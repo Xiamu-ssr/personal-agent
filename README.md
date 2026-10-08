@@ -6,7 +6,7 @@
 |---|---|---|
 | `spec/` | Spec 模拟器（`index.html`，浏览器直接打开）和系统提示词 | v3 |
 | `cloud/` | 云端本体：Claude Agent SDK 内核 + 定时任务 + App/设备网关 | 在跑 |
-| `android/` | 安卓 App（聊天 / 看板 / 任务 / 记忆 / 日记 + 设备能力） | 下一步 |
+| `android/` | 安卓 App（聊天 / 看板 / 任务 / 记忆 / 日记 + 设备能力） | v0.1 |
 | `mac/` | Mac DMG（菜单栏 + 本机能力） | 之后 |
 
 安装包发布在 [Releases](../../releases)，手机上直接下载 APK。
@@ -33,3 +33,11 @@ bash /opt/personal-agent/cloud/deploy/install.sh   # 不要加 sudo，脚本内�
 ```
 
 `/etc/personal-agent.env` 需要：`ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`HTTPS_PROXY`（ECS 直连 ZenMux 不通）、`AGENT_TOKEN`（安装脚本会生成）。
+
+## 安卓 App
+
+Kotlin + Jetpack Compose，minSdk 28。两条 WebSocket：`role=app`（聊天、事件）和 `role=device`（前台服务，把手机注册成设备）。
+
+- 首次打开：填云端地址 + 6 位配对码（在 ECS 上 `sudo -u agent node /opt/personal-agent/cloud/src/pair.mjs` 生成，24 小时有效、一次性）
+- 能力（逐个授权才注册）：电量、发通知、位置、日历、短信（支持补读）
+- 构建：`cd android && ./gradlew assembleRelease`（签名读 `~/.personal-agent/signing.properties`，不在仓库里）

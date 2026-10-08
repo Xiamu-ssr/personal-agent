@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
 import { config } from "./config.mjs";
-import { readJson, tailJsonl } from "./store.mjs";
+import { readJson, writeJson, tailJsonl } from "./store.mjs";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8", ".json": "application/json",
@@ -52,6 +52,21 @@ function readBody(req) {
   });
 }
 
+// One-time pairing code -> token. The code is single-use, expires, and dies after 5 wrong tries.
+async function pair(req, res) {
+  const file = path.join(config.system, "pair.json");
+  const p = readJson(file, null);
+  const { code } = await readBody(req);
+  if (!p || Date.now() > p.expires) return json(res, 410, { error: "配对码过期了，重新要一个" });
+  if (String(code || "").trim() !== p.code) {
+    p.fails = (p.fails || 0) + 1;
+    p.fails >= 5 ? fs.rmSync(file, { force: true }) : writeJson(file, p);
+    return json(res, 403, { error: p.fails >= 5 ? "错太多次，配对码作废了" : "配对码不对" });
+  }
+  fs.rmSync(file, { force: true });
+  return json(res, 200, { token: config.token });
+}
+
 export function startServer({ harness, hub, bus, log }) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
@@ -64,6 +79,7 @@ export function startServer({ harness, hub, bus, log }) {
       res.setHeader("set-cookie", `pa_token=${encodeURIComponent(token)}; Path=/agent; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`);
       return json(res, 200, { ok: true });
     }
+    if (p === "/api/pair" && req.method === "POST") return pair(req, res);
     if (!authed(req)) return json(res, 401, { error: "unauthorized" });
 
     if (p === "/api/state") {
