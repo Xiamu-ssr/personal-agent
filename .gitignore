@@ -1,0 +1,12 @@
+node_modules/
+.DS_Store
+*.env
+.env*
+!cloud/seed/**
+android/**/build/
+android/.gradle/
+android/local.properties
+mac/build/
+*.dmg
+*.apk
+*.keystore

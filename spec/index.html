@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Personal Agent · 架构模拟器</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--ink:#1d2433;--mut:#6b7488;--glass:rgba(255,255,255,.62);--line:rgba(30,40,70,.12)}
+*{box-sizing:border-box}
+body{margin:0;font:13px/1.45 -apple-system,"PingFang SC","Helvetica Neue",sans-serif;color:var(--ink);background:linear-gradient(180deg,#c9e3fb 0%,#e7ecfb 45%,#fbe6d6 100%) fixed;min-height:100vh}
+header{display:flex;align-items:center;gap:14px;padding:12px 20px 6px;flex-wrap:wrap}
+h1{font-size:17px;margin:0}
+h1 small{font-weight:400;color:var(--mut);margin-left:8px}
+.sp{flex:1}
+.btn{border:1px solid var(--line);background:rgba(255,255,255,.72);border-radius:999px;padding:5px 12px;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}
+.btn:hover{background:#fff}
+.btn.on{background:#1d2433;color:#fff;border-color:#1d2433}
+select.btn{padding:5px 8px}
+#flows{display:flex;gap:6px;flex-wrap:wrap;padding:4px 20px 10px;align-items:center}
+#flows .lab{color:var(--mut);margin-right:2px}
+main{display:flex;gap:14px;padding:0 20px 20px;align-items:flex-start}
+html{scrollbar-gutter:stable}
+#stagewrap{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden}
+#stagebox{position:relative;overflow:hidden}
+#stage{position:absolute;left:16px;top:16px;width:1080px;height:780px;transform-origin:0 0}
+.domain{position:absolute;border-radius:22px;background:var(--glass);border:2px solid color-mix(in srgb,var(--zc) 55%,transparent);backdrop-filter:blur(8px);padding:12px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:box-shadow .3s,background .3s}
+.domain.sel{box-shadow:0 0 0 3px color-mix(in srgb,var(--zc) 50%,transparent)}
+.domain.pulse{box-shadow:0 0 0 4px color-mix(in srgb,var(--zc) 40%,transparent),0 0 26px color-mix(in srgb,var(--zc) 55%,transparent)}
+.trust .domain{background:color-mix(in srgb,var(--zc) 30%,white);border-width:3px}
+.trust .wire.egress{stroke:#e11d48!important;opacity:1}
+.trust .zb{background:var(--zc);color:#fff}
+.dhead{display:flex;gap:10px;align-items:flex-start}
+.ico{font-size:24px;line-height:1}
+.dt{flex:1;min-width:0}
+.dname{font-weight:700;font-size:14px}
+.drole{color:var(--mut);font-size:11.5px;line-height:1.35;margin-top:2px}
+.zb{font-size:10.5px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--zc) 18%,white);color:color-mix(in srgb,var(--zc) 75%,black);white-space:nowrap}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.dev .chips{grid-template-columns:1fr}
+.app .chips{grid-template-columns:1fr 1fr}
+.conn .chips{grid-template-columns:repeat(2,minmax(0,1fr))}
+.model .chips{grid-template-columns:minmax(0,1fr)}
+.domain.compact .chip .ci{display:none}
+.domain.compact .chip{min-width:0}
+.domain.compact .chip small,.domain.compact .chip b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.domain.compact .dname{white-space:nowrap}
+.domain.compact{flex-direction:row;align-items:center;gap:12px;padding:8px 12px}
+.domain.compact .dhead{flex:0 0 auto;align-items:center}
+.domain.compact .drole{display:none}
+.domain.compact .zb{display:none}
+.domain.compact .chips{flex:1}
+.domain.compact .chip small{white-space:nowrap}
+.chip{display:flex;gap:8px;align-items:center;padding:6px 9px;border-radius:12px;background:rgba(255,255,255,.78);border:1px solid var(--line);cursor:pointer;position:relative;transition:all .25s}
+.chip .ci{font-size:16px}
+.chip b{display:block;font-size:12.5px}
+.chip small{display:block;color:var(--mut);font-size:10.5px;line-height:1.3}
+.chip.on{background:#fff;box-shadow:0 0 0 2px var(--zc),0 6px 18px color-mix(in srgb,var(--zc) 45%,transparent);transform:translateY(-1px)}
+.chip.bad{background:#ffe4e4;box-shadow:0 0 0 2px #ef4444}
+.chip.warn{background:#fff3d6;box-shadow:0 0 0 2px #f59e0b}
+.chip.sel{outline:2px dashed #1d2433;outline-offset:1px}
+.chips.free{display:block;position:relative;flex:1}
+.chips.free .chip{position:absolute;align-items:flex-start;padding:6px 8px}
+.chip.box{flex-direction:column;align-items:stretch;gap:4px}
+.chip.box .mem{margin-top:0}
+.chip.box .mem{gap:3px}
+.pills{display:flex;flex-wrap:wrap;gap:4px}
+.pills span{font-size:10px;padding:1px 7px;border-radius:6px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3}
+.chip.box .memt{margin-top:2px}
+.mem span[data-k="profile"]{font-weight:700;border-color:#3b82f6}
+.chip.box .mem span{font-size:9px;padding:0 5px}
+.domain.compact .chip>div{min-width:0}
+.link{fill:none;stroke-width:1.6;opacity:.45}
+.link.hot{opacity:1;stroke-width:2.6}
+.lbl.small text{font-size:9px}
+.doc{font-size:12px}
+.doc h4{margin:10px 0 4px;font-size:13px}.doc h5{margin:8px 0 3px}
+.doc pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:8px;font:10.5px/1.4 ui-monospace,Menlo,monospace;overflow:auto;white-space:pre}
+.doc code{background:#eef2ff;border-radius:4px;padding:0 4px;font:11px ui-monospace,Menlo,monospace}
+.doc pre code{background:none;padding:0;color:inherit}
+.doc table{border-collapse:collapse;margin:4px 0;font-size:11.5px}.doc td{border:1px solid var(--line);padding:2px 6px}
+.doc p{margin:4px 0}
+.q.done{border-color:#10b981;background:#f0fdf4}
+.qd{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#f59e0b;border:2px solid #fff}
+.qd.big{position:static;display:inline-block;margin-left:6px}
+.phone{flex:1;min-height:110px;border-radius:16px;background:linear-gradient(180deg,#bfdcf7,#f8e2d2);border:1px solid var(--line);padding:8px;display:flex;flex-direction:column;justify-content:space-between;position:relative}
+.pbubble{background:rgba(255,255,255,.85);border-radius:12px;padding:7px 9px;font-size:11.5px;min-height:46px;white-space:pre-line}
+.ptabs{display:flex;justify-content:space-around;font-size:10.5px;color:var(--mut)}
+.mem{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
+.mem span{font-size:10.5px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.8);border:1px solid var(--line);transition:all .3s}
+.mem span.flash{background:#dbeafe;border-color:#3b82f6;transform:scale(1.12)}
+.memt{font-size:10.5px;color:var(--mut)}
+.widget{position:absolute;border-radius:16px;background:rgba(255,255,255,.55);border:1px solid var(--line);padding:10px 12px;font-size:11.5px}
+.widget h4{margin:0 0 6px;font-size:12px}
+.lg-row{display:flex;align-items:center;gap:6px;margin:2px 0}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.stats b{font-size:16px}
+#wires{position:absolute;left:0;top:0;pointer-events:none;z-index:5;overflow:visible}
+.wire{fill:none;stroke-width:2.2;opacity:.55}
+.wire.hot{opacity:1;stroke-width:3.2}
+.wire.egress{stroke-dasharray:6 5}
+.hit{fill:none;stroke:transparent;stroke-width:18;pointer-events:stroke;cursor:pointer}
+.lbl{pointer-events:all;cursor:pointer}
+.lbl text{font-size:10.5px;fill:#334}
+.lbl rect{fill:rgba(255,255,255,.92);stroke:var(--line)}
+.edge.sel .wire{stroke-width:4}
+.pkt text{font-size:10.5px;font-weight:600}
+#panel{width:350px;flex:0 0 350px;background:var(--glass);border:1px solid var(--line);border-radius:20px;backdrop-filter:blur(8px);display:flex;flex-direction:column;height:780px}
+.tabs{display:flex;gap:4px;padding:10px 10px 6px}
+.tabs .btn{flex:1;text-align:center;padding:5px 4px}
+.tabc{flex:1;overflow:auto;padding:12px 14px;display:none}
+.tabc.show{display:block}
+.tabc h3{margin:0 0 4px;font-size:15px}
+.tabc h5{margin:12px 0 4px;font-size:12px;color:var(--mut)}
+.tabc ul{margin:0;padding-left:16px}
+.tabc li{margin:2px 0}
+.tabc li.no{color:#b42318}
+.tag{display:inline-block;font-size:10.5px;padding:1px 8px;border-radius:999px;background:#eef2ff;margin:1px 2px 1px 0}
+.lg{display:flex;gap:6px;padding:3px 0;border-bottom:1px dashed var(--line);font-size:12px}
+.lg time{color:var(--mut);flex:0 0 46px;font-variant-numeric:tabular-nums}
+.lg.bad span{color:#b42318;font-weight:600}
+.lg.sys span{color:var(--mut)}
+.q{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.7);padding:10px;margin-bottom:9px}
+.q .qt{font-weight:700}
+.q .qb{color:var(--mut);font-size:12px;margin:3px 0}
+.q .qrec{background:#ecfdf5;border-radius:8px;padding:5px 8px;font-size:12px;margin:5px 0}
+.q .qs{display:flex;gap:5px}
+.q .qs .btn{padding:2px 9px;font-size:11.5px}
+.q.adopt{border-color:#10b981}.q.reject{opacity:.6}
+dialog{border:0;border-radius:18px;padding:16px;width:min(760px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog textarea{width:100%;height:55vh;font:11.5px/1.4 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:10px;padding:8px}
+#specerr{min-height:18px;margin-top:6px;font-size:12px;color:#b42318;white-space:pre-line}
+#specerr.ok{color:#047857}
+.hint{color:var(--mut)}
+.kgrid{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px}
+@media (max-width:1100px){main{flex-direction:column;align-items:stretch}#panel{width:100%;flex:none;height:460px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Personal Agent · 架构模拟器<small>Spec v3 · Claude Harness 内核 · 亮 = 真的发生了一次调用</small></h1>
+  <span class="sp"></span>
+  <button class="btn" id="bPlay">⏸ 暂停</button>
+  <select class="btn" id="sSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+  <button class="btn on" id="bAuto">自动循环</button>
+  <button class="btn" id="bView">视图：架构</button>
+  <button class="btn" id="bSpec">Spec JSON</button>
+</header>
+<div id="flows"></div>
+<main>
+  <div id="stagewrap"><div id="stagebox"><div id="stage"></div></div></div>
+  <aside id="panel">
+    <div class="tabs">
+      <button class="btn on" data-tab="log">日志</button>
+      <button class="btn" data-tab="detail">详情</button>
+      <button class="btn" data-tab="qs">待对齐 <span id="qcount"></span></button>
+    </div>
+    <div class="tabc show" id="log"></div>
+    <div class="tabc" id="detail"></div>
+    <div class="tabc" id="qs"></div>
+  </aside>
+</main>
+<dialog id="specdlg">
+  <h3 style="margin:0 0 6px">Spec（图 = 数据）</h3>
+  <div class="hint" style="margin-bottom:8px">页面完全由这份 JSON 渲染。改节点、连线、流程后点「应用」，模拟器立刻按新 Spec 重新跑。</div>
+  <textarea id="specta" spellcheck="false"></textarea>
+  <div id="specerr"></div>
+  <div style="display:flex;gap:8px;margin-top:6px">
+    <button class="btn" id="specApply">应用</button>
+    <button class="btn" id="specCopy">复制</button>
+    <span class="sp"></span>
+    <button class="btn" id="specClose">关闭</button>
+  </div>
+</dialog>
+
+<script>
+/* ============ SPEC：整个架构就是这份图 ============ */
+let SPEC = {
+  zones: {
+    dev:   {label: "你的设备", color: "#2faa7a"},
+    cloud: {label: "你的云",   color: "#3b82f6"},
+    third: {label: "第三方",   color: "#f08a3c"}
+  },
+  kinds: {
+    cmd:    {label: "指令",       color: "#3b82f6"},
+    data:   {label: "个人数据",   color: "#f59e0b"},
+    result: {label: "结果",       color: "#10b981"},
+    event:  {label: "进度/上线",  color: "#8b5cf6"}
+  },
+  domains: [
+    {id: "app", name: "豆豆 App · 界面", icon: "📱", zone: "dev", rect: [1, 15, 22, 64], widget: "phone",
+     role: "安卓和 Mac 同一套界面。",
+     can: ["五个栏目：聊天 / 看板 / 任务 / 记忆 / 日记", "配置入口之一，不是唯一入口（聊天也能配）", "引导：首装逐项授权本机连接器", "设置：模型、用量、连接器、定时任务"],
+     cannot: ["不存记忆、不调模型", "App 关了不影响本体干活"],
+     holds: ["本地缓存"],
+     chips: [
+       {id: "app_chat", name: "聊天", icon: "💬", desc: "主线程 · 也能配置"},
+       {id: "app_board", name: "看板", icon: "📋", desc: "读 briefs/ 和 sites/", note: "就是把两个目录渲染出来：简报按日期叠放、新的盖住旧的；站点常驻。"},
+       {id: "app_task", name: "任务", icon: "✅", desc: "子任务进度 · 定时", note: "进度来自 SDK 的 task_started / task_progress / task_notification；定时列表就是调度器那张表。"},
+       {id: "app_mem", name: "记忆", icon: "🗂", desc: "读 memory/", note: "health/ 有专门的渲染（图表），底下仍是多个 MD。"},
+       {id: "app_diary", name: "日记", icon: "📔", desc: "读 diary/"},
+       {id: "app_guide", name: "引导", icon: "🧭", desc: "首装逐项授权", note: "授权一项 = 开通一个预置连接器。每项都能跳过。"},
+       {id: "app_set", name: "设置", icon: "⚙️", desc: "模型 · 用量 · 连接器", note: "连接器配置存在云端，App 只是入口。参数让你自己去找，填进来；也可以在聊天里交给豆豆配。",
+        doc: "- 模型：选哪个、看用量\n- 连接器：本机（安卓 / Mac 预置，开关 + 授权 + 在线状态）· 云端（填参数）\n- 定时任务：看、停、改时间"}
+     ]},
+    {id: "cloud", name: "本体 · ECS", icon: "☁️", zone: "cloud", rect: [27, 15, 46, 84], free: true, qs: ["q_dirs", "q_boundary"],
+     role: "Claude Harness + 自写薄壳（两个网关 + 调度器）+ 一个工作目录。",
+     can: ["跑主线程、定时 session、子任务", "通过设备网关用本机连接器", "自己改连接器配置（写 system/connectors/ 再 reload）"],
+     cannot: ["不审批：bypassPermissions，非 root 跑", "不全量同步设备数据，原始短信等不落云", "没有心跳"],
+     holds: ["工作目录（记忆、简报、站点、日记、连接器配置、会话记录）"],
+     chips: [
+       {id: "cl_sched", name: "调度器", icon: "⏰", desc: "到点开 session", at: [0, 0, 22, 14],
+        note: "自写薄壳。一张表：时间 + 存好的 prompt。模型可用自定义工具 schedule_create 加行。",
+        doc: "| 任务 | 时间 | 产出 |\n|---|---|---|\n| 晨报 | 每天 07:30 | data/briefs/<日期>/ |\n| 晚报 | 每天 21:30 | data/briefs/<日期>/ |\n| 健康周报 | 周日 20:00 | data/briefs/<日期>/ |\n| 云端增量 | 每天 06:00 | 邮件等 → data/memory/ |\n| 夜间整理 | 每天 22:30 | data/memory/ · 重写总档 |\n| 日记 | 整理之后 | data/diary/<日期>.md |\n| 主线程压缩 | 整理之后 | /compact |\n| 清理草稿 | 每周 | 删 workspace/ 里 30 天没动的 |\n| 站点刷新 | 各站点自己登记 | data/sites/<名>/ |\n\n事件触发：设备上线 → 补读，每天最多一次。每个定时 / 事件都开**独立 session**，不进主线程。"},
+       {id: "cl_appgw", name: "App 网关", icon: "🚪", desc: "WebSocket · 读目录给 App", at: [0, 26, 22, 16],
+        note: "自写薄壳。把 SDK 消息流翻成 App 事件；看板 / 记忆 / 日记直接读工作目录里的文件。",
+        doc: "SDK 能拿到的（粒度以实测为准）：\n- 文字流：`includePartialMessages`\n- 工具调用 / 结果：assistant / user 消息里的 tool_use、tool_result\n- 子任务：`task_started` / `task_progress`（`agentProgressSummaries` 给一行摘要）/ `task_notification`\n- 写了 memory/：PostToolUse 钩子 →「记忆已更新」"},
+       {id: "cl_harness", name: "Claude Harness", icon: "⚙️", desc: "Agent SDK · 机制不画", at: [26, 0, 42, 54],
+        pills: ["系统提示词 · 固定", "连接器 = Plugins", "Skills", "子任务", "Hooks", "主线程 session"],
+        note: "Claude 怎么跑我们改不了，只决定挂什么。挂上的东西它自己会用，所以不画箭头。",
+        doc: "```js\nquery({ prompt, options: {\n  model: \"glm-5.3-flash\",\n  systemPrompt: PROMPT,      // 固定字符串\n  plugins: connectors(),      // system/connectors/*\n  cwd: \"/srv/agent\", resume: mainId,\n  permissionMode: \"bypassPermissions\",\n  hooks: { UserPromptSubmit, PostToolUse },\n  env: { ANTHROPIC_BASE_URL: ZENMUX,\n         CLAUDE_CODE_DISABLE_AUTO_MEMORY: \"1\" }\n}})\n```\n- 系统提示词不变，缓存一直命中；时间、在线设备由 UserPromptSubmit 钩子随消息带上\n- 新 session 先自己 Read 总档，提示词里写明目录约定\n- 改了 system/connectors/ → 薄壳调 `reloadPlugins()`\n- cwd 不是边界：bypassPermissions 下，Linux 用户能碰的它都能碰。边界 = 非 root 用户 `agent` 只拥有 /srv/agent；要更严再开 `sandbox.filesystem`"},
+       {id: "cl_devgw", name: "设备网关", icon: "🔗", desc: "外连通道 · 在线状态", at: [74, 26, 26, 16],
+        note: "自写薄壳。设备外连进来（WebSocket），网关把它代理成本机连接器的 MCP。离线 / 未授权 → 直接返回「设备离线」「未授权」。"},
+       {id: "cl_fs", name: "工作目录 /srv/agent", icon: "💾", desc: "按寿命分三区：data 精心维护 · workspace 随便写 · system 配置和状态", at: [0, 64, 100, 36], q: "q_dirs", widget: "memory",
+        pills: ["data/ · memory briefs sites diary", "workspace/ · 脚本 中间结果", "system/ · connectors sync sessions", ".claude/skills/"],
+        note: "记忆库、简报、站点、日记都只是这里的目录。App 按目录渲染。",
+        doc: "```\n/srv/agent/            ← cwd，属于 Linux 用户 agent\n  data/                 ← 持久，要精心维护、要备份；App 展示的都在这\n    memory/<分类>/<主题>.md\n    briefs/<日期>/index.html\n    sites/<名>/index.html (+ site.json)\n    diary/<日期>.md\n  workspace/<任务>/     ← 草稿：脚本、下载、中间结果；可清理\n  system/               ← 配置和状态\n    connectors/<名>/    ← 一个 Plugin（.mcp.json + skills/ + .env）\n    sync/<设备>.json    ← 补读游标，网关维护\n    sessions/           ← CLAUDE_CONFIG_DIR\n  .claude/skills/       ← 用过两次以上的脚本升级成技能\n```\n- `memory/profile/` 只有 `总档.md`；`health/` App 会画图；`voice-notes/` 猜是语音转文字\n- 其余分类多个 MD，不建子目录"}
+     ]},
+    {id: "model", name: "ZenMux", icon: "🧠", zone: "third", rect: [21, 0, 22, 9], compact: true,
+     role: "SDK 经 ANTHROPIC_BASE_URL 指向 ZenMux。",
+     can: ["推理"], cannot: ["不持有记忆和 token"], holds: ["本次请求的上下文"],
+     chips: [
+       {id: "md_main", name: "glm-5.3-flash", icon: "⚡", desc: "测试期全用它"}
+     ]},
+    {id: "conn", name: "云端连接器", icon: "🧩", zone: "third", rect: [45, 0, 34, 9], compact: true,
+     role: "对接外部平台，一直在线。",
+     can: ["本体用 token 调用"], cannot: ["支付类不接"], holds: ["你在这些服务里的数据"],
+     chips: [
+       {id: "cn_cloud", name: "邮箱 · 日历", icon: "☁️", desc: "GitHub · MCP"},
+       {id: "cn_search", name: "联网", icon: "🔎", desc: "搜索 · 抓网页"}
+     ]},
+    {id: "dev", name: "设备 · 本机连接器", icon: "🔌", zone: "dev", rect: [78, 15, 21, 64],
+     role: "也是连接器，只是宿主是设备：要授权，会离线。",
+     can: ["执行本体经设备网关下发的工具调用"],
+     cannot: ["不开入站端口", "数据不整盘上传：被调用时才读"],
+     holds: ["原始短信、联系人、相册、文件"],
+     chips: [
+       {id: "dev_android", name: "安卓（预置）", icon: "🤖", desc: "短信 · 通知 · 联系人 · 日历 · 位置 · 健康 · 相册", note: "每项权限对应一组工具。授权 + 在线才可用。被厂商杀后台就算离线。"},
+       {id: "dev_mac", name: "Mac（预置）", icon: "💻", desc: "文件 · 命令行 · 备忘录 · 浏览器", note: "和安卓同一套界面，只是授权项和工具不同。睡眠就算离线。"},
+       {id: "dev_hw", name: "以后的硬件", icon: "📷", desc: "后放"}
+     ]}
+  ],
+  edges: [
+    {id: "e_msg",   from: "app", to: "cloud", label: "消息", kind: "cmd", off: -45, desc: "你在聊天里说的话", trigger: "你发消息", trust: "来自你本人"},
+    {id: "e_evt",   from: "cloud", to: "app", label: "进度流", kind: "event", off: -15, desc: "文字流、工具链、子任务进度、「记忆已更新」", trigger: "SDK 吐消息", trust: "粒度以 SDK 实际能给的为准"},
+    {id: "e_card",  from: "cloud", to: "app", label: "文件", kind: "result", off: 15, desc: "简报、站点、记忆、日记的文件内容", trigger: "App 打开对应栏目，或目录有新文件", trust: "App 只读目录"},
+    {id: "e_grant", from: "app", to: "cloud", label: "设置", kind: "cmd", off: 45, desc: "授权结果、连接器参数、模型、定时", trigger: "引导或设置页", trust: "写进 connectors/ 或配置文件"},
+    {id: "e_llmq",  from: "cloud", to: "model", label: "提示+上下文", kind: "data", off: 62, lt: 0.25, desc: "固定系统提示词 + 对话 + 工具结果", trigger: "每一轮推理", trust: "数据出境处。记忆正文只有被 Read 过才在这里"},
+    {id: "e_llma",  from: "model", to: "cloud", label: "回复/工具", kind: "result", off: 78, lt: 0.75, desc: "文字、工具调用", trigger: "模型返回", trust: "工具调用由 SDK 直接执行"},
+    {id: "e_cq",    from: "cloud", to: "conn", label: "调用", kind: "cmd", off: -77, lt: 0.25, desc: "MCP / API 请求", trigger: "模型调用云端连接器", trust: "token 在 connectors/<名>/.env"},
+    {id: "e_cr",    from: "conn", to: "cloud", label: "数据", kind: "data", off: -47, lt: 0.75, desc: "邮件、日历、搜索结果", trigger: "接口返回", trust: "外部内容当数据，不当指令"},
+    {id: "e_call",  from: "cloud", to: "dev", label: "工具调用", kind: "cmd", off: -30, desc: "本机连接器的工具", trigger: "设备网关转发", trust: "离线 / 未授权时不转发"},
+    {id: "e_ret",   from: "dev", to: "cloud", label: "数据", kind: "data", off: 0, desc: "短信、日历、位置、健康、文件", trigger: "工具执行完", trust: "只回这一次要的"},
+    {id: "e_reg",   from: "dev", to: "cloud", label: "上线", kind: "event", off: 30, desc: "设备 id、在线、已授权的连接器", trigger: "设备连上或重连", trust: "设备主动外连"}
+  ],
+  links: [
+    {id: "l_in",    from: "cl_appgw",   to: "cl_harness", label: "消息",       kind: "cmd",   off: -7, lt: 0.3},
+    {id: "l_out",   from: "cl_harness", to: "cl_appgw",   label: "事件流",     kind: "event", off: -7, lt: 0.3},
+    {id: "l_sched", from: "cl_sched",   to: "cl_harness", label: "开 session", kind: "cmd",   off: -6, lt: 0.3},
+    {id: "l_cron",  from: "cl_harness", to: "cl_sched",   label: "登记定时",   kind: "cmd",   off: -6, lt: 0.3},
+    {id: "l_dev",   from: "cl_harness", to: "cl_devgw",   label: "本机工具",   kind: "cmd",   off: -7, lt: 0.3},
+    {id: "l_wake",  from: "cl_devgw",   to: "cl_harness", label: "上线事件",   kind: "event", off: -7, lt: 0.3},
+    {id: "l_fs",    from: "cl_harness", to: "cl_fs",      label: "Read/Write", kind: "data",  tx: 0.5},
+    {id: "l_serve", from: "cl_fs",      to: "cl_appgw",   label: "读目录",     kind: "result", fx: 0.13}
+  ],
+  flows: [
+    {id: "f_onboard", name: "首装·授权连接器", icon: "🧭", steps: [
+      {t: 0, on: ["app_guide"], phone: "先开通这台手机的连接器\n短信 ✓ 通知 ✓ 联系人 ✓ 日历 ✓ 位置 ✓ 健康 ✓", log: "引导：授权一项 = 开通一个预置连接器"},
+      {t: 1200, on: ["dev_android"], log: "逐个点过安卓系统权限"},
+      {t: 2100, pkt: "e_reg", label: "上线·已授权 6 项", log: "设备外连本体，报上已授权的连接器"},
+      {t: 3200, on: ["cl_devgw"], log: "设备网关：安卓在线，6 个连接器可用"},
+      {t: 4000, on: ["app_guide"], pkt: "e_grant", label: "邮箱 OAuth ✓", phone: "云端连接器：邮箱 ✓\n⚠ 不要连接支付类应用", log: "开通云端连接器"},
+      {t: 5100, on: ["cl_appgw"], pkt: "l_serve", back: true, label: "写 system/connectors/邮箱/", log: "App 网关把参数写进 system/connectors/邮箱/，然后 reloadPlugins()"},
+      {t: 6000, pkt: "l_sched", label: "[初始化]", log: "开一次性初始化 session"},
+      {t: 6800, pkt: "e_llmq", label: "[初始化]", on: ["md_main"], log: "→ 模型"},
+      {t: 7900, pkt: "e_llma", label: "读近 30 天", log: "← 要读手机和邮箱"},
+      {t: 8600, pkt: "l_dev", label: "短信·联系人·日历", log: "Harness → 设备网关"},
+      {t: 9300, pkt: "e_call", label: "近 30 天", stat: {dev: 1}, log: "→ 手机"},
+      {t: 10300, pkt: "e_ret", label: "短信·联系人·日历", log: "← 手机（只进上下文，不落盘）"},
+      {t: 11100, pkt: "l_dev", back: true, label: "工具结果", log: "回 Harness"},
+      {t: 11300, pkt: "e_cq", label: "近 30 天邮件", log: "→ 邮箱"},
+      {t: 12300, pkt: "e_cr", label: "邮件", log: "← 邮箱"},
+      {t: 13000, pkt: "e_llmq", label: "原始材料", on: ["md_main"], log: "→ 模型：提炼"},
+      {t: 14100, pkt: "e_llma", label: "Write ×5", log: "← 一串写文件"},
+      {t: 14800, pkt: "l_fs", label: "Write memory/people/…", mem: {people: 2, work: 1, life: 1}, log: "只留提炼后的记忆，原始数据不落盘"},
+      {t: 15600, pkt: "l_fs", label: "Write profile/总档.md", log: "总档 v1"},
+      {t: 16400, pkt: "l_out", label: "初始化完成", log: "事件流"},
+      {t: 17000, pkt: "e_evt", label: "初始化完成", log: "→ App"},
+      {t: 18000, on: ["app_mem"], phone: "初始化完成\n记住了：家人 2 位、工作 1 项……\n哪里不对直接告诉我", log: "记忆页：可看可改"}
+    ]},
+    {id: "f_chat", name: "聊天·主线程", icon: "💬", steps: [
+      {t: 0, on: ["app_chat"], phone: "你：周六带娃去哪玩？", pkt: "e_msg", label: "周六带娃去哪", log: "你发了一条消息"},
+      {t: 1100, pkt: "l_in", label: "消息+时间", log: "进主线程；UserPromptSubmit 钩子带上时间和在线设备"},
+      {t: 1800, pkt: "e_llmq", label: "消息", on: ["md_main"], log: "→ 模型（系统提示词固定，缓存命中）"},
+      {t: 2900, pkt: "e_llma", label: "Read people/孩子.md", log: "← 模型自己决定翻记忆"},
+      {t: 3600, pkt: "l_fs", label: "Read people/孩子.md", log: "一次普通的 Read"},
+      {t: 4400, pkt: "l_fs", back: true, label: "5 岁，怕晒", log: "内容回来"},
+      {t: 5100, pkt: "e_llmq", label: "文件内容", on: ["md_main"], log: "→ 模型"},
+      {t: 6200, pkt: "e_llma", label: "位置、搜索", log: "← 要用两个工具"},
+      {t: 6900, pkt: "l_dev", label: "读位置", log: "→ 设备网关"},
+      {t: 7600, pkt: "e_call", label: "读位置", stat: {dev: 1}, log: "→ 手机"},
+      {t: 8600, pkt: "e_ret", label: "位置", log: "← 手机"},
+      {t: 9400, pkt: "l_dev", back: true, label: "位置", log: "回 Harness"},
+      {t: 9600, pkt: "e_cq", label: "搜亲子活动", on: ["cn_search"], log: "→ 联网"},
+      {t: 10600, pkt: "e_cr", label: "5 个结果", log: "← 结果"},
+      {t: 10800, pkt: "l_out", label: "Ran 3 tools", log: "事件流"},
+      {t: 11400, pkt: "e_evt", label: "Ran 3 tools", log: "App 看到折叠的工具链"},
+      {t: 12100, pkt: "e_llmq", label: "工具结果", on: ["md_main"], log: "→ 模型"},
+      {t: 13200, pkt: "e_llma", label: "回答 + Write", log: "← 回答，外加写记忆"},
+      {t: 13900, pkt: "l_fs", label: "Write interests/周末.md", mem: {interests: 1}, log: "当场写"},
+      {t: 14700, pkt: "l_out", label: "回答+记忆已更新", log: "PostToolUse 看到写了 memory/"},
+      {t: 15400, pkt: "e_evt", label: "回答", log: "→ App"},
+      {t: 16400, on: ["app_chat"], phone: "推荐：① 植物园 ② 科技馆 ③ 湿地公园\n✨ 记忆已更新", log: "回答 +「记忆已更新」"}
+    ]},
+    {id: "f_config", name: "让豆豆帮我配连接器", icon: "🔧", steps: [
+      {t: 0, on: ["app_chat"], phone: "你：帮我接上 GitHub", pkt: "e_msg", label: "接上 GitHub", log: "配置不只在设置页，聊天也行"},
+      {t: 1100, pkt: "l_in", label: "消息", log: "进主线程"},
+      {t: 1800, pkt: "e_llmq", label: "消息", on: ["md_main"], log: "→ 模型"},
+      {t: 2900, pkt: "e_llma", label: "指引", log: "← 告诉你去哪拿 token"},
+      {t: 3600, pkt: "l_out", label: "指引", log: "事件流"},
+      {t: 4200, pkt: "e_evt", label: "指引", phone: "去 GitHub → Settings → Tokens\n生成一个只读 token，发给我", log: "→ App"},
+      {t: 5300, on: ["app_chat"], pkt: "e_msg", label: "ghp_****", phone: "你：ghp_****", log: "你把值发过来（会经过模型一次；不想就去设置页填）"},
+      {t: 6400, pkt: "l_in", label: "token", log: "进主线程"},
+      {t: 7100, pkt: "e_llmq", label: "token", on: ["md_main"], log: "→ 模型"},
+      {t: 8200, pkt: "e_llma", label: "Write system/connectors/github/", log: "← 写一个 Plugin 目录"},
+      {t: 8900, pkt: "l_fs", label: "Write system/connectors/github/", log: ".mcp.json + .env"},
+      {t: 9700, on: ["cl_appgw"], log: "薄壳看到 system/connectors/ 变了 → reloadPlugins()（会让缓存失效一次）"},
+      {t: 10400, pkt: "e_cq", label: "测试调用", on: ["cn_cloud"], log: "→ GitHub"},
+      {t: 11400, pkt: "e_cr", label: "ok", log: "← 通了"},
+      {t: 12100, pkt: "l_out", label: "已接上", log: "事件流"},
+      {t: 12700, pkt: "e_evt", label: "已接上", log: "→ App"},
+      {t: 13700, on: ["app_set"], phone: "设置 · 云端连接器\nGitHub ✓ 已接上", log: "设置页也看得到"}
+    ]},
+    {id: "f_brief", name: "晨报·目录即看板", icon: "🌅", steps: [
+      {t: 0, on: ["cl_sched"], log: "07:30 调度器到点"},
+      {t: 800, pkt: "l_sched", label: "[定时任务] 晨报", log: "开一个新 session"},
+      {t: 1600, pkt: "e_llmq", label: "[定时任务] 晨报", on: ["md_main"], log: "→ 模型"},
+      {t: 2700, pkt: "e_llma", label: "Read 总档", log: "← 新 session 先读总档（提示词里写了）"},
+      {t: 3400, pkt: "l_fs", label: "Read profile/总档.md", log: "读总档"},
+      {t: 4200, pkt: "l_fs", back: true, label: "总档", log: "内容回来；晨报技能是挂载的，它自己会用"},
+      {t: 4900, pkt: "l_dev", label: "日历·短信·睡眠", log: "→ 设备网关"},
+      {t: 5600, pkt: "e_call", label: "日历·短信·睡眠", stat: {dev: 1}, log: "→ 手机"},
+      {t: 6600, pkt: "e_ret", label: "日程·快递·睡眠", log: "← 手机"},
+      {t: 7400, pkt: "l_dev", back: true, label: "设备数据", log: "回 Harness"},
+      {t: 7600, pkt: "e_cq", label: "未读邮件", log: "→ 邮箱"},
+      {t: 8600, pkt: "e_cr", label: "3 封重要", log: "← 邮件"},
+      {t: 9300, pkt: "e_llmq", label: "材料", on: ["md_main"], log: "→ 模型"},
+      {t: 10400, pkt: "e_llma", label: "Write 晨报", log: "← 晨报 HTML"},
+      {t: 11100, pkt: "l_fs", label: "Write briefs/10-08/", log: "briefs/2026-10-08/index.html，session 结束"},
+      {t: 11900, pkt: "l_serve", label: "briefs/ 有新目录", log: "App 网关盯着目录"},
+      {t: 12600, pkt: "e_card", label: "晨报", log: "→ App"},
+      {t: 13600, on: ["app_board"], phone: "看板 · 简报\n今天 3 件事：① 交方案 ② 取快递 ③ 早点睡", log: "看板 = 把 briefs/ 渲染出来"}
+    ]},
+    {id: "f_site", name: "站点·目录即站点", icon: "📊", steps: [
+      {t: 0, on: ["app_chat"], phone: "你：做个页面，跟踪我的体重和跑步", pkt: "e_msg", label: "做个体重跑步页", log: "你：做个页面"},
+      {t: 1100, pkt: "l_in", label: "消息", log: "进主线程"},
+      {t: 1800, pkt: "e_llmq", label: "消息", on: ["md_main"], log: "→ 模型"},
+      {t: 2900, pkt: "e_llma", label: "读健康数据", log: "← 先拿数据"},
+      {t: 3600, pkt: "l_dev", label: "90 天健康", log: "→ 设备网关"},
+      {t: 4300, pkt: "e_call", label: "90 天健康", stat: {dev: 1}, log: "→ 手机"},
+      {t: 5300, pkt: "e_ret", label: "体重·跑步", log: "← 数据"},
+      {t: 6100, pkt: "l_dev", back: true, label: "健康数据", log: "回 Harness"},
+      {t: 6800, pkt: "e_llmq", label: "数据", on: ["md_main"], log: "→ 模型"},
+      {t: 7900, pkt: "e_llma", label: "Write + 登记", log: "← 写站点 + 登记刷新"},
+      {t: 8600, pkt: "l_fs", label: "Write sites/health/", log: "index.html + site.json；存在即站点"},
+      {t: 9400, pkt: "l_cron", label: "每晚 23:00 刷新", log: "schedule_create"},
+      {t: 10200, pkt: "l_serve", label: "sites/ 有新目录", log: "App 网关盯着目录"},
+      {t: 10900, pkt: "e_card", label: "站点", log: "→ App"},
+      {t: 11900, on: ["app_board"], phone: "看板 · 站点\n📈 体重 & 跑步（每晚刷新）", log: "站点常驻"}
+    ]},
+    {id: "f_task", name: "子任务·进度", icon: "🧩", steps: [
+      {t: 0, on: ["app_chat"], phone: "你：调研三款儿童安全座椅，出对比表", pkt: "e_msg", label: "调研安全座椅", log: "你：调研安全座椅"},
+      {t: 1100, pkt: "l_in", label: "消息", log: "进主线程"},
+      {t: 1800, pkt: "e_llmq", label: "消息", on: ["md_main"], log: "→ 模型"},
+      {t: 2900, pkt: "e_llma", label: "派子任务", log: "← 派后台子任务（在 Harness 里跑，不画）"},
+      {t: 3600, pkt: "l_out", label: "task_started", stat: {sub: 1}, log: "SDK 消息：task_started"},
+      {t: 4200, pkt: "e_evt", label: "在弄了", on: ["app_task"], phone: "任务 · 安全座椅调研\n进行中", log: "→ App 任务页"},
+      {t: 4900, pkt: "e_cq", label: "搜评测", on: ["cn_search"], log: "子任务 → 联网"},
+      {t: 5900, pkt: "e_cr", label: "12 篇", log: "← 评测"},
+      {t: 6600, pkt: "e_llmq", label: "评测", on: ["md_main"], log: "子任务自己的上下文"},
+      {t: 7700, pkt: "e_llma", label: "要点", log: "← 要点"},
+      {t: 8400, pkt: "l_fs", label: "Write workspace/座椅/", log: "脚本、中间结果放草稿区"},
+      {t: 9200, pkt: "l_out", label: "task_progress", log: "一行进度摘要（agentProgressSummaries）"},
+      {t: 9800, pkt: "e_evt", label: "进度：已读 12 篇", on: ["app_task"], log: "→ App"},
+      {t: 10500, pkt: "e_llmq", label: "汇总", on: ["md_main"], log: "→ 模型"},
+      {t: 11600, pkt: "e_llma", label: "对比表", log: "← 对比表 HTML"},
+      {t: 12300, pkt: "l_fs", label: "Write data/sites/座椅对比/", log: "交付物放 data/，看板能看到"},
+      {t: 13100, pkt: "l_out", label: "task_notification", log: "完成通知回到主线程"},
+      {t: 13700, pkt: "e_evt", label: "完成", log: "→ App"},
+      {t: 14700, on: ["app_task"], phone: "✅ 安全座椅对比表\n可继续追问", log: "任务页"}
+    ]},
+    {id: "f_night", name: "夜间整理·日记·压缩", icon: "🌙", steps: [
+      {t: 0, on: ["cl_sched"], log: "22:30 夜间整理"},
+      {t: 800, pkt: "l_sched", label: "[定时任务] 整理", log: "开新 session"},
+      {t: 1600, pkt: "e_llmq", label: "[定时任务] 整理", on: ["md_main"], log: "→ 模型"},
+      {t: 2700, pkt: "e_llma", label: "Read 今日会话", log: "← 读今天的会话记录"},
+      {t: 3400, pkt: "l_fs", label: "Read system/sessions/", log: "主线程 + 各任务"},
+      {t: 4200, pkt: "l_fs", back: true, label: "今日记录", log: "内容回来"},
+      {t: 4900, pkt: "e_llmq", label: "今日记录", on: ["md_main"], log: "→ 模型：补漏、合并、纠错"},
+      {t: 6000, pkt: "e_llma", label: "Edit ×3", log: "← 三处改动"},
+      {t: 6700, pkt: "l_fs", label: "Edit feedback/晨报.md", mem: {feedback: 1, people: 1}, log: "补上白天漏记的"},
+      {t: 7500, pkt: "l_fs", label: "旧事实 → history/", mem: {history: 1}, log: "被推翻的挪进 history"},
+      {t: 8300, pkt: "l_fs", label: "重写 profile/总档.md", log: "总档重写"},
+      {t: 9100, pkt: "l_fs", label: "Write diary/10-07.md", log: "日记也只是一个目录"},
+      {t: 9900, on: ["cl_harness"], log: "主线程闲着 → /compact（你不在聊，无感）"},
+      {t: 10600, pkt: "l_serve", label: "diary/ 有新文件", log: "App 网关盯着目录"},
+      {t: 11300, pkt: "e_card", label: "日记", log: "→ App"},
+      {t: 12300, on: ["app_diary"], phone: "日记 · 10 月 7 日\n今天陪你找了周末去处，\n也记住了晨报要再短一点。", log: "日记页"}
+    ]},
+    {id: "f_catchup", name: "设备上线·补读", icon: "📥", steps: [
+      {t: 0, on: ["dev_android"], pkt: "e_reg", label: "重新上线", log: "手机离线 3 天后，你打开了 App"},
+      {t: 1100, on: ["cl_devgw"], log: "设备网关：游标停在 10-05 21:13，今天还没补过"},
+      {t: 1900, pkt: "l_wake", label: "[补读] 安卓", log: "开一个独立 session，不进主线程，聊天里什么都不会多"},
+      {t: 2700, pkt: "e_llmq", label: "[补读] 安卓", on: ["md_main"], log: "→ 模型"},
+      {t: 3800, pkt: "e_llma", label: "read_since", log: "← 调网关的 read_since，不用自己算时间"},
+      {t: 4500, pkt: "l_dev", label: "read_since(短信)", log: "→ 设备网关：按游标取一批（最多 50 条）"},
+      {t: 5200, pkt: "e_call", label: "第 1 批", stat: {dev: 1}, log: "→ 手机"},
+      {t: 6200, pkt: "e_ret", label: "50 条", log: "← 手机"},
+      {t: 7000, pkt: "l_dev", back: true, label: "50 条 + 批次号", log: "只进上下文"},
+      {t: 7700, pkt: "e_llmq", label: "第 1 批", on: ["md_main"], log: "→ 模型：挑出值得记的"},
+      {t: 8800, pkt: "e_llma", label: "Write + commit", log: "← 写记忆，再提交这一批"},
+      {t: 9500, pkt: "l_fs", label: "Write people/老王.md", mem: {people: 1}, log: "原始短信不落盘"},
+      {t: 10300, pkt: "l_dev", label: "sync_commit(批次 1)", log: "写完记忆才提交 → 网关把游标推到第 1 批末尾"},
+      {t: 11100, pkt: "l_dev", label: "read_since(短信)", log: "取第 2 批"},
+      {t: 11800, bad: ["dev_android"], dur: 2600, log: "读到一半，手机又离线了", logKind: "bad"},
+      {t: 12300, pkt: "l_dev", back: true, label: "设备离线", bad: ["cl_devgw"], dur: 1200, log: "第 2 批没提交 → 游标不动；session 结束", logKind: "bad"},
+      {t: 13300, on: ["cl_devgw"], log: "下次上线从第 2 批开头接着读。最坏重读一批，写记忆前会先看文件里有没有"}
+    ]},
+    {id: "f_offline", name: "设备离线·诚实降级", icon: "🫥", steps: [
+      {t: 0, on: ["cl_sched"], log: "07:30 晨报"},
+      {t: 600, pkt: "l_sched", label: "[定时任务] 晨报", log: "开新 session"},
+      {t: 900, bad: ["dev_android"], dur: 9800, log: "安卓被杀后台 → 离线", logKind: "bad"},
+      {t: 1700, pkt: "e_llmq", label: "[定时任务] 晨报", on: ["md_main"], log: "→ 模型"},
+      {t: 2800, pkt: "e_llma", label: "读日历", log: "← 要读日历"},
+      {t: 3500, pkt: "l_dev", label: "calendar_read", log: "→ 设备网关"},
+      {t: 4300, pkt: "l_dev", back: true, label: "设备离线", bad: ["cl_devgw"], dur: 1500, log: "网关直接回「设备离线」", logKind: "bad"},
+      {t: 5000, pkt: "e_cq", label: "未读邮件", log: "→ 邮箱（云端一直在线）"},
+      {t: 6000, pkt: "e_cr", label: "3 封重要", log: "← 邮件"},
+      {t: 6700, pkt: "e_llmq", label: "材料（缺日程）", on: ["md_main"], log: "读不到就说读不到，不拿记忆补"},
+      {t: 7800, pkt: "e_llma", label: "晨报", log: "← 晨报"},
+      {t: 8500, pkt: "l_fs", label: "Write briefs/10-08/", log: "写入"},
+      {t: 9300, pkt: "l_serve", label: "briefs/ 有新目录", log: "App 网关"},
+      {t: 10000, pkt: "e_card", label: "晨报（日程暂不可读）", log: "→ App"},
+      {t: 11000, on: ["app_board"], phone: "晨报\n日程 · 暂不可读（手机离线）\n邮件 · 3 封重要", log: "读不到的，就写读不到"}
+    ]}
+  ],
+  questions: [
+    {id: "q_boundary", title: "要替你对别人说话、改外面的东西时，先问不问？", body: "「对外动作」= 会影响到你以外的人或系统、收不回来的事：给别人发短信 / 邮件 / 微信、建或删日程、删文件、发帖。只读（查日历、读短信、搜索）和写自己的目录（记忆、站点）不算。", rec: "例：你说「跟老王说我晚点到」→ 直接发。老王来短信问几点到 → 先问你「要我回他吗？」，不自己回。你从没提过的（比如看到账单快到期）→ 只告诉你，不替你处理。另一种做法是 Poke 式：发出去之前都先给你看一眼草稿。"},
+    {id: "q_dirs", title: "工作目录怎么分区？", body: "跑任务难免写脚本，它们不是记忆也不是站点。Personal Agent 的特点是很多数据要长期、高质量维护。", rec: "按寿命分三区，不放同级：data/（精心维护、备份、App 展示）· workspace/（草稿，每周清理）· system/（连接器、游标、会话记录）。用过两次以上的脚本升级成 .claude/skills/ 里的技能。"},
+    {id: "q_sync", title: "增量补读", decided: "云端连接器每天定时读；本机连接器在设备上线时补读，每天最多一次，开独立 session。", rec: "游标是网关维护的一个小 JSON（system/sync/<设备>.json），不是 MD。分批读，写完记忆再 sync_commit；断了这批不算，下次接着读。"},
+    {id: "q_session", title: "压缩", decided: "夜里主线程空闲时主动 /compact；白天用得多照样会触发自动压缩，夜里压缩只是让第二天离下一次压缩更远。"},
+    {id: "q_site", title: "站点", decided: "不做低代码。data/sites/<名>/index.html 存在即站点，可选 site.json。"},
+    {id: "q_conn", title: "连接器和设备怎么分", decided: "设备上的能力也是连接器，技术上就是 SDK 的 Plugin（MCP + skills + hooks）。区别只在宿主：本机连接器要授权、会离线；云端连接器一直在线。", rec: "本体能自己写 connectors/<名>/，薄壳调 reloadPlugins() 生效，所以「让豆豆帮我配」可行。"},
+    {id: "q_prompt", title: "系统提示词", decided: "固定不变，吃满缓存。不往里装总档或索引；写清目录约定，模型自己去读。", rec: "时间、在线设备由 UserPromptSubmit 钩子随消息带上，不碰系统提示词。具体怎么写后面再聊。"},
+    {id: "q_memory", title: "记忆库形态", decided: "工作目录里的 memory/。profile/ 只放一份总档；health/ App 有专门渲染；其余分类多个 MD，不建子目录。"},
+    {id: "q_host", title: "云主机", decided: "ECS。"},
+    {id: "q_model", title: "模型", decided: "测试期全部用 glm-5.3-flash。"},
+    {id: "q_proto", title: "设备离线", decided: "设备网关直接返回「设备离线」。"},
+    {id: "q_push", title: "App 被杀后怎么联系你", decided: "后放。"},
+    {id: "q_hw", title: "以后的硬件", decided: "后放。"},
+    {id: "q_spike", title: "Spec 之后先做什么", decided: "云本体 → 安卓 App → Mac DMG。"}
+  ]
+};
+
+/* ============ 运行时 ============ */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const NS = "http://www.w3.org/2000/svg";
+const mk = (tag, attrs, parent) => { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); if (parent) parent.appendChild(el); return el; };
+const stage = $("#stage");
+const MEM0 = {profile: 1, people: 2, preferences: 4, life: 2, work: 1, project: 1, interests: 1, history: 1, health: 3, finance: 1, feedback: 0, "automation-prefs": 1, role: 1, "voice-notes": 0};
+const STATS0 = {egress: 0, sub: 0, mem: 0, dev: 0};
+
+const S = {clock: 0, playing: true, speed: 1, auto: true, queue: [], packets: [], fx: new Map(), flow: -1, flowStart: 0,
+  running: false, idleAt: 0, stats: {...STATS0}, mem: {...MEM0},
+  sel: null, trust: false, domEls: {}, chipEls: {}, edgeEls: {}, geom: {}, svg: null, pk: null, dirtyStats: true};
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem("pa_q") || "{}"); } catch (e) { return {}; } },
+  set(v) { try { localStorage.setItem("pa_q", JSON.stringify(v)); } catch (e) {} }
+};
+let qState = store.get();
+
+const dom = id => SPEC.domains.find(d => d.id === id);
+const chipOwner = id => SPEC.domains.find(d => d.chips.some(c => c.id === id));
+const edgeOf = id => SPEC.edges.find(e => e.id === id);
+const linkOf = id => (SPEC.links || []).find(l => l.id === id);
+const wireOf = id => edgeOf(id) || linkOf(id);
+const chipOf = id => { const o = chipOwner(id); return o && o.chips.find(c => c.id === id); };
+const nameOf = id => (dom(id) || chipOf(id) || {name: id}).name;
+/* 元素相对舞台的矩形（未缩放坐标） */
+function relRect(el) {
+  let l = 0, t = 0, e = el;
+  while (e && e !== stage) { l += e.offsetLeft; t += e.offsetTop; e = e.offsetParent; }
+  return {l, t, r: l + el.offsetWidth, b: t + el.offsetHeight};
+}
+
+function buildStage() {
+  stage.innerHTML = ""; S.domEls = {}; S.chipEls = {}; S.edgeEls = {}; S.geom = {};
+  for (const d of SPEC.domains) {
+    const z = SPEC.zones[d.zone];
+    const el = document.createElement("div");
+    el.className = `domain ${d.id}${d.compact ? " compact" : ""}`;
+    el.dataset.id = d.id;
+    el.style.setProperty("--zc", z.color);
+    const [x, y, w, h] = d.rect;
+    Object.assign(el.style, {left: x + "%", top: y + "%", width: w + "%", height: h + "%"});
+    el.innerHTML = `<div class="dhead"><span class="ico">${d.icon}</span><div class="dt"><div class="dname">${esc(d.name)}${d.qs ? '<i class="qd big"></i>' : ""}</div><div class="drole">${esc(d.role)}</div></div><span class="zb">${esc(z.label)}</span></div><div class="chips"></div>`;
+    const cw = $(".chips", el);
+    if (d.free) cw.classList.add("free");
+    for (const c of d.chips) {
+      const ce = document.createElement("div");
+      const box = c.widget === "memory" || c.pills;
+      ce.className = "chip" + (box ? " box" : ""); ce.dataset.id = c.id;
+      ce.innerHTML = `<span class="ci">${c.icon}</span><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></div>${c.q ? '<i class="qd"></i>' : ""}`;
+      if (box) ce.innerHTML = `<div style="display:flex;gap:8px;align-items:center">${ce.innerHTML}</div>` +
+        (c.pills ? `<div class="pills">${c.pills.map(p => `<span>${esc(p)}</span>`).join("")}</div>` : "") +
+        (c.widget === "memory" ? `<div class="memt">memory/</div><div class="mem" id="mem"></div>` : "");
+      if (d.free && c.at) { const [x, y, w, h] = c.at; Object.assign(ce.style, {left: x + "%", top: y + "%", width: w + "%", height: h + "%"}); }
+      ce.onclick = e => { e.stopPropagation(); select("chip", c.id); };
+      cw.appendChild(ce); S.chipEls[c.id] = ce;
+    }
+    if (d.widget === "phone") {
+      el.insertAdjacentHTML("beforeend", `<div class="phone"><div class="pbubble" id="pbubble">豆豆 · 等待中…</div><div class="ptabs"><span>💬 聊天</span><span>📋 看板</span><span>✅ 任务</span><span>🗂 记忆</span><span>📔 日记</span></div></div>`);
+    }
+    if (d.widget === "memory") {
+      el.insertAdjacentHTML("beforeend", `<div class="memt">记忆库 · MD 文件夹（+ 总档《我对你的了解》）</div><div class="mem" id="mem"></div>`);
+    }
+    el.onclick = () => select("domain", d.id);
+    stage.appendChild(el); S.domEls[d.id] = el;
+  }
+  stage.insertAdjacentHTML("beforeend", `<div class="widget" style="left:1%;top:82%;width:22%;height:17%"><h4>图例</h4><div class="kgrid">${Object.values(SPEC.kinds).map(k => `<div class="lg-row"><span class="dot" style="background:${k.color}"></span>${esc(k.label)}</div>`).join("")}</div><div class="hint" style="margin-top:6px;font-size:11px">框 = 域 · 卡片 = 子节点 · 紫签 = 挂载项（不画箭头）</div></div><div class="widget" style="left:77%;top:82%;width:22%;height:17%"><h4>本次运行</h4><div class="stats" id="stats"></div></div>`);
+  S.svg = mk("svg", {id: "wires"}, stage);
+  const defs = mk("defs", {}, S.svg);
+  for (const [k, v] of Object.entries(SPEC.kinds)) {
+    const m = mk("marker", {id: "ar_" + k, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto"}, defs);
+    mk("path", {d: "M0 0L10 5L0 10z", fill: v.color}, m);
+  }
+  for (const e of SPEC.edges) {
+    const g = mk("g", {class: "edge"}, S.svg); g.dataset.id = e.id;
+    const toThird = dom(e.to) && SPEC.zones[dom(e.to).zone].label === "第三方";
+    const col = SPEC.kinds[e.kind].color;
+    const wire = mk("path", {class: "wire" + (toThird ? " egress" : ""), stroke: col, "marker-end": `url(#ar_${e.kind})`}, g);
+    const hit = mk("path", {class: "hit"}, g);
+    hit.onclick = ev => { ev.stopPropagation(); select("edge", e.id); };
+    const lbl = mk("g", {class: "lbl"}, g);
+    lbl.onclick = ev => { ev.stopPropagation(); select("edge", e.id); };
+    const rc = mk("rect", {rx: 8, height: 16}, lbl);
+    const tx = mk("text", {"text-anchor": "middle", y: 11}, lbl); tx.textContent = e.label;
+    S.edgeEls[e.id] = {g, wire, hit, lbl, rc, tx};
+  }
+  for (const e of SPEC.links || []) {
+    const g = mk("g", {class: "edge"}, S.svg); g.dataset.id = e.id;
+    const wire = mk("path", {class: "link", stroke: SPEC.kinds[e.kind].color, "marker-end": `url(#ar_${e.kind})`}, g);
+    const hit = mk("path", {class: "hit"}, g);
+    hit.onclick = ev => { ev.stopPropagation(); select("edge", e.id); };
+    const lbl = mk("g", {class: "lbl small"}, g);
+    lbl.onclick = ev => { ev.stopPropagation(); select("edge", e.id); };
+    const rc = mk("rect", {rx: 7, height: 14, y: 1}, lbl);
+    const tx = mk("text", {"text-anchor": "middle", y: 11}, lbl); tx.textContent = e.label;
+    S.edgeEls[e.id] = {g, wire, hit, lbl, rc, tx, link: true};
+  }
+  S.pk = mk("g", {}, S.svg);
+  renderMem(); layoutWires();
+}
+
+/* 舞台是固定 1080×780 的设计稿，按可用宽度（行布局时还看窗口高度）整体缩放；#stagebox 按缩放后的尺寸占位并裁掉变换前的布局框 */
+const DESIGN_W = 1080, DESIGN_H = 780, PAD = 16;
+function fit() {
+  const wrap = $("#stagewrap"), box = $("#stagebox"), row = getComputedStyle($("main")).flexDirection === "row";
+  let k = (wrap.clientWidth - 2 * PAD) / DESIGN_W;
+  if (row) k = Math.min(k, (innerHeight - (wrap.getBoundingClientRect().top + scrollY) - 2 * PAD - 20) / DESIGN_H);
+  k = Math.min(1.5, Math.max(0.5, Math.floor(k * 1000) / 1000));
+  stage.style.transform = `scale(${k})`;
+  box.style.width = Math.round(DESIGN_W * k + 2 * PAD) + "px";
+  box.style.height = Math.round(DESIGN_H * k + 2 * PAD) + "px";
+  $("#panel").style.height = row ? Math.max(560, box.offsetHeight) + "px" : "";
+}
+
+function layoutWires() {
+  S.svg.setAttribute("width", stage.offsetWidth); S.svg.setAttribute("height", stage.offsetHeight);
+  const R = {};
+  for (const id in S.domEls) { const e = S.domEls[id]; R[id] = {l: e.offsetLeft, t: e.offsetTop, r: e.offsetLeft + e.offsetWidth, b: e.offsetTop + e.offsetHeight}; }
+  for (const e of SPEC.edges) {
+    const A = R[e.from], B = R[e.to], el = S.edgeEls[e.id]; if (!A || !B || !el) continue;
+    const gx = Math.max(B.l - A.r, A.l - B.r), gy = Math.max(B.t - A.b, A.t - B.b);
+    let x1, y1, x2, y2, horiz = gx >= gy;
+    if (horiz) {
+      const lo = Math.max(A.t, B.t) + 14, hi = Math.min(A.b, B.b) - 14;
+      const y = (lo < hi ? (lo + hi) / 2 : (A.t + A.b + B.t + B.b) / 4) + (e.off || 0);
+      y1 = y2 = y; if (B.l > A.r) { x1 = A.r; x2 = B.l - 2; } else { x1 = A.l; x2 = B.r + 2; }
+    } else {
+      const lo = Math.max(A.l, B.l) + 14, hi = Math.min(A.r, B.r) - 14;
+      const x = (lo < hi ? (lo + hi) / 2 : (A.l + A.r + B.l + B.r) / 4) + (e.off || 0);
+      x1 = x2 = x; if (B.t > A.b) { y1 = A.b; y2 = B.t - 2; } else { y1 = A.t; y2 = B.b + 2; }
+    }
+    const d = `M${x1} ${y1}L${x2} ${y2}`;
+    el.wire.setAttribute("d", d); el.hit.setAttribute("d", d);
+    const bb = el.tx.getBBox(), w = bb.width + 12;
+    el.rc.setAttribute("width", w); el.rc.setAttribute("x", -w / 2);
+    const lt = e.lt ?? 0.5;
+    el.lbl.setAttribute("transform", `translate(${x1 + (x2 - x1) * lt},${y1 + (y2 - y1) * lt - 8})`);
+    S.geom[e.id] = {path: el.wire, len: el.wire.getTotalLength(), horiz};
+  }
+  /* 域内连线：两张卡片中心连线，按 off 平移后裁到卡片边框 */
+  for (const e of SPEC.links || []) {
+    const ea = S.chipEls[e.from], eb = S.chipEls[e.to], el = S.edgeEls[e.id]; if (!ea || !eb || !el) continue;
+    const A = relRect(ea), B = relRect(eb);
+    let ax = A.l + (A.r - A.l) * (e.fx ?? 0.5), ay = (A.t + A.b) / 2, bx = B.l + (B.r - B.l) * (e.tx ?? 0.5), by = (B.t + B.b) / 2;
+    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, o = e.off || 0;
+    ax += nx * o; ay += ny * o; bx += nx * o; by += ny * o;
+    const exit = (R, x, y, ux, uy) => {
+      const tx = ux > 0 ? (R.r + 2 - x) / ux : ux < 0 ? (R.l - 2 - x) / ux : Infinity;
+      const ty = uy > 0 ? (R.b + 2 - y) / uy : uy < 0 ? (R.t - 2 - y) / uy : Infinity;
+      const t = Math.min(tx, ty); return [x + ux * t, y + uy * t];
+    };
+    const [x1, y1] = exit(A, ax, ay, dx / len, dy / len), [x2, y2] = exit(B, bx, by, -dx / len, -dy / len);
+    const d = `M${x1} ${y1}L${x2} ${y2}`;
+    el.wire.setAttribute("d", d); el.hit.setAttribute("d", d);
+    const bb = el.tx.getBBox(), w = bb.width + 10, lt = e.lt ?? 0.5;
+    el.rc.setAttribute("width", w); el.rc.setAttribute("x", -w / 2);
+    el.lbl.setAttribute("transform", `translate(${x1 + (x2 - x1) * lt},${y1 + (y2 - y1) * lt - 8})`);
+    S.geom[e.id] = {path: el.wire, len: el.wire.getTotalLength(), horiz: Math.abs(dx) >= Math.abs(dy)};
+  }
+}
+
+function renderMem() {
+  const m = $("#mem"); if (!m) return;
+  m.innerHTML = Object.keys(S.mem).map(k => `<span data-k="${k}">${k} ${S.mem[k]}</span>`).join("");
+}
+function flashMem(k) { const el = $(`#mem [data-k="${k}"]`); if (!el) return; el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 900); }
+
+/* ---- 引擎 ---- */
+function enqueue(at, step) { S.queue.push({at, step}); S.queue.sort((a, b) => a.at - b.at); }
+function setFx(id, kind, dur) { S.fx.set(id, {until: S.clock + dur, kind}); }
+function addLog(text, kind) {
+  const l = $("#log"), d = document.createElement("div");
+  d.className = "lg" + (kind ? " " + kind : "");
+  d.innerHTML = `<time>+${((S.clock - S.flowStart) / 1000).toFixed(1)}s</time><span>${esc(text)}</span>`;
+  l.appendChild(d); while (l.children.length > 300) l.removeChild(l.firstChild); l.scrollTop = l.scrollHeight;
+}
+/* back = 沿同一条线反向走（工具调用的返回值），不用为每次返回再画一根线 */
+function spawnPacket(edgeId, label, back) {
+  const e = wireOf(edgeId), g = S.geom[edgeId]; if (!e || !g) return;
+  const col = SPEC.kinds[e.kind].color, isLink = !edgeOf(edgeId);
+  const grp = mk("g", {class: "pkt"}, S.pk);
+  mk("circle", {r: isLink ? 5.5 : 7, fill: back ? "#fff" : col, stroke: back ? col : "#fff", "stroke-width": 2.5}, grp);
+  const tx = mk("text", {fill: "#1d2433", x: g.horiz ? 0 : 12, y: g.horiz ? -11 : 4, "text-anchor": g.horiz ? "middle" : "start"}, grp);
+  tx.textContent = (back ? "↩ " : "") + (label || e.label);
+  S.packets.push({edge: edgeId, t0: S.clock, dur: isLink ? 850 : 1100, g: grp, back: !!back, target: back ? e.from : e.to});
+  const to = dom(e.to);
+  if (!isLink && !back && to && SPEC.zones[to.zone].label === "第三方") { S.stats.egress++; S.dirtyStats = true; }
+}
+function runStep(s) {
+  if (s.on) for (const id of s.on) setFx(id, "ok", s.dur || 1500);
+  if (s.warn) for (const id of s.warn) setFx(id, "warn", s.dur || 2500);
+  if (s.bad) for (const id of s.bad) setFx(id, "bad", s.dur || 3000);
+  if (s.pkt) spawnPacket(s.pkt, s.label, s.back);
+  if (s.mem) for (const k in s.mem) { S.mem[k] = (S.mem[k] || 0) + s.mem[k]; S.stats.mem += s.mem[k]; S.dirtyStats = true; renderMem(); flashMem(k); }
+  if (s.stat) { for (const k in s.stat) S.stats[k] = (S.stats[k] || 0) + s.stat[k]; S.dirtyStats = true; }
+  const pb = $("#pbubble"); if (s.phone && pb) pb.textContent = s.phone;
+  if (s.log) addLog(s.log, s.logKind);
+}
+function startFlow(i) {
+  S.flow = (i + SPEC.flows.length) % SPEC.flows.length;
+  const f = SPEC.flows[S.flow];
+  S.queue = [];
+  for (const p of S.packets) p.g.remove(); S.packets = []; S.fx.clear();
+  S.flowStart = S.clock; S.running = true;
+  for (const s of f.steps) enqueue(S.clock + s.t, s);
+  addLog(`▶ ${f.icon} ${f.name}`, "sys");
+  markFlow();
+}
+function ease(k) { return k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; }
+
+function tick() {
+  while (S.queue.length && S.queue[0].at <= S.clock) runStep(S.queue.shift().step);
+  if (S.running && !S.queue.length && !S.packets.length && ![...S.fx.values()].some(f => f.until > S.clock)) {
+    S.running = false; S.idleAt = S.clock;
+  }
+  if (!S.running && S.auto && S.clock - S.idleAt > 1800) startFlow(S.flow + 1);
+}
+
+function render() {
+  const hot = new Set();
+  for (let i = S.packets.length - 1; i >= 0; i--) {
+    const p = S.packets[i], g = S.geom[p.edge], k = (S.clock - p.t0) / p.dur;
+    if (!g || k >= 1) {
+      p.g.remove(); S.packets.splice(i, 1);
+      const el = S.domEls[p.target];
+      if (el) { el.classList.add("pulse"); setTimeout(() => el.classList.remove("pulse"), 600); }
+      else if (S.chipEls[p.target] && !S.fx.has(p.target)) setFx(p.target, "ok", 500);
+      continue;
+    }
+    const pt = g.path.getPointAtLength(g.len * (p.back ? 1 - ease(k) : ease(k)));
+    p.g.setAttribute("transform", `translate(${pt.x},${pt.y})`); hot.add(p.edge);
+  }
+  for (const id in S.edgeEls) S.edgeEls[id].wire.classList.toggle("hot", hot.has(id));
+  for (const [id, f] of S.fx) {
+    if (f.until <= S.clock) S.fx.delete(id);
+  }
+  for (const id in S.chipEls) {
+    const f = S.fx.get(id), el = S.chipEls[id];
+    el.classList.toggle("on", !!f && f.kind === "ok");
+    el.classList.toggle("warn", !!f && f.kind === "warn");
+    el.classList.toggle("bad", !!f && f.kind === "bad");
+  }
+  if (S.dirtyStats) {
+    S.dirtyStats = false;
+    $("#stats").innerHTML = `<div><b>${S.stats.egress}</b> 次出境</div><div><b>${S.stats.dev}</b> 次设备调用</div><div><b>${S.stats.sub}</b> 个子任务</div><div><b>${S.stats.mem}</b> 处记忆写入</div>`;
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(now - last, 100); last = now;
+  try {
+    if (S.playing) { S.clock += dt * S.speed; tick(); }
+    render();
+  } catch (err) {
+    console.error(err);
+    if (S.lastErr !== err.message) { S.lastErr = err.message; addLog("⚠ 运行出错：" + err.message, "bad"); }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---- 面板 ---- */
+function renderFlowBar() {
+  $("#flows").innerHTML = `<span class="lab">场景：</span>` + SPEC.flows.map((f, i) => `<button class="btn" data-i="${i}">${f.icon} ${esc(f.name)}</button>`).join("");
+  document.querySelectorAll("#flows [data-i]").forEach(b => b.onclick = () => { startFlow(+b.dataset.i); });
+}
+function markFlow() {
+  document.querySelectorAll("#flows [data-i]").forEach(b => b.classList.toggle("on", +b.dataset.i === S.flow));
+}
+function showTab(t) {
+  document.querySelectorAll(".tabs .btn").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  document.querySelectorAll(".tabc").forEach(c => c.classList.toggle("show", c.id === t));
+}
+function li(arr, cls) { return `<ul>${(arr || []).map(x => `<li class="${cls || ""}">${esc(x)}</li>`).join("")}</ul>`; }
+/* 极简 Markdown：标题 / 列表 / 表格 / 代码块 / 行内代码 / 粗体 */
+function md(src) {
+  const inl = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  const out = []; let list = false, table = false, code = null;
+  const close = () => { if (list) { out.push("</ul>"); list = false; } if (table) { out.push("</table>"); table = false; } };
+  for (const line of String(src).split("\n")) {
+    if (code !== null) { if (line.startsWith("```")) { out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); code = null; } else code.push(line); continue; }
+    if (line.startsWith("```")) { close(); code = []; continue; }
+    if (/^#{1,2} /.test(line)) { close(); out.push(line.startsWith("## ") ? `<h5>${inl(line.slice(3))}</h5>` : `<h4>${inl(line.slice(2))}</h4>`); continue; }
+    if (/^\s*- /.test(line)) { if (table) close(); if (!list) { out.push("<ul>"); list = true; } out.push(`<li>${inl(line.replace(/^\s*- /, ""))}</li>`); continue; }
+    if (line.startsWith("|")) { if (list) close(); if (/^\|[\s:|-]+\|$/.test(line)) continue; if (!table) { out.push("<table>"); table = true; } out.push("<tr>" + line.slice(1, -1).split("|").map(c => `<td>${inl(c.trim())}</td>`).join("") + "</tr>"); continue; }
+    close(); if (line.trim()) out.push(`<p>${inl(line)}</p>`);
+  }
+  if (code !== null) out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`);
+  close(); return `<div class="doc">${out.join("")}</div>`;
+}
+function qCard(q) {
+  if (q.decided) return `<div class="q done"><div class="qt">✅ ${esc(q.title)}</div><div class="qrec">已定：${esc(q.decided)}</div>${q.rec ? `<div class="qb">${esc(q.rec)}</div>` : ""}</div>`;
+  const st = qState[q.id] || "待定";
+  return `<div class="q ${st === "采纳建议" ? "adopt" : st === "否决" ? "reject" : ""}"><div class="qt">${esc(q.title)}</div><div class="qb">${esc(q.body)}</div><div class="qrec">我的建议：${esc(q.rec)}</div><div class="qs">${["待定", "采纳建议", "否决"].map(s => `<button class="btn${st === s ? " on" : ""}" data-q="${q.id}" data-s="${s}">${s}</button>`).join("")}</div></div>`;
+}
+function bindQ(root) {
+  root.querySelectorAll("[data-q]").forEach(b => b.onclick = () => {
+    qState[b.dataset.q] = b.dataset.s; store.set(qState); renderQs(); renderDetail();
+  });
+}
+function renderQs() {
+  const open = SPEC.questions.filter(q => !q.decided), done = SPEC.questions.filter(q => q.decided);
+  $("#qs").innerHTML = `<div class="hint" style="margin-bottom:8px">上面是还没拍板的（点按钮记录，存在本机浏览器里），下面是已经定了的。</div>` + open.map(qCard).join("") + (done.length ? `<h5>已定（${done.length}）</h5>` + done.map(qCard).join("") : "");
+  bindQ($("#qs"));
+  $("#qcount").textContent = `(${open.filter(q => (qState[q.id] || "待定") === "待定").length})`;
+}
+function overview() {
+  return `<h3>怎么读这张图</h3><div class="hint">图本身就是规格。三种东西：</div><ul><li><b>域节点</b>（大玻璃框）：一个部件，里面是子功能。</li><li><b>子节点</b>（小卡片）：这个域里的部件。橙点 = 有待对齐的问题。</li><li><b>箭头</b>：数据包。粗线连域，细线连域内部件。虚线 = 数据出境。白心 ↩ 包 = 沿原路返回的工具结果。</li><li><b>亮</b> = 这一步真的在那里发生了一次调用或读写，不代表「可能用到」。</li></ul><h5>点击任意节点 / 卡片 / 连线看规格</h5><h5>顶部「视图：边界」按区域（设备 / 云 / 第三方）染色</h5><h5>顶部场景按钮可手动触发；默认自动轮播</h5>`;
+}
+function renderDetail() {
+  const p = $("#detail"), s = S.sel; if (!s) { p.innerHTML = overview(); return; }
+  if (s.type === "domain") {
+    const d = dom(s.id), z = SPEC.zones[d.zone];
+    const ins = SPEC.edges.filter(e => e.to === d.id), outs = SPEC.edges.filter(e => e.from === d.id);
+    p.innerHTML = `<h3>${d.icon} ${esc(d.name)}</h3><span class="tag" style="background:color-mix(in srgb,${z.color} 20%,white)">${esc(z.label)}</span><div style="margin-top:6px">${esc(d.role)}</div><h5>能做</h5>${li(d.can)}<h5>不能做（红线）</h5>${li(d.cannot, "no")}<h5>持有的数据</h5>${li(d.holds)}${d.doc ? md(d.doc) : ""}<h5>子节点</h5>${d.chips.map(c => `<span class="tag">${c.icon} ${esc(c.name)}</span>`).join("")}<h5>收</h5>${ins.map(e => `<span class="tag">← ${esc(e.label)}</span>`).join("") || "—"}<h5>发</h5>${outs.map(e => `<span class="tag">→ ${esc(e.label)}</span>`).join("") || "—"}${(d.qs || []).length ? "<h5>待对齐</h5>" + d.qs.map(id => qCard(SPEC.questions.find(q => q.id === id))).join("") : ""}`;
+  } else if (s.type === "chip") {
+    const c = chipOwner(s.id).chips.find(c => c.id === s.id), o = chipOwner(s.id);
+    p.innerHTML = `<h3>${c.icon} ${esc(c.name)}</h3><span class="tag">属于：${esc(o.name)}</span><div style="margin-top:6px">${esc(c.desc)}</div>${c.note ? `<h5>说明</h5><div>${esc(c.note)}</div>` : ""}${c.doc ? md(c.doc) : ""}${(SPEC.links || []).filter(l => l.from === c.id || l.to === c.id).length ? "<h5>域内连线</h5>" + SPEC.links.filter(l => l.from === c.id || l.to === c.id).map(l => `<span class="tag">${l.from === c.id ? "→ " + esc(nameOf(l.to)) : "← " + esc(nameOf(l.from))}：${esc(l.label)}</span>`).join("") : ""}${c.q ? "<h5>待对齐</h5>" + qCard(SPEC.questions.find(q => q.id === c.q)) : ""}`;
+  } else {
+    const e = wireOf(s.id), k = SPEC.kinds[e.kind];
+    p.innerHTML = `<h3>${esc(e.label)}</h3><span class="tag" style="background:color-mix(in srgb,${k.color} 22%,white)">${esc(k.label)}</span>${linkOf(s.id) ? '<span class="tag">域内</span>' : ""}<div style="margin-top:6px">${esc(nameOf(e.from))} → ${esc(nameOf(e.to))}</div>${e.desc ? `<h5>载荷</h5><div>${esc(e.desc)}</div>` : ""}${e.trigger ? `<h5>触发</h5><div>${esc(e.trigger)}</div>` : ""}${e.trust ? `<h5>边界说明</h5><div>${esc(e.trust)}</div>` : ""}${e.doc ? md(e.doc) : ""}`;
+  }
+  bindQ(p);
+}
+function select(type, id) {
+  const el = type === "domain" ? S.domEls[id] : type === "chip" ? S.chipEls[id] : type === "edge" && S.edgeEls[id] ? S.edgeEls[id].g : null;
+  if (!el) return;
+  S.sel = {type, id};
+  document.querySelectorAll(".sel").forEach(e => e.classList.remove("sel"));
+  el.classList.add("sel");
+  renderDetail(); showTab("detail");
+}
+
+/* ---- 控件 ---- */
+$("#bPlay").onclick = () => { S.playing = !S.playing; $("#bPlay").textContent = S.playing ? "⏸ 暂停" : "▶ 播放"; };
+$("#sSpeed").onchange = e => S.speed = +e.target.value;
+$("#bAuto").onclick = () => { S.auto = !S.auto; $("#bAuto").classList.toggle("on", S.auto); };
+$("#bView").onclick = () => { S.trust = !S.trust; stage.classList.toggle("trust", S.trust); $("#bView").textContent = "视图：" + (S.trust ? "边界" : "架构"); $("#bView").classList.toggle("on", S.trust); };
+document.querySelectorAll(".tabs .btn").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+const specMsg = (text, ok) => { const m = $("#specerr"); m.textContent = text; m.classList.toggle("ok", !!ok); };
+$("#bSpec").onclick = () => { $("#specta").value = JSON.stringify(SPEC, null, 1); specMsg(""); $("#specdlg").showModal(); };
+$("#specClose").onclick = () => $("#specdlg").close();
+$("#specCopy").onclick = async () => {
+  const ta = $("#specta"); let ok = false;
+  try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) {}
+  if (!ok) { ta.select(); try { ok = document.execCommand("copy"); } catch (e) {} }
+  specMsg(ok ? "已复制" : "浏览器不让自动复制，已全选，按 ⌘C / Ctrl+C", ok);
+};
+function validateSpec(sp) {
+  const errs = [], isObj = v => v && typeof v === "object" && !Array.isArray(v), isArr = Array.isArray;
+  if (!isObj(sp)) return ["顶层必须是 JSON 对象 {…}"];
+  for (const k of ["zones", "kinds"]) if (!isObj(sp[k]) || !Object.keys(sp[k]).length) errs.push(`${k} 必须是非空对象`);
+  for (const k of ["domains", "edges", "flows", "questions"]) if (!isArr(sp[k])) errs.push(`${k} 必须是数组`);
+  if (errs.length) return errs;
+  if (!sp.domains.length) errs.push("domains 不能为空");
+  if (!sp.flows.length) errs.push("flows 不能为空");
+  const ids = (arr, what) => {
+    const seen = new Set();
+    for (const x of arr) { if (!x || !x.id) errs.push(`${what} 缺少 id`); else if (seen.has(x.id)) errs.push(`${what} id 重复：${x.id}`); else seen.add(x.id); }
+    return seen;
+  };
+  const domIds = ids(sp.domains, "domain"), edgeIds = ids(sp.edges, "edge"), qIds = ids(sp.questions, "question"), chipIds = new Set();
+  for (const d of sp.domains) {
+    if (!d || !d.id) continue;
+    if (!sp.zones[d.zone]) errs.push(`domain ${d.id}：zone「${d.zone}」不在 zones 里`);
+    if (!isArr(d.rect) || d.rect.length !== 4 || d.rect.some(n => typeof n !== "number")) errs.push(`domain ${d.id}：rect 要 4 个数字 [x, y, w, h]（百分比）`);
+    for (const q of d.qs || []) if (!qIds.has(q)) errs.push(`domain ${d.id}：待对齐问题 ${q} 不存在`);
+    if (!isArr(d.chips)) { errs.push(`domain ${d.id}：chips 必须是数组`); continue; }
+    for (const c of d.chips) {
+      if (!c || !c.id) { errs.push(`domain ${d.id}：有 chip 缺少 id`); continue; }
+      if (chipIds.has(c.id) || domIds.has(c.id)) errs.push(`chip id 重复：${c.id}`);
+      chipIds.add(c.id);
+      if (c.q && !qIds.has(c.q)) errs.push(`chip ${c.id}：待对齐问题 ${c.q} 不存在`);
+    }
+  }
+  for (const e of sp.edges) {
+    if (!e || !e.id) continue;
+    if (!domIds.has(e.from) || !domIds.has(e.to)) errs.push(`edge ${e.id}：from / to 必须是已有的 domain id`);
+    if (!sp.kinds[e.kind]) errs.push(`edge ${e.id}：kind「${e.kind}」不在 kinds 里`);
+  }
+  if (sp.links !== undefined && !isArr(sp.links)) { errs.push("links 必须是数组"); return errs; }
+  const linkIds = ids(sp.links || [], "link");
+  for (const e of sp.links || []) {
+    if (!e || !e.id) continue;
+    if (edgeIds.has(e.id)) errs.push(`link id 与 edge 重复：${e.id}`);
+    if (!chipIds.has(e.from) || !chipIds.has(e.to)) errs.push(`link ${e.id}：from / to 必须是已有的 chip id`);
+    if (!sp.kinds[e.kind]) errs.push(`link ${e.id}：kind「${e.kind}」不在 kinds 里`);
+  }
+  for (const d of sp.domains) if (d && d.free) for (const c of d.chips || []) if (c && (!isArr(c.at) || c.at.length !== 4)) errs.push(`domain ${d.id} 是自由布局：chip ${c.id} 需要 at: [x, y, w, h]`);
+  const steps = (arr, where) => {
+    if (!isArr(arr)) { errs.push(`${where}：steps 必须是数组`); return; }
+    arr.forEach((s, i) => {
+      const at = `${where} 第 ${i + 1} 步`;
+      if (!s || typeof s.t !== "number") { errs.push(`${at}：缺少数字 t（毫秒）`); return; }
+      if (s.pkt && !edgeIds.has(s.pkt) && !linkIds.has(s.pkt)) errs.push(`${at}：pkt「${s.pkt}」不是已有的 edge / link`);
+    });
+  };
+  for (const f of sp.flows) steps(f && f.steps, `flow ${f && f.name}`);
+  return errs;
+}
+$("#specApply").onclick = () => {
+  let next;
+  try { next = JSON.parse($("#specta").value); } catch (err) { specMsg("JSON 解析失败：" + err.message); return; }
+  const errs = validateSpec(next);
+  if (errs.length) { specMsg(errs.slice(0, 8).join("\n") + (errs.length > 8 ? `\n…还有 ${errs.length - 8} 条` : "")); return; }
+  const prev = SPEC;
+  try { SPEC = next; resetRun(); boot(); }
+  catch (err) { SPEC = prev; resetRun(); boot(); specMsg("应用失败，已恢复上一版：" + err.message); return; }
+  addLog("✔ 已应用新的 Spec，从第一个场景重新开始", "sys");
+  $("#specdlg").close();
+};
+
+function resetRun() {
+  S.sel = null; S.queue = []; S.packets = []; S.fx.clear(); S.running = false;
+  S.mem = {...MEM0}; S.stats = {...STATS0}; S.dirtyStats = true;
+}
+let wrapW = 0;
+new ResizeObserver(() => { const w = $("#stagewrap").clientWidth; if (w !== wrapW) { wrapW = w; fit(); } }).observe($("#stagewrap"));
+addEventListener("resize", fit);
+
+function boot(first) {
+  buildStage(); renderQs(); renderDetail(); renderFlowBar(); fit();
+  requestAnimationFrame(() => {
+    try {
+      fit(); layoutWires();
+      const q = new URLSearchParams(first ? location.hash.slice(1) : "");
+      startFlow(parseInt(q.get("flow"), 10) || 0);
+      if (q.get("trust") && !S.trust) $("#bView").click();
+      for (let t = 0, ff = +q.get("ff") || 0; t < ff; t += 50) { S.clock += 50; tick(); }
+      if (q.get("sel")) select(...q.get("sel").split(":"));
+    } catch (err) { console.error(err); addLog("⚠ 启动出错：" + err.message, "bad"); }
+  });
+}
+boot(true);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

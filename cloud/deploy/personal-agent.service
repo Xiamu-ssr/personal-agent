@@ -1,0 +1,21 @@
+[Unit]
+Description=Personal Agent cloud body
+After=network-online.target mihomo.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agent
+Group=agent
+WorkingDirectory=/srv/agent
+EnvironmentFile=/etc/personal-agent.env
+ExecStart=/usr/bin/node /opt/personal-agent/cloud/src/main.mjs
+Restart=always
+RestartSec=5
+# The agent may write anywhere it owns (/srv/agent, /home/agent, /tmp); the rest of the OS is read-only to it.
+ProtectSystem=full
+NoNewPrivileges=true
+MemoryMax=900M
+
+[Install]
+WantedBy=multi-user.target
