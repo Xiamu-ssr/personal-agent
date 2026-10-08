@@ -6,10 +6,10 @@
 |---|---|---|
 | `spec/` | Spec 模拟器（`index.html`，浏览器直接打开）和系统提示词 | v3 |
 | `cloud/` | 云端本体：Claude Agent SDK 内核 + 定时任务 + App/设备网关 | 在跑 |
-| `android/` | 安卓 App（聊天 / 看板 / 任务 / 记忆 / 日记 + 设备能力） | v0.1 |
-| `mac/` | Mac DMG（菜单栏 + 本机能力） | 之后 |
+| `android/` | 安卓 App（聊天 / 看板 / 任务 / 记忆 / 日记 + 设备能力） | v0.1.1 |
+| `mac/` | Mac 菜单栏 App（聊天 + 本机能力），打成 DMG | v0.1.0 |
 
-安装包发布在 [Releases](../../releases)，手机上直接下载 APK。
+安装包发布在 [Releases](../../releases)：手机下载 APK，Mac 下载 DMG。
 
 ## 云端本体
 
@@ -38,6 +38,15 @@ bash /opt/personal-agent/cloud/deploy/install.sh   # 不要加 sudo，脚本内�
 
 Kotlin + Jetpack Compose，minSdk 28。两条 WebSocket：`role=app`（聊天、事件）和 `role=device`（前台服务，把手机注册成设备）。
 
-- 首次打开：填云端地址 + 6 位配对码（在 ECS 上 `sudo -u agent node /opt/personal-agent/cloud/src/pair.mjs` 生成，24 小时有效、一次性）
+- 首次打开：填云端地址 + 6 位配对码。码在 ECS 上 `sudo -u agent node /opt/personal-agent/cloud/src/pair.mjs` 生成，或者在已连上的设备「设置 → 生成配对码」（`POST /api/pair/new`）。24 小时有效、一次性，新码顶掉旧码
 - 能力（逐个授权才注册）：电量、发通知、位置、日历、短信（支持补读）
 - 构建：`cd android && ./gradlew assembleRelease`（签名读 `~/.personal-agent/signing.properties`，不在仓库里）
+
+## Mac App
+
+SwiftUI 菜单栏 App（macOS 14+，不占 Dock）。点菜单栏的气泡图标聊天，齿轮进设置。同样两条 WebSocket：聊天 + 把这台 Mac 注册成设备。
+
+- 能力（逐个打开才注册）：电量、发通知、读/写剪贴板、打开网页、当前应用、快捷指令（列出 / 运行）、一个授权文件夹（列目录 / 读 / 写）
+- 安装：打开 DMG，把「豆豆」拖进「应用程序」。没有 Apple 开发者签名（ad-hoc），第一次打开会被拦：系统设置 → 隐私与安全性 → 「仍要打开」；或者终端里 `xattr -dr com.apple.quarantine /Applications/豆豆.app`
+- 口令存在 `~/Library/Application Support/Doudou/token`（0600），不进钥匙串，免得每次更新都弹授权
+- 构建：`VERSION=0.1.0 bash mac/build.sh`，只要命令行工具（CLT），不用 Xcode。脚本会自动绕开部分 CLT 自带的旧 `module.modulemap` 导致的 `import SwiftUI` 失败

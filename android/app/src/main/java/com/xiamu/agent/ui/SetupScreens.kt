@@ -176,6 +176,24 @@ fun OnboardingScreen(onDone: () -> Unit) {
     }
 }
 
+/** Issue a fresh one-time code (e.g. for the Mac app) from this already-paired phone. */
+@Composable
+private fun PairAnotherDevice() {
+    val scope = rememberCoroutineScope()
+    var code by remember { mutableStateOf("") }
+    Text("给另一台设备配对", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = {
+            scope.launch {
+                code = runCatching { Api.postJson("/api/pair/new", JSONObject()).getString("code") }
+                    .getOrElse { "失败：${it.message}" }
+            }
+        }) { Text("生成配对码") }
+        if (code.isNotBlank()) Text(code, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
+    }
+    Text("新码 24 小时内有效、只能用一次；会顶掉之前没用的码。", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onClose: () -> Unit) {
@@ -209,6 +227,8 @@ fun SettingsScreen(onClose: () -> Unit) {
                 Chat.disconnect(); Chat.connect()
                 DeviceService.start(ctx, reregister = true)
             }, okLabel = "保存并重连")
+
+            PairAnotherDevice()
 
             Text("版本 ${BuildConfigInfo.version(ctx)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 16.dp))
         }

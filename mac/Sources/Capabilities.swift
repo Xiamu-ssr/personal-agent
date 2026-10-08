@@ -1,0 +1,166 @@
+import AppKit
+import UserNotifications
+
+/// One thing this Mac can do for the agent. Only capabilities the user switched on are registered.
+struct Capability: Identifiable {
+    let name: String
+    let title: String
+    /// Written for the model.
+    let description: String
+    let args: String
+    /// What the user sees in settings, when it should differ from [description].
+    var hint: String? = nil
+    let run: ([String: Any]) async throws -> Any
+
+    var id: String { name }
+    var json: [String: Any] { ["name": name, "description": description, "args": args, "sync": false, "source": name] }
+}
+
+struct CapError: LocalizedError {
+    let errorDescription: String?
+    init(_ s: String) { errorDescription = s }
+}
+
+enum Capabilities {
+    static let all: [Capability] = [
+        Capability(name: "battery", title: "电量", description: "Mac 电量和是否接着电源（台式机没有电池）", args: "{}") { _ in
+            let out = try await shell("/usr/bin/pmset", ["-g", "batt"])
+            let pct = out.range(of: #"\d+%"#, options: .regularExpression).flatMap { Int(out[$0].dropLast()) }
+            let r: [String: Any] = ["percent": pct ?? -1, "on_power": out.contains("AC Power")]
+            return r
+        },
+        Capability(name: "notify", title: "发通知", description: "在 Mac 上弹一条通知提醒用户",
+                   args: #"{"title":"标题","text":"正文"}"#) { a in
+            let title = a["title"] as? String ?? "豆豆"
+            let text = a["text"] as? String ?? ""
+            if await notifyAllowed() {
+                let c = UNMutableNotificationContent()
+                c.title = title
+                c.body = text
+                c.sound = .default
+                try await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+            } else {
+                _ = try await shell("/usr/bin/osascript", ["-e", "on run argv", "-e",
+                    "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run", title, text])
+            }
+            return "已通知"
+        },
+        Capability(name: "clipboard_read", title: "读剪贴板", description: "读 Mac 剪贴板里的文字", args: "{}") { _ in
+            await MainActor.run { String((NSPasteboard.general.string(forType: .string) ?? "").prefix(20000)) }
+        },
+        Capability(name: "clipboard_write", title: "写剪贴板", description: "把文字放进 Mac 剪贴板，方便用户直接粘贴",
+                   args: #"{"text":"内容"}"#) { a in
+            let text = a["text"] as? String ?? ""
+            await MainActor.run {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+            return "已放进剪贴板"
+        },
+        Capability(name: "open_url", title: "打开网页", description: "在 Mac 的默认浏览器里打开一个网址给用户看",
+                   args: #"{"url":"https://…"}"#) { a in
+            guard let s = a["url"] as? String, let u = URL(string: s), ["http", "https"].contains(u.scheme?.lowercased() ?? "") else {
+                throw CapError("只能打开 http/https 网址")
+            }
+            _ = await MainActor.run { NSWorkspace.shared.open(u) }
+            return "已打开"
+        },
+        Capability(name: "frontmost_app", title: "当前应用", description: "用户此刻在 Mac 上用的是哪个应用", args: "{}") { _ in
+            await MainActor.run {
+                let app = NSWorkspace.shared.frontmostApplication
+                let r: [String: Any] = ["name": app?.localizedName ?? "", "bundle_id": app?.bundleIdentifier ?? ""]
+                return r
+            }
+        },
+        Capability(name: "shortcuts", title: "快捷指令", description: "运行用户 Mac 上的快捷指令；不给 name 就列出全部快捷指令",
+                   args: #"{"name":"快捷指令名，可选","input":"传给它的文字，可选"}"#,
+                   hint: "豆豆能列出和运行你的快捷指令，能做什么取决于你建了哪些") { a in
+            guard let name = a["name"] as? String, !name.isEmpty else {
+                return try await shell("/usr/bin/shortcuts", ["list"]).split(separator: "\n").map(String.init)
+            }
+            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("doudou-sc-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: tmp) }
+            let outFile = tmp.appendingPathComponent("out")
+            var args = ["run", name, "-o", outFile.path]
+            if let input = a["input"] as? String, !input.isEmpty {
+                let inFile = tmp.appendingPathComponent("in.txt")
+                try input.write(to: inFile, atomically: true, encoding: .utf8)
+                args += ["-i", inFile.path]
+            }
+            _ = try await shell("/usr/bin/shortcuts", args, timeout: 120)
+            guard let d = try? Data(contentsOf: outFile), !d.isEmpty else { return "已运行" }
+            return String(data: d.prefix(20000), encoding: .utf8) ?? "已运行（输出不是文字，\(d.count) 字节）"
+        },
+        Capability(name: "folder", title: "文件夹",
+                   description: "读写用户授权的一个 Mac 文件夹。op=list 列目录，op=read 读文本文件（200KB 以内），op=write 写文本文件。path 是相对这个文件夹的路径",
+                   args: #"{"op":"list|read|write","path":"相对路径，默认根目录","text":"write 时的内容"}"#,
+                   hint: "只限你在下面选的那个文件夹，可读可写") { a in try folder(a) },
+    ]
+
+    static var enabled: [Capability] {
+        all.filter { Prefs.granted($0.name) && ($0.name != "folder" || Prefs.folder != nil) }
+    }
+
+    static func notifyAllowed() async -> Bool {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .authorized
+    }
+
+    private static let stamp: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        return f
+    }()
+
+    private static func folder(_ a: [String: Any]) throws -> Any {
+        guard let rootPath = Prefs.folder else { throw CapError("用户还没选文件夹") }
+        let root = URL(fileURLWithPath: rootPath).standardizedFileURL.resolvingSymlinksInPath()
+        let rel = (a["path"] as? String ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        let target = (rel.isEmpty ? root : root.appendingPathComponent(rel)).standardizedFileURL.resolvingSymlinksInPath()
+        guard target.path == root.path || target.path.hasPrefix(root.path + "/") else { throw CapError("路径超出授权文件夹") }
+        let fm = FileManager.default
+        switch a["op"] as? String ?? "list" {
+        case "list":
+            let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
+            let items = try fm.contentsOfDirectory(at: target, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
+            return items.prefix(500).map { u -> [String: Any] in
+                let v = try? u.resourceValues(forKeys: Set(keys))
+                return ["name": u.lastPathComponent, "dir": v?.isDirectory ?? false, "size": v?.fileSize ?? 0,
+                        "modified": v?.contentModificationDate.map(stamp.string) ?? ""]
+            }
+        case "read":
+            let size = (try fm.attributesOfItem(atPath: target.path)[.size] as? Int) ?? 0
+            guard size <= 200_000 else { throw CapError("文件太大（\(size / 1024)KB），只读 200KB 以内的文本") }
+            guard let s = String(data: try Data(contentsOf: target), encoding: .utf8) else { throw CapError("不是文本文件") }
+            return s
+        case "write":
+            guard !rel.isEmpty else { throw CapError("要给文件路径") }
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try (a["text"] as? String ?? "").write(to: target, atomically: true, encoding: .utf8)
+            return "已写入 \(rel)"
+        default:
+            throw CapError("op 只能是 list / read / write")
+        }
+    }
+
+    /// Run a command, returning stdout+stderr; throws on a non-zero exit. Killed after [timeout] seconds.
+    static func shell(_ exe: String, _ args: [String], timeout: Double = 30) async throws -> String {
+        try await withCheckedThrowingContinuation { cont in
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: exe)
+            p.arguments = args
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            p.standardError = pipe
+            do { try p.run() } catch { return cont.resume(throwing: error) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if p.isRunning { p.terminate() } }
+            DispatchQueue.global().async {
+                let s = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                p.waitUntilExit()
+                if p.terminationStatus == 0 { cont.resume(returning: s) } else {
+                    cont.resume(throwing: CapError(s.isEmpty ? "退出码 \(p.terminationStatus)" : String(s.prefix(2000))))
+                }
+            }
+        }
+    }
+}

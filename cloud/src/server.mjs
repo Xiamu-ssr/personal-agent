@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
 import { config } from "./config.mjs";
 import { readJson, writeJson, tailJsonl } from "./store.mjs";
+import { issuePairCode } from "./pair.mjs";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8", ".json": "application/json",
@@ -88,6 +89,7 @@ export function startServer({ harness, hub, bus, log }) {
         schedule: readJson(config.scheduleFile, []),
       });
     }
+    if (p === "/api/pair/new" && req.method === "POST") return json(res, 200, { code: issuePairCode() });
     if (p === "/api/history") {
       return json(res, 200, { items: tailJsonl(config.chatLog, Number(url.searchParams.get("n") || 200)) });
     }
