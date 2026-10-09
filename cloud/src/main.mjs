@@ -16,7 +16,7 @@ if (!config.token) {
 
 // First boot: lay out the three zones and copy seed files that don't exist yet.
 function seed() {
-  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "workspace", "system/connectors", "system/sync", "system/sessions", ".claude/skills"]) {
+  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "workspace", "system/connectors", "system/sync", "system/sessions", ".claude/skills"]) {
     fs.mkdirSync(path.join(config.root, d), { recursive: true });
   }
   const seedDir = path.join(CODE, "seed");
@@ -46,7 +46,7 @@ const harness = new Harness({ hub, bus, log });
 hub.onChange = () => bus.emit({ t: "devices", devices: hub.online() });
 // Device catch-up: on reconnect, at most once every 20 hours, in its own session.
 hub.onReconnect = (info) => {
-  const sources = (info.capabilities || []).filter((c) => c.sync).map((c) => c.source || c.name);
+  const sources = (info.capabilities || []).filter((c) => c.sync && c.enabled !== false).map((c) => c.source || c.name);
   if (!sources.length || Date.now() - hub.lastCatchup(info.id) < 20 * 3600_000) return;
   hub.markCatchup(info.id);
   harness.runIsolated(`补读 · ${info.name || info.id}`, `[补读] ${info.id}\n\n设备：${info.name || info.id}\n来源：${sources.join("、")}`);

@@ -8,6 +8,11 @@ import { config } from "./config.mjs";
 import { readJson, writeJson } from "./store.mjs";
 
 const CALL_TIMEOUT_MS = 60_000;
+const REGISTRY = () => path.join(config.system, "devices.json");
+
+// Devices send every capability they have, each with `enabled` (what the user switched on there).
+// Older clients only sent the enabled ones, without the flag.
+const enabledCaps = (info) => (info.capabilities || []).filter((c) => c.enabled !== false);
 
 export class DeviceHub {
   constructor() {
@@ -18,6 +23,9 @@ export class DeviceHub {
   }
 
   register(ws, info) {
+    const reg = readJson(REGISTRY(), {});
+    reg[info.id] = { ...info, lastSeen: Date.now() };
+    writeJson(REGISTRY(), reg);
     const prev = this.devices.get(info.id);
     if (prev && prev.ws !== ws) prev.ws.close(4000, "replaced");
     this.devices.set(info.id, { info, ws, pending: new Map() });
@@ -26,6 +34,11 @@ export class DeviceHub {
       if (cur?.ws !== ws) return;
       for (const p of cur.pending.values()) p.reject(new Error("设备离线"));
       this.devices.delete(info.id);
+      const reg = readJson(REGISTRY(), {});
+      if (reg[info.id]) {
+        reg[info.id].lastSeen = Date.now();
+        writeJson(REGISTRY(), reg);
+      }
       this.onChange();
     });
     this.onChange();
@@ -47,13 +60,34 @@ export class DeviceHub {
       id: info.id,
       name: info.name,
       kind: info.kind,
-      capabilities: (info.capabilities || []).map((c) => c.name),
+      capabilities: enabledCaps(info).map((c) => c.name),
     }));
+  }
+
+  // Every device that ever registered, online or not, with all its capabilities (for the App's connector pages).
+  known() {
+    return Object.values(readJson(REGISTRY(), {}))
+      .map((info) => ({
+        id: info.id, name: info.name, kind: info.kind, online: this.devices.has(info.id), lastSeen: info.lastSeen,
+        capabilities: (info.capabilities || []).map((c) => ({
+          name: c.name, title: c.title || c.name, description: c.hint || c.description || "", enabled: c.enabled !== false,
+        })),
+      }))
+      .sort((a, b) => b.online - a.online || b.lastSeen - a.lastSeen);
+  }
+
+  // Push a small event to every connected device (e.g. so the phone can notify while the App is closed).
+  broadcast(ev) {
+    const s = JSON.stringify(ev);
+    for (const d of this.devices.values()) if (d.ws.readyState === 1) d.ws.send(s);
   }
 
   call(deviceId, capability, args) {
     const d = this.devices.get(deviceId);
     if (!d) return Promise.reject(new Error("设备离线"));
+    if (!capability.startsWith("__") && !enabledCaps(d.info).some((c) => c.name === capability)) {
+      return Promise.reject(new Error(`这台设备没有开启「${capability}」。要用的话，请用户在那台设备的豆豆里打开`));
+    }
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -111,7 +145,7 @@ export class DeviceHub {
       instructions: "用户的手机和电脑。先 list_devices 看谁在线、有哪些能力，再 call_device。",
       tools: [
         tool("list_devices", "列出在线设备和每台设备的能力清单（含参数说明）。", {}, async () =>
-          text([...this.devices.values()].map(({ info }) => info))),
+          text([...this.devices.values()].map(({ info }) => ({ ...info, capabilities: enabledCaps(info) })))),
         tool(
           "call_device",
           "调用某台设备的一个能力。args 按能力清单里的说明传。设备离线会直接返回错误。",

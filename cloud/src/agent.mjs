@@ -4,8 +4,11 @@ import path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { config, MEMORY_CATEGORIES } from "./config.mjs";
 import { readJson, writeJson, appendJsonl, nowIn } from "./store.mjs";
+import { transcribe, audioFormat } from "./transcribe.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
+const IMAGE_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
+const KIND_LABEL = { image: "图片", file: "文件", voice: "语音笔记" };
 
 // An async iterable the SDK reads user messages from (streaming input mode).
 class Inbox {
@@ -40,10 +43,13 @@ function systemPrompt() {
   if (promptCache) return promptCache;
   const raw = fs.readFileSync(config.promptFile, "utf8");
   const body = raw.split(/\n---\n/).slice(1).join("\n---\n").trim();
-  promptCache = body
-    .replace(/ ?\{名字\} ?/g, config.agentName)
-    .replace(/ ?\{称呼\} ?/g, config.userCall)
-    .replace(/ ?\{时区\} ?/g, config.timezone);
+  // The source keeps a space around placeholders for readability; drop it only where it touches CJK text.
+  const cjk = "[\\u3000-\\u9fff\\uff00-\\uffef]";
+  const fill = (s, key, val) => (!new RegExp(cjk).test(val) ? s : s
+    .replace(new RegExp(`(?<=${cjk}) \\{${key}\\}`, "g"), `{${key}}`)
+    .replace(new RegExp(`\\{${key}\\} (?=${cjk})`, "g"), `{${key}}`))
+    .replaceAll(`{${key}}`, val);
+  promptCache = fill(fill(fill(body, "名字", config.agentName), "称呼", config.userCall), "时区", config.timezone);
   return promptCache;
 }
 
@@ -100,6 +106,7 @@ export class Harness {
     this.main = null;
     this.jobChain = Promise.resolve();
     this.busy = false;
+    this.running = new Map(); // label -> started (isolated jobs, queued or running)
   }
 
   options({ isolated, onWrite }) {
@@ -109,6 +116,10 @@ export class Harness {
       cwd: config.root,
       systemPrompt: systemPrompt(),
       permissionMode: config.permissionMode,
+      // The user grants device capabilities on the device itself; asking the classifier again only adds cost and false refusals.
+      allowedTools: ["mcp__devices__list_devices", "mcp__devices__call_device", "mcp__devices__read_since", "mcp__devices__sync_commit"],
+      thinking: { type: "adaptive" },
+      effort: config.effort,
       allowDangerouslySkipPermissions: config.permissionMode === "bypassPermissions",
       settingSources: ["project"],
       settings: { availableModels: [m] },
@@ -246,13 +257,31 @@ export class Harness {
     }
   }
 
-  send(text, source = "app") {
+  // attachments: [{ path: "data/uploads/...", name, kind: "image" | "file" | "voice" }], already uploaded.
+  async send(text, source = "app", attachments = []) {
     if (!this.main) throw new Error("main thread not ready");
-    appendJsonl(config.chatLog, { role: "user", text, ts: Date.now(), source });
-    this.bus.emit({ t: "user", text, source });
+    const atts = [];
+    for (const a of attachments) {
+      const abs = path.resolve(config.root, a.path || "");
+      if (!abs.startsWith(path.join(config.data, "uploads") + path.sep) || !fs.existsSync(abs)) continue;
+      const att = { path: path.relative(config.root, abs), name: a.name || path.basename(abs), kind: KIND_LABEL[a.kind] ? a.kind : "file" };
+      if (att.kind === "voice") {
+        try {
+          att.transcript = await transcribe(fs.readFileSync(abs), audioFormat(abs));
+          fs.writeFileSync(abs.replace(/\.[^.]+$/, "") + ".txt", att.transcript + "\n");
+        } catch (e) {
+          att.transcript = `（转写失败：${e.message}）`;
+        }
+      }
+      atts.push(att);
+    }
+    const entry = { role: "user", text, ts: Date.now(), source };
+    if (atts.length) entry.attachments = atts;
+    appendJsonl(config.chatLog, entry);
+    this.bus.emit({ t: "user", text, source, attachments: atts });
     this.busy = true;
     this.bus.emit({ t: "status", busy: true });
-    this.main.inbox.push({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null });
+    this.main.inbox.push({ type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null });
   }
 
   async interrupt() {
@@ -272,9 +301,11 @@ export class Harness {
   // ---------- isolated sessions (cron, catch-up, night tidy) ----------
 
   runIsolated(label, prompt) {
+    this.running.set(label, Date.now());
     const run = async () => {
       const job = { label, outputs: new Set(), text: "" };
       const started = Date.now();
+      this.running.set(label, started);
       this.bus.emit({ t: "job", phase: "started", label });
       this.log(`job start: ${label}`);
       try {
@@ -294,6 +325,7 @@ export class Harness {
       appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - started });
       if (outputs.length) appendJsonl(config.chatLog, entry);
       this.bus.emit({ t: "job", phase: "done", ...entry });
+      this.running.delete(label);
       this.log(`job done: ${label} ok=${job.ok} outputs=${outputs.join(",")}`);
       return job;
     };
@@ -302,6 +334,25 @@ export class Harness {
     this.jobChain = p.catch(() => {});
     return p;
   }
+}
+
+// Text plus a list of attachment paths; images also go in as image blocks so the model sees them right away.
+function userContent(text, atts) {
+  if (!atts.length) return text;
+  const lines = atts.map((a) => {
+    if (a.kind === "voice") return `- ${a.path}（语音笔记，转写：${a.transcript || "空"}）`;
+    if (a.kind === "image") return `- ${a.path}（图片，已附在本条消息里）`;
+    return `- ${a.path}（文件，需要时自己读）`;
+  });
+  const body = `${text || (atts.every((a) => a.kind === "voice") ? "（一段语音笔记）" : "（发来了附件）")}\n\n[附件]\n${lines.join("\n")}`;
+  const blocks = [{ type: "text", text: body }];
+  for (const a of atts) {
+    const type = IMAGE_TYPES[path.extname(a.path).toLowerCase()];
+    if (a.kind !== "image" || !type) continue;
+    const buf = fs.readFileSync(path.join(config.root, a.path));
+    if (buf.length <= 5 * 1024 * 1024) blocks.push({ type: "image", source: { type: "base64", media_type: type, data: buf.toString("base64") } });
+  }
+  return blocks;
 }
 
 function toolHint(b) {
