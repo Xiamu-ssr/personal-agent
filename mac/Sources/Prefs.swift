@@ -32,6 +32,34 @@ enum Prefs {
 
     static var configured: Bool { !server.isEmpty && !token.isEmpty }
 
+    /// The capability walkthrough after the first login. Installs that were already paired before v0.2 skip it.
+    static var onboarded: Bool {
+        get { d.bool(forKey: "onboarded") }
+        set { d.set(newValue, forKey: "onboarded") }
+    }
+
+    /// Run once at launch, before anything reads [onboarded].
+    static func migrate() {
+        if d.object(forKey: "onboarded") == nil { onboarded = configured }
+    }
+
+    /// 接收消息通知: pop a system notification for replies and finished jobs while the app is in the background.
+    static var notifyMessages: Bool {
+        get { d.object(forKey: "notifyMessages") as? Bool ?? true }
+        set { d.set(newValue, forKey: "notifyMessages") }
+    }
+
+    /// When the first chat happened (ms since 1970); never changes once known, so it is fetched only once.
+    static var firstChatAt: Double {
+        get { d.double(forKey: "firstChatAt") }
+        set { d.set(newValue, forKey: "firstChatAt") }
+    }
+
+    static func signOut() {
+        token = ""
+        d.removeObject(forKey: "firstChatAt")
+    }
+
     static var deviceId: String {
         if let id = d.string(forKey: "deviceId") { return id }
         let id = "mac-" + UUID().uuidString.prefix(8).lowercased()

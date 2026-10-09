@@ -42,7 +42,10 @@ final class Socket: NSObject, URLSessionWebSocketDelegate {
     func send(_ obj: [String: Any]) -> Bool {
         guard let t = task, opened, let data = try? JSONSerialization.data(withJSONObject: obj),
               let s = String(data: data, encoding: .utf8) else { return false }
-        t.send(.string(s)) { _ in }
+        t.send(.string(s)) { [weak self] error in
+            guard let error else { return }
+            DispatchQueue.main.async { self?.dropped(t, error.localizedDescription) }
+        }
         return true
     }
 

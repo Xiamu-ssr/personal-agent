@@ -20,8 +20,14 @@
     <string>__BUILD__</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>按住说话和录制语音笔记时需要用麦克风。</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>开启「日历」能力后，豆豆会在你问起或做晨报时读取日程。</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>开启「日历」能力后，豆豆会在你问起或做晨报时读取日程。</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build 豆豆.app (universal, ad-hoc signed) and a DMG with only the Command Line Tools — no Xcode needed.
-#   VERSION=0.1.0 bash mac/build.sh   ->  mac/build/doudou-0.1.0.dmg
+#   VERSION=0.2.0 bash mac/build.sh   ->  mac/build/doudou-0.2.0.dmg
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION=${VERSION:-0.1.0}
+VERSION=${VERSION:-0.2.0}
 BUILD=${BUILD:-1}
 OUT=build
 APP="$OUT/豆豆.app"
@@ -24,7 +24,7 @@ if [[ -f "$INC/module.modulemap" && -f "$INC/bridging.modulemap" ]]; then
 fi
 
 for arch in arm64 x86_64; do
-  swiftc -O -parse-as-library -target "$arch-apple-macos14" -sdk "$SDK" "${FIX[@]}" Sources/*.swift -o "$OUT/Doudou-$arch"
+  swiftc -swift-version 5 -O -parse-as-library -target "$arch-apple-macos14" -sdk "$SDK" "${FIX[@]}" Sources/*.swift -o "$OUT/Doudou-$arch"
 done
 lipo -create -output "$APP/Contents/MacOS/Doudou" "$OUT/Doudou-arm64" "$OUT/Doudou-x86_64"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" Info.plist > "$APP/Contents/Info.plist"

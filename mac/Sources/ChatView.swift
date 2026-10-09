@@ -1,0 +1,462 @@
+import AVFoundation
+import SwiftUI
+
+/// 在线 · 本机已接入 / 在翻资料 / 连接中…
+func statusLine(_ chat: ChatClient, _ device: DeviceClient) -> String {
+    if !chat.configured { return "未登录" }
+    if !chat.connected { return chat.error.isEmpty ? "连接中…" : chat.error }
+    if chat.busy { return chat.toolHint.isEmpty ? "在想…" : chat.toolHint }
+    return device.online ? "在线 · 本机已接入" : "在线"
+}
+
+struct ChatPage: View {
+    private var chat: ChatClient { .shared }
+    private var device: DeviceClient { .shared }
+    private var nav: Nav { .shared }
+    @State private var searching = false
+    @State private var query = ""
+    @State private var highlight: UUID? = nil
+    @State private var jump: UUID? = nil
+    @FocusState private var searchFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            if !chat.live.isEmpty { LiveStrip().padding(.horizontal, 28).padding(.bottom, 6) }
+            ZStack(alignment: .top) {
+                messages
+                if searching && !query.isEmpty { results.padding(.horizontal, 28) }
+            }
+            ComposerBar(placeholder: Tab.chat.prompt ?? "")
+                .frame(maxWidth: 820)
+                .padding(.horizontal, 28)
+                .padding(.bottom, 18)
+                .padding(.top, 4)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 10) {
+                Orb(size: 30)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("豆豆").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+                    HStack(spacing: 5) {
+                        Dot(on: chat.connected)
+                        Text(statusLine(chat, device)).font(.system(size: 11.5)).foregroundStyle(Theme.sub).lineLimit(1)
+                    }
+                }
+            }
+            .padding(.leading, 6)
+            .padding(.trailing, 16)
+            .frame(height: 46)
+            .background(Capsule().fill(Theme.card))
+            .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+            .shadow(color: Color(hex: 0x253751, alpha: 0.06), radius: 10, y: 4)
+            Spacer()
+            if searching {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Theme.faint)
+                    TextField("搜索聊天记录", text: $query).textFieldStyle(.plain).font(.system(size: 13)).focused($searchFocused)
+                        .onExitCommand { closeSearch() }
+                    Button { closeSearch() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.faint) }
+                        .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .frame(width: 260, height: 36)
+                .background(Capsule().fill(Theme.card))
+                .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+            } else {
+                CircleIconButton(icon: "magnifyingglass", help: "搜索聊天记录") {
+                    searching = true
+                    searchFocused = true
+                }
+            }
+            CircleIconButton(icon: "gearshape", help: "设置") { nav.go(.settings) }
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+
+    private func closeSearch() {
+        searching = false
+        query = ""
+    }
+
+    private var hits: [ChatItem] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return [] }
+        return chat.items.filter { $0.kind != .note && ($0.text.localizedCaseInsensitiveContains(q) || $0.attachments.contains { $0.name.localizedCaseInsensitiveContains(q) || ($0.transcript ?? "").localizedCaseInsensitiveContains(q) }) }.reversed()
+    }
+
+    private var results: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(hits.isEmpty ? "已加载的聊天记录里没有「\(query)」" : "找到 \(hits.count) 条")
+                .font(.system(size: 11.5)).foregroundStyle(Theme.faint).padding(.horizontal, 10).padding(.vertical, 8)
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(hits.prefix(30)) { item in
+                        Button {
+                            jump = item.id
+                            highlight = item.id
+                            closeSearch()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { if highlight == item.id { highlight = nil } }
+                        } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                Text(item.kind == .user ? "我" : "豆豆").font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(item.kind == .user ? Theme.accent : Theme.goldText).frame(width: 28, alignment: .leading)
+                                Text(snippet(item.text.isEmpty ? (item.attachments.first?.transcript ?? item.attachments.first?.name ?? "") : item.text))
+                                    .font(.system(size: 12.5)).foregroundStyle(Theme.ink).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                                if let ts = item.ts { Text(Fmt.when(ts)).font(.system(size: 11)).foregroundStyle(Theme.faint) }
+                            }
+                            .padding(.horizontal, 10).padding(.vertical, 8).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+        }
+        .frame(maxWidth: 560)
+        .card(radius: 16, padding: 6)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private func snippet(_ s: String) -> String {
+        let flat = s.replacingOccurrences(of: "\n", with: " ")
+        guard let r = flat.range(of: query, options: .caseInsensitive) else { return flat }
+        let start = flat.index(r.lowerBound, offsetBy: -24, limitedBy: flat.startIndex) ?? flat.startIndex
+        return (start == flat.startIndex ? "" : "…") + flat[start...]
+    }
+
+    private var messages: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    if chat.items.isEmpty && chat.streaming.isEmpty {
+                        Note(text: chat.connected ? "跟豆豆说点什么吧" : statusLine(chat, device), icon: "bubble.left.and.bubble.right")
+                            .padding(.top, 80)
+                    }
+                    ForEach(chat.items) { item in
+                        MessageRow(item: item)
+                            .id(item.id)
+                            .background(RoundedRectangle(cornerRadius: 18).fill(Color(hex: 0xF3DFB0, alpha: highlight == item.id ? 0.45 : 0)).padding(-6))
+                            .animation(.easeOut(duration: 0.3), value: highlight)
+                    }
+                    if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming) }
+                    if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.toolHint) }
+                    Color.clear.frame(height: 1).id("end")
+                }
+                .frame(maxWidth: 820)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollContentBackground(.hidden)
+            .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+            .onChange(of: chat.items.count) { proxy.scrollTo("end", anchor: .bottom) }
+            .onChange(of: chat.streaming) { proxy.scrollTo("end", anchor: .bottom) }
+            .onChange(of: jump) { _, id in
+                guard let id else { return }
+                withAnimation { proxy.scrollTo(id, anchor: .center) }
+                jump = nil
+            }
+        }
+    }
+}
+
+/// Background jobs and sub-agent tasks: a thin bar under the header that expands into a list.
+struct LiveStrip: View {
+    private var chat: ChatClient { .shared }
+    @State private var open = false
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { ctx in
+            VStack(alignment: .leading, spacing: 8) {
+                Button { withAnimation(.easeOut(duration: 0.2)) { open.toggle() } } label: {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.mini)
+                        Text(summary(ctx.date)).font(.system(size: 12)).foregroundStyle(Theme.ink.opacity(0.85)).lineLimit(1)
+                        Spacer()
+                        Image(systemName: open ? "chevron.up" : "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if open {
+                    ForEach(chat.live) { t in
+                        HStack {
+                            Text(t.label).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                            Text(t.detail).font(.system(size: 11.5)).foregroundStyle(Theme.sub).lineLimit(1)
+                            Spacer()
+                            Text("已运行 " + Fmt.duration(ctx.date.timeIntervalSince(t.started))).font(.system(size: 11)).foregroundStyle(Theme.faint)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.6)))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white, lineWidth: 1))
+            .frame(maxWidth: 820)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func summary(_ now: Date) -> String {
+        guard let first = chat.live.first else { return "" }
+        let one = "\(first.label) · 已运行 \(Fmt.duration(now.timeIntervalSince(first.started)))"
+        return chat.live.count == 1 ? "后台在跑：\(one)" : "后台 \(chat.live.count) 个任务在跑：\(one) 等"
+    }
+}
+
+struct Thinking: View {
+    let hint: String
+    @State private var phase = 0.0
+
+    var body: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                ForEach(0..<3) { i in
+                    Circle().fill(Theme.faint).frame(width: 5, height: 5)
+                        .opacity(0.35 + 0.65 * max(0, sin(phase + Double(i) * 0.9)))
+                }
+            }
+            Text(hint.isEmpty ? "豆豆在想…" : hint).font(.system(size: 12.5)).foregroundStyle(Theme.sub)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 34)
+        .background(Capsule().fill(.white.opacity(0.7)))
+        .onAppear { withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) { phase = .pi * 2 } }
+    }
+}
+
+struct MessageRow: View {
+    let item: ChatItem
+    var compact = false
+
+    var body: some View {
+        switch item.kind {
+        case .user: UserBubble(item: item, compact: compact)
+        case .assistant: AssistantBubble(text: item.text, compact: compact)
+        case .note:
+            Text(item.text).font(.system(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
+        case .card: CardMessage(item: item)
+        }
+    }
+}
+
+struct UserBubble: View {
+    let item: ChatItem
+    var compact = false
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: compact ? 40 : 120)
+            VStack(alignment: .trailing, spacing: 8) {
+                ForEach(item.attachments, id: \.path) { AttachmentView(att: $0) }
+                if !item.text.isEmpty {
+                    Text(Markdown.inline(item.text))
+                        .font(.system(size: compact ? 13 : 14))
+                        .foregroundStyle(Theme.ink)
+                        .lineSpacing(3)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.userBubble))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.7), lineWidth: 1))
+                }
+            }
+            .opacity(item.pending ? 0.7 : 1)
+        }
+    }
+}
+
+struct AssistantBubble: View {
+    let text: String
+    var compact = false
+
+    var body: some View {
+        HStack {
+            MarkdownView(text: text, size: compact ? 13 : 14)
+                .textSelection(.enabled)
+                .card(radius: compact ? 14 : 20, padding: compact ? 11 : 16)
+            Spacer(minLength: compact ? 30 : 80)
+        }
+    }
+}
+
+/// 简报等: white card with a document icon; opens in the web view.
+struct CardMessage: View {
+    let item: ChatItem
+    @State private var hover = false
+
+    var body: some View {
+        HStack {
+            Button {
+                if let p = item.outputs.first { Nav.shared.open(p, title: item.label.isEmpty ? nil : item.label) }
+            } label: {
+                HStack(spacing: 12) {
+                    IconTile(icon: "doc.richtext", tint: Color(hex: 0x527AAA), size: 40)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.text.isEmpty ? (item.label.isEmpty ? "简报" : item.label) : item.text)
+                            .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(2).multilineTextAlignment(.leading)
+                        Text([item.label, item.ts.map(Fmt.when) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.system(size: 11.5)).foregroundStyle(Theme.faint)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
+                }
+                .frame(maxWidth: 440)
+                .card(radius: 18, padding: 14)
+                .scaleEffect(hover ? 1.01 : 1)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hover = h } }
+            .disabled(item.outputs.isEmpty)
+            Spacer()
+        }
+    }
+}
+
+/// An attachment inside a user bubble: picture thumbnail, file row, or voice note player with its transcript.
+struct AttachmentView: View {
+    let att: Attachment
+
+    var body: some View {
+        switch att.kind {
+        case "image": RemoteImage(path: att.path, maxSide: 220).onTapGesture { Nav.shared.preview = att.path }
+        case "voice": VoiceNote(att: att)
+        default:
+            Button { Nav.shared.open(att.path, title: att.name) } label: {
+                HStack(spacing: 10) {
+                    IconTile(icon: icon, size: 32)
+                    Text(att.name).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.9)))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.line, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var icon: String {
+        switch (att.name as NSString).pathExtension.lowercased() {
+        case "pdf": "doc.richtext"
+        case "xls", "xlsx", "csv", "numbers": "tablecells"
+        case "zip", "gz", "tar", "rar", "7z": "doc.zipper"
+        case "mp3", "m4a", "wav", "aac": "waveform"
+        case "mp4", "mov": "film"
+        default: "doc.text"
+        }
+    }
+}
+
+/// A data/ image fetched with the token.
+struct RemoteImage: View {
+    let path: String
+    var maxSide: CGFloat = 220
+    @State private var image: NSImage? = nil
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                let s = image.size
+                let k = min(1, maxSide / max(s.width, s.height, 1))
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                    .frame(width: max(40, s.width * k), height: max(40, s.height * k))
+            } else {
+                RoundedRectangle(cornerRadius: 14).fill(Color(hex: 0xE8EDF3))
+                    .frame(width: maxSide * 0.7, height: maxSide * 0.5)
+                    .overlay(failed ? AnyView(Image(systemName: "photo").foregroundStyle(Theme.faint)) : AnyView(ProgressView().controlSize(.small)))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white, lineWidth: 1.5))
+        .contentShape(Rectangle())
+        .task(id: path) {
+            do { image = NSImage(data: try await Api.cached(path)); failed = image == nil } catch { failed = true }
+        }
+    }
+}
+
+/// Play bar + the cloud's transcript.
+struct VoiceNote: View {
+    let att: Attachment
+    @State private var player: AVAudioPlayer? = nil
+    @State private var playing = false
+    @State private var progress = 0.0
+    @State private var loading = false
+    private let tick = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Button(action: toggle) {
+                    ZStack {
+                        GoldBase()
+                        if loading { ProgressView().controlSize(.mini) } else {
+                            Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 11)).foregroundStyle(Theme.goldText)
+                        }
+                    }
+                    .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+                GeometryReader { g in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color(hex: 0xD5DEE8))
+                        Capsule().fill(Color(hex: 0x6F8BAA)).frame(width: g.size.width * progress)
+                    }
+                }
+                .frame(height: 4)
+                Text(duration).font(.system(size: 11).monospacedDigit()).foregroundStyle(Theme.sub)
+            }
+            .frame(width: 230)
+            Text(att.transcript.map { $0.isEmpty ? "（没有听到内容）" : $0 } ?? "语音笔记 · 转写中…")
+                .font(.system(size: 13)).foregroundStyle(Theme.ink.opacity(0.85)).lineSpacing(2)
+                .frame(maxWidth: 320, alignment: .leading)
+                .textSelection(.enabled)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.userBubble))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.7), lineWidth: 1))
+        .onReceive(tick) { _ in
+            guard let p = player else { return }
+            progress = p.duration > 0 ? p.currentTime / p.duration : 0
+            if playing && !p.isPlaying {
+                playing = false
+                progress = 0
+            }
+        }
+        .onDisappear { player?.stop() }
+    }
+
+    private var duration: String {
+        let s = Int(player?.duration ?? 0)
+        return player == nil ? "语音" : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    private func toggle() {
+        if let p = player {
+            if p.isPlaying { p.pause(); playing = false } else { p.play(); playing = true }
+            return
+        }
+        loading = true
+        Task { @MainActor in
+            defer { loading = false }
+            guard let d = try? await Api.cached(att.path), let p = try? AVAudioPlayer(data: d) else {
+                Nav.shared.show("这段语音放不了")
+                return
+            }
+            player = p
+            p.play()
+            playing = true
+        }
+    }
+}

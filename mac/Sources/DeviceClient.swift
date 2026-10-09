@@ -1,7 +1,9 @@
-import Foundation
+import AppKit
 import Observation
+import UserNotifications
 
-/// Keeps this Mac registered with the cloud body as a device (WS role=device) and answers capability calls.
+/// Keeps this Mac registered with the cloud body as a device (WS role=device), answers capability calls,
+/// and turns the server's reply/job events into notifications while the app is in the background.
 @Observable
 final class DeviceClient {
     static let shared = DeviceClient()
@@ -13,22 +15,48 @@ final class DeviceClient {
     private init() {
         socket.onOpen = { [weak self] in self?.register() }
         socket.onMessage = { [weak self] m in
-            if m["t"] as? String == "call" { self?.handle(m) }
+            switch m["t"] as? String {
+            case "call": self?.handle(m)
+            case "event": Self.notify(kind: m["kind"] as? String ?? "", text: m["text"] as? String ?? "")
+            default: break
+            }
         }
         socket.onClose = { [weak self] _ in self?.online = false }
     }
 
     func start() { socket.start() }
 
-    /// Reconnect so the cloud sees the new name / capability list.
-    func reregister() { socket.restart() }
+    func stop() {
+        socket.stop()
+        online = false
+    }
+
+    /// Reconnect so the cloud sees the new name / capability switches.
+    func reregister() {
+        online = false
+        socket.stop()
+        if Prefs.configured { socket.start() }
+    }
 
     private func register() {
         let device: [String: Any] = [
             "id": Prefs.deviceId, "name": Prefs.deviceName, "kind": "mac",
-            "capabilities": Capabilities.enabled.map(\.json),
+            "capabilities": Capabilities.all.map(\.json),
         ]
         online = socket.send(["t": "register", "device": device])
+        ChatClient.shared.devicesVersion += 1
+    }
+
+    private static func notify(kind: String, text: String) {
+        guard Prefs.notifyMessages, !NSApp.isActive, !text.isEmpty else { return }
+        Task {
+            guard await Capabilities.notifyAllowed() else { return }
+            let c = UNMutableNotificationContent()
+            c.title = kind == "job" ? "豆豆 · 任务完成" : "豆豆"
+            c.body = text
+            c.sound = .default
+            try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+        }
     }
 
     private func handle(_ m: [String: Any]) {
@@ -41,7 +69,7 @@ final class DeviceClient {
             var reply: [String: Any] = ["t": "result", "id": id]
             do {
                 guard let cap else {
-                    throw CapError(name == "__read_since" ? "这台 Mac 没有可补读的数据" : "用户没有授权这个能力：\(name)")
+                    throw CapError(name == "__read_since" ? "这台 Mac 没有可补读的数据" : "用户没有开启这个能力：\(name)")
                 }
                 reply["data"] = try await cap.run(args)
                 reply["ok"] = true
