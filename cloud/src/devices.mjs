@@ -1,6 +1,7 @@
 // Device gateway: phones and Macs connect over WebSocket and register a capability list.
 // The agent reaches them through one in-process MCP server ("devices").
 import path from "node:path";
+import fs from "node:fs";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
@@ -74,6 +75,27 @@ export class DeviceHub {
         })),
       }))
       .sort((a, b) => b.online - a.online || b.lastSeen - a.lastSeen);
+  }
+
+  // Forget only disconnected devices, including their sync cursors and outstanding batches.
+  forget(id) {
+    if (this.devices.has(id)) {
+      const error = new Error("设备在线时不能移除，请先断开设备");
+      error.status = 409;
+      throw error;
+    }
+    const registry = readJson(REGISTRY(), {});
+    if (!Object.hasOwn(registry, id)) {
+      const error = new Error("没有这台设备");
+      error.status = 404;
+      throw error;
+    }
+    delete registry[id];
+    writeJson(REGISTRY(), registry);
+    fs.rmSync(this.cursorFile(id), { force: true });
+    for (const [batch, value] of this.batches) if (value.deviceId === id) this.batches.delete(batch);
+    this.onChange();
+    return { ok: true };
   }
 
   // Push a small event to every connected device (e.g. so the phone can notify while the App is closed).

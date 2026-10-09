@@ -8,6 +8,7 @@ import { config } from "./config.mjs";
 import { readJson, writeJson, tailJsonl, firstTs, dateIn } from "./store.mjs";
 import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
+import { ConnectorManager } from "./connectors.mjs";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8", ".json": "application/json",
@@ -56,7 +57,7 @@ function readRaw(req, max) {
   });
 }
 
-// What the cloud body itself can do, plus connectors installed under system/connectors/ and ones the agent can set up.
+// Built-in cloud capabilities are retained for older clients; the connector catalog comes from released code.
 const CLOUD_BUILTIN = [
   { name: "web_search", title: "网页搜索", description: "上网搜最新信息" },
   { name: "web_fetch", title: "网页读取", description: "打开网页、读取公开数据接口" },
@@ -65,30 +66,10 @@ const CLOUD_BUILTIN = [
   { name: "schedule", title: "定时任务", description: "按时做简报、整理和提醒" },
   { name: "transcribe", title: "语音转写", description: "把语音笔记和按住说话转成文字" },
 ];
-const CLOUD_CATALOG = [
-  { name: "email", title: "邮箱", description: "QQ、163、Gmail、企业邮箱（IMAP）" },
-  { name: "calendar", title: "在线日历", description: "iCloud、Google、飞书日历（CalDAV）" },
-  { name: "github", title: "GitHub", description: "仓库、Issue、PR" },
-  { name: "feishu", title: "飞书", description: "消息、文档、日历" },
-  { name: "notion", title: "Notion", description: "笔记和知识库" },
-  { name: "rss", title: "RSS 订阅", description: "博客、周刊、播客更新" },
-  { name: "tavily", title: "Tavily 搜索", description: "另一个搜索引擎，适合深度检索和网页抽取" },
-];
-
-function cloudConnectors() {
-  const installed = [];
-  try {
-    for (const d of fs.readdirSync(config.connectors, { withFileTypes: true })) {
-      if (!d.isDirectory()) continue;
-      const manifest = readJson(path.join(config.connectors, d.name, ".claude-plugin", "plugin.json"), {});
-      installed.push({ name: d.name, title: manifest.displayName || manifest.name || d.name, description: manifest.description || "", status: "on" });
-    }
-  } catch {}
-  const have = new Set(installed.map((c) => c.name));
+function cloudConnectors(connectors) {
   return {
     builtin: CLOUD_BUILTIN.map((c) => ({ ...c, status: "on" })),
-    installed,
-    catalog: CLOUD_CATALOG.filter((c) => !have.has(c.name)).map((c) => ({ ...c, status: "off" })),
+    ...connectors.list(),
   };
 }
 
@@ -138,7 +119,7 @@ async function pair(req, res) {
   return json(res, 200, { token: config.token });
 }
 
-export function startServer({ harness, hub, bus, log }) {
+export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), listen = config }) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
     const p = url.pathname;
@@ -171,9 +152,36 @@ export function startServer({ harness, hub, bus, log }) {
     }
     if (p === "/api/connectors") {
       return json(res, 200, {
-        cloud: { id: "cloud", name: "云电脑", kind: "cloud", online: true, ...cloudConnectors() },
+        cloud: { id: "cloud", name: "云电脑", kind: "cloud", online: true, ...cloudConnectors(connectors) },
         devices: hub.known(),
       });
+    }
+    const accountRoute = p.match(/^\/api\/connectors\/([^/]+)\/accounts(?:\/([^/]+))?(?:\/(test))?$/);
+    if (accountRoute) {
+      try {
+        const name = decodeURIComponent(accountRoute[1]);
+        const id = accountRoute[2] && decodeURIComponent(accountRoute[2]);
+        if (req.method === "DELETE" && id && !accountRoute[3]) return json(res, 200, await connectors.removeAccount(name, id));
+        if (req.method === "POST" && id && accountRoute[3]) {
+          const account = await connectors.testAccount(name, id);
+          return json(res, account.status === "ok" ? 200 : 400, account);
+        }
+        if ((req.method === "POST" && !id) || (req.method === "PUT" && id && !accountRoute[3])) {
+          let body;
+          try { body = JSON.parse((await readRaw(req, 1024 * 1024)).toString("utf8")); }
+          catch { return json(res, 400, { error: "请提交有效的 JSON 配置" }); }
+          const account = id ? await connectors.updateAccount(name, id, body?.values) : await connectors.addAccount(name, body?.values);
+          return json(res, id ? 200 : 201, account);
+        }
+        return json(res, 405, { error: "不支持这个连接器操作" });
+      } catch (e) {
+        return json(res, e.status || 400, { error: connectors.redact(e.message || "连接器操作失败") });
+      }
+    }
+    const deviceRoute = p.match(/^\/api\/devices\/([^/]+)$/);
+    if (deviceRoute && req.method === "DELETE") {
+      try { return json(res, 200, hub.forget(decodeURIComponent(deviceRoute[1]))); }
+      catch (e) { return json(res, e.status || 400, { error: e.message || "设备移除失败" }); }
     }
     if (p === "/api/jobs") {
       return json(res, 200, {
@@ -319,7 +327,7 @@ export function startServer({ harness, hub, bus, log }) {
     if (ev.t === "job" && ev.phase === "done" && ev.outputs?.length) hub.broadcast({ t: "event", kind: "job", text: ev.title });
   });
 
-  setInterval(() => {
+  const heartbeat = setInterval(() => {
     for (const ws of wss.clients) {
       if (!ws.isAlive) {
         ws.terminate();
@@ -329,7 +337,9 @@ export function startServer({ harness, hub, bus, log }) {
       ws.ping();
     }
   }, 30_000);
+  heartbeat.unref();
+  server.on("close", () => { clearInterval(heartbeat); wss.close(); });
 
-  server.listen(config.port, config.host, () => log(`listening on ${config.host}:${config.port}`));
+  server.listen(listen.port, listen.host, () => log("listening on " + listen.host + ":" + server.address().port));
   return server;
 }

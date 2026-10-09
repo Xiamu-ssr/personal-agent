@@ -4,6 +4,7 @@ import path from "node:path";
 import { config, CODE } from "./config.mjs";
 import { DeviceHub } from "./devices.mjs";
 import { Harness } from "./agent.mjs";
+import { ConnectorManager } from "./connectors.mjs";
 import { startScheduler } from "./scheduler.mjs";
 import { startServer } from "./server.mjs";
 
@@ -16,7 +17,7 @@ if (!config.token) {
 
 // First boot: lay out the three zones and copy seed files that don't exist yet.
 function seed() {
-  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "workspace", "system/connectors", "system/sync", "system/sessions", ".claude/skills"]) {
+  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "workspace", "system/connectors", "system/custom-connectors", "system/sync", "system/sessions", ".claude/skills"]) {
     fs.mkdirSync(path.join(config.root, d), { recursive: true });
   }
   const seedDir = path.join(CODE, "seed");
@@ -41,7 +42,8 @@ const bus = { on: (fn) => listeners.add(fn), emit: (ev) => listeners.forEach((fn
 
 seed();
 const hub = new DeviceHub();
-const harness = new Harness({ hub, bus, log });
+const connectors = new ConnectorManager();
+const harness = new Harness({ hub, bus, log, connectors });
 
 hub.onChange = () => bus.emit({ t: "devices", devices: hub.online() });
 // Device catch-up: on reconnect, at most once every 20 hours, in its own session.
@@ -54,6 +56,6 @@ hub.onReconnect = (info) => {
 
 harness.startMain();
 startScheduler({ harness, log });
-startServer({ harness, hub, bus, log });
+startServer({ harness, hub, bus, log, connectors });
 
 process.on("unhandledRejection", (e) => log("unhandledRejection:", e?.message || e));

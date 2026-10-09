@@ -5,6 +5,8 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { config, MEMORY_CATEGORIES } from "./config.mjs";
 import { readJson, writeJson, appendJsonl, nowIn } from "./store.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
+import { ConnectorManager, customPlugins, customConnectorEnv } from "./connectors.mjs";
+import { checkConnectorAccess, CONNECTOR_GUARD_TOOLS } from "./connector-guard.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const IMAGE_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
@@ -73,37 +75,23 @@ function memoryPathError(r) {
   return null;
 }
 
-function connectorPlugins() {
-  try {
-    return fs
-      .readdirSync(config.connectors, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => ({ type: "local", path: path.join(config.connectors, d.name) }));
-  } catch {
-    return [];
-  }
-}
-
-// Connector secrets live in system/connectors/<name>/.env; .mcp.json can reference them as ${VAR}.
-function connectorEnv() {
-  const env = {};
-  for (const p of connectorPlugins()) {
-    try {
-      for (const line of fs.readFileSync(path.join(p.path, ".env"), "utf8").split("\n")) {
-        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-        if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-      }
-    } catch {}
-  }
-  return env;
-}
-
 export class Harness {
-  constructor({ hub, bus, log }) {
+  constructor({ hub, bus, log, connectors = new ConnectorManager(), queryFactory = query }) {
     this.hub = hub;
     this.bus = bus;
     this.log = log;
+    this.connectors = connectors;
+    this.queryFactory = queryFactory;
     this.main = null;
+    this.turnQueue = [];
+    this.dispatchChain = Promise.resolve();
+    this.reloadRevision = 0;
+    const previousOnChange = connectors.onChange;
+    connectors.onChange = (name) => {
+      previousOnChange(name);
+      this.reloadSoon();
+      this.bus.emit({ t: "connectors_changed", name });
+    };
     this.jobChain = Promise.resolve();
     this.busy = false;
     this.running = new Map(); // label -> started (isolated jobs, queued or running)
@@ -117,19 +105,23 @@ export class Harness {
       systemPrompt: systemPrompt(),
       permissionMode: config.permissionMode,
       // The user grants device capabilities on the device itself; asking the classifier again only adds cost and false refusals.
-      allowedTools: ["mcp__devices__list_devices", "mcp__devices__call_device", "mcp__devices__read_since", "mcp__devices__sync_commit"],
+      allowedTools: [
+        "mcp__devices__list_devices", "mcp__devices__call_device", "mcp__devices__read_since", "mcp__devices__sync_commit",
+        "mcp__connectors__list", "mcp__connectors__add_account", "mcp__connectors__update_account", "mcp__connectors__remove_account",
+        ...[...this.connectors.definitions.keys()].map((name) => "mcp__" + name + "__*"),
+      ],
       thinking: { type: "adaptive" },
       effort: config.effort,
       allowDangerouslySkipPermissions: config.permissionMode === "bypassPermissions",
       settingSources: ["project"],
       settings: { availableModels: [m] },
-      plugins: connectorPlugins(),
-      mcpServers: { devices: this.hub.mcpServer() },
+      plugins: customPlugins(),
+      mcpServers: { devices: this.hub.mcpServer(), ...this.connectors.mcpServers() },
       includePartialMessages: !isolated,
       agentProgressSummaries: true,
       env: {
         ...process.env,
-        ...connectorEnv(),
+        ...customConnectorEnv(),
         CLAUDE_CONFIG_DIR: config.sessions,
         CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
         ANTHROPIC_DEFAULT_HAIKU_MODEL: m,
@@ -139,12 +131,15 @@ export class Harness {
       },
       hooks: {
         UserPromptSubmit: [{ hooks: [async () => this.promptContext()] }],
-        PreToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] }],
+        PreToolUse: [
+          { matcher: CONNECTOR_GUARD_TOOLS, hooks: [async (input) => checkConnectorAccess(input)] },
+          { matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] },
+        ],
         PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => (onWrite(rel(input.tool_input?.file_path)), {})] }],
       },
       stderr: (d) => {
         const s = String(d).trim();
-        if (s && !s.includes("unrecognized_model")) this.log("[cc]", s.slice(0, 500));
+        if (s && !s.includes("unrecognized_model")) this.log("[cc]", this.connectors.redact(s).slice(0, 500));
       },
     };
   }
@@ -173,52 +168,77 @@ export class Harness {
     if (!r) return;
     if (r.startsWith("data/memory/")) this.bus.emit({ t: "memory_updated", path: r });
     if (r.startsWith("data/")) this.bus.emit({ t: "files_changed", path: r });
-    if (r.startsWith("system/connectors/")) this.reloadSoon();
+    if (r.startsWith("system/custom-connectors/")) this.reloadSoon();
     if (job && r.endsWith(".html") && (r.startsWith("data/briefs/") || r.startsWith("data/sites/"))) job.outputs.add(r);
   }
 
   reloadSoon() {
-    clearTimeout(this.reloadTimer);
-    this.reloadTimer = setTimeout(async () => {
-      try {
-        await this.main?.q?.reloadPlugins();
-        this.log("plugins reloaded");
-      } catch (e) {
-        this.log("reloadPlugins failed:", e.message);
-      }
-    }, 2000);
+    // SDK setMcpServers() keeps an already-registered same-name SDK instance.
+    // Reconstruct the query BEFORE dispatching the next turn instead of replacing it in a running tool call.
+    // This also discovers new custom plugin directories and reloads their .env without interrupting a reply.
+    this.reloadRevision++;
   }
 
   // ---------- main thread ----------
 
   startMain() {
+    clearTimeout(this.restartTimer);
     const state = readJson(config.stateFile, {});
     const inbox = new Inbox();
     const startedAt = Date.now();
     const opts = this.options({ isolated: false, onWrite: (r) => this.noteWrite(r) });
     if (state.mainSessionId) opts.resume = state.mainSessionId;
-    const q = query({ prompt: inbox, options: opts });
-    this.main = { q, inbox, reply: "" };
+    const q = this.queryFactory({ prompt: inbox, options: opts });
+    const main = { q, inbox, reply: "", reloadRevision: this.reloadRevision, connectorRevision: this.connectors.revision };
+    this.main = main;
     this.busy = false;
-    (async () => {
+    main.finished = (async () => {
       try {
-        for await (const m of q) this.onMainMessage(m);
-        this.log("main thread ended");
+        for await (const m of q) this.onMainMessage(m, main);
+        if (!main.intentionalClose) this.log("main thread ended");
       } catch (e) {
-        this.log("main thread error:", e.message);
-        if (opts.resume && Date.now() - startedAt < 15_000) {
+        if (!main.intentionalClose) this.log("main thread error:", this.connectors.redact(e.message));
+        if (!main.intentionalClose && opts.resume && Date.now() - startedAt < 15_000) {
           this.log("resume failed, starting a fresh main session");
           writeJson(config.stateFile, { ...state, mainSessionId: null });
         }
       }
+      if (main.intentionalClose || this.main !== main) return;
+      main.ended = true;
+      main.inbox.close();
       this.busy = false;
       this.bus.emit({ t: "status", busy: false });
-      setTimeout(() => this.startMain(), 3000);
+      this.restartTimer = setTimeout(() => {
+        this.startMain();
+        this.scheduleDispatch().catch((e) => this.log("dispatch failed:", this.connectors.redact(e.message)));
+      }, 3000);
     })();
   }
 
-  onMainMessage(m) {
-    const main = this.main;
+  async dispatchNextTurn() {
+    if (this.busy || !this.turnQueue.length) return;
+    if (!this.main) this.startMain();
+    if (this.main.ended || this.main.reloadRevision !== this.reloadRevision || this.main.connectorRevision !== this.connectors.revision) {
+      const old = this.main;
+      old.intentionalClose = true;
+      old.inbox.close();
+      old.q.close();
+      await old.finished;
+      this.startMain(); // startMain reads mainSessionId and resumes the same conversation.
+      this.log("main query rebuilt with current connectors");
+    }
+    this.busy = true;
+    this.bus.emit({ t: "status", busy: true });
+    this.main.inbox.push(this.turnQueue.shift());
+  }
+
+  scheduleDispatch() {
+    this.dispatchChain = this.dispatchChain.then(() => this.dispatchNextTurn(), () => this.dispatchNextTurn());
+    return this.dispatchChain;
+  }
+
+  onMainMessage(m, main = this.main) {
+    if (this.main !== main || main.intentionalClose) return;
     if (m.type === "system" && m.subtype === "init") {
       const state = readJson(config.stateFile, {});
       if (state.mainSessionId !== m.session_id) writeJson(config.stateFile, { ...state, mainSessionId: m.session_id });
@@ -244,7 +264,7 @@ export class Harness {
     if (m.type === "assistant") {
       for (const b of m.message?.content || []) {
         if (b.type === "text") main.reply += (main.reply ? "\n\n" : "") + b.text;
-        if (b.type === "tool_use") this.bus.emit({ t: "tool", name: b.name, hint: toolHint(b) });
+        if (b.type === "tool_use") this.bus.emit({ t: "tool", name: b.name, hint: this.connectors.redact(toolHint(b)) });
       }
       return;
     }
@@ -254,6 +274,7 @@ export class Harness {
       if (text) appendJsonl(config.chatLog, { role: "assistant", text, ts: Date.now() });
       this.busy = false;
       this.bus.emit({ t: "turn_end", text, error: m.subtype !== "success" ? m.subtype : undefined });
+      this.scheduleDispatch().catch((e) => this.log("dispatch failed:", this.connectors.redact(e.message)));
     }
   }
 
@@ -279,9 +300,8 @@ export class Harness {
     if (atts.length) entry.attachments = atts;
     appendJsonl(config.chatLog, entry);
     this.bus.emit({ t: "user", text, source, attachments: atts });
-    this.busy = true;
-    this.bus.emit({ t: "status", busy: true });
-    this.main.inbox.push({ type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null });
+    this.turnQueue.push({ type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null });
+    await this.scheduleDispatch();
   }
 
   async interrupt() {
@@ -294,7 +314,8 @@ export class Harness {
 
   compactMain() {
     if (this.busy) return false;
-    this.main?.inbox.push({ type: "user", message: { role: "user", content: "/compact" }, parent_tool_use_id: null });
+    this.turnQueue.push({ type: "user", message: { role: "user", content: "/compact" }, parent_tool_use_id: null });
+    this.scheduleDispatch().catch((e) => this.log("compact failed:", this.connectors.redact(e.message)));
     return true;
   }
 
@@ -309,7 +330,7 @@ export class Harness {
       this.bus.emit({ t: "job", phase: "started", label });
       this.log(`job start: ${label}`);
       try {
-        const q = query({ prompt, options: this.options({ isolated: true, onWrite: (r) => this.noteWrite(r, job) }) });
+        const q = this.queryFactory({ prompt, options: this.options({ isolated: true, onWrite: (r) => this.noteWrite(r, job) }) });
         for await (const m of q) {
           if (m.type === "assistant" && !m.parent_tool_use_id) {
             for (const b of m.message?.content || []) if (b.type === "text") job.text = b.text;
