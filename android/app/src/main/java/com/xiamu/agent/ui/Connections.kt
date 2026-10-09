@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,42 +58,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiamu.agent.Api
 import com.xiamu.agent.Prefs
+import com.xiamu.agent.connectors.CloudConnectors
+import com.xiamu.agent.connectors.ConnectedDevice
+import com.xiamu.agent.connectors.ConnectorGateway
+import com.xiamu.agent.connectors.ConnectorInfo
+import com.xiamu.agent.connectors.Connections
 import com.xiamu.agent.device.Capabilities
 import com.xiamu.agent.device.DeviceService
 import com.xiamu.agent.objects
-import org.json.JSONObject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
-private data class Connector(val name: String, val title: String, val description: String, val enabled: Boolean)
-private data class Device(val id: String, val name: String, val kind: String, val online: Boolean, val lastSeen: Long, val caps: List<Connector>)
-private data class Connections(val cloud: Device, val connected: List<Connector>, val catalog: List<Connector>, val others: List<Device>)
+private val connectionsRevision = mutableIntStateOf(0)
 
-private fun connector(j: JSONObject, device: Boolean = false) = Connector(
-    j.optString("name"), j.optString("title").ifBlank { j.optString("name") }, j.optString("description"),
-    if (device) j.optBoolean("enabled") else j.optString("status") == "on",
-)
-
-private suspend fun connections(): Connections {
-    val j = Api.getJson("/api/connectors")
-    val cloud = j.getJSONObject("cloud")
-    return Connections(
-        Device(cloud.optString("id", "cloud"), cloud.optString("name", "云电脑"), "cloud", cloud.optBoolean("online"), 0, emptyList()),
-        (cloud.optJSONArray("builtin").objects() + cloud.optJSONArray("installed").objects()).map { connector(it) },
-        cloud.optJSONArray("catalog").objects().map { connector(it) },
-        j.optJSONArray("devices").objects().filter { it.optString("id") != Prefs.deviceId }.map {
-            Device(it.optString("id"), it.optString("name"), it.optString("kind"), it.optBoolean("online"), it.optLong("lastSeen"),
-                it.optJSONArray("capabilities").objects().map { c -> connector(c, true) })
-        },
-    )
+internal fun connectionsChanged() {
+    invalidateCache("connectors")
+    connectionsRevision.intValue++
 }
 
-private fun connectorIcon(name: String): ImageVector = when (name) {
+@Composable
+internal fun connectionData(gateway: ConnectorGateway): Pair<Connections?, String> =
+    load("connectors", cacheValue = gateway === CloudConnectors, revision = connectionsRevision.intValue) { gateway.list() }
+
+internal fun connectorIcon(name: String): ImageVector = when (name) {
     "web_search", "tavily" -> Icons.Outlined.Search
     "web_fetch" -> Icons.Outlined.Language
     "shell" -> Icons.Outlined.Terminal
     "files" -> Icons.Outlined.Folder
     "schedule" -> Icons.Outlined.Schedule
     "transcribe" -> Icons.Outlined.KeyboardVoice
-    "email" -> Icons.Outlined.Email
+    "email", "envelope", "mail" -> Icons.Outlined.Email
     "calendar" -> Icons.Outlined.CalendarMonth
     "github" -> Icons.Outlined.Code
     "notion" -> Icons.Outlined.Description
@@ -102,9 +97,8 @@ private fun connectorIcon(name: String): ImageVector = when (name) {
 }
 
 @Composable
-fun ConnectorsScreen(route: Route.Connectors) {
-    val ctx = ctx()
-    val (data, error) = load("connectors") { connections() }
+fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudConnectors) {
+    val (data, error) = connectionData(gateway)
     var selected by remember(route) { mutableIntStateOf(route.tab) }
     var query by remember { mutableStateOf("") }
     val list = rememberLazyListState()
@@ -120,7 +114,7 @@ fun ConnectorsScreen(route: Route.Connectors) {
             Column(Modifier.padding(horizontal = 20.dp)) {
                 BigTitle("连接应用", "连接设备和服务，豆豆就能替你做更多事")
                 SegTabs(
-                    listOf("本机 · ${Capabilities.all.size}", "云端 · ${data?.let { it.connected.size + it.catalog.size } ?: "—"}",
+                    listOf("本机 · ${Capabilities.all.size}", "云端 · ${data?.let { it.connected.size + it.catalog.size + it.custom.size } ?: "—"}",
                         "其他设备 · ${data?.others?.sumOf { it.caps.size } ?: "—"}"),
                     selected, Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp),
                 ) { selected = it }
@@ -139,17 +133,24 @@ fun ConnectorsScreen(route: Route.Connectors) {
                         item { SearchField(query, { query = it }, "搜索应用", Modifier.padding(top = 8.dp)) }
                         if (data == null) item { if (error.isNotBlank()) ErrorNote(error) else Loading() }
                         else {
-                            fun matches(c: Connector) = "${c.title} ${c.description} ${c.name}".contains(query.trim(), true)
+                            fun matches(c: ConnectorInfo) = "${c.title} ${c.description} ${c.name}".contains(query.trim(), true)
                             val connected = data.connected.filter(::matches)
                             val catalog = data.catalog.filter(::matches)
+                            val custom = data.custom.filter(::matches)
                             if (connected.isNotEmpty()) {
                                 item { SectionTitle("已接入") }
                                 item {
                                     CardList {
                                         connected.forEachIndexed { i, c ->
                                             if (i > 0) Hairline()
-                                            ListRow(c.title, c.description, connectorIcon(c.name), Pal.Link, subLines = 2,
-                                                trailing = { if (c.enabled) GoldChip("已连接") else Tag("未开启") })
+                                            ListRow(c.title, c.description, connectorIcon(c.icon.ifBlank { c.name }), Pal.Link, subLines = 2,
+                                                trailing = {
+                                                    when {
+                                                        c.builtin -> Tag("内置能力")
+                                                        c.accounts.isNotEmpty() -> Tag("${c.accounts.size} 个账号", if (c.enabled) Pal.GoldInk else Pal.Danger)
+                                                        else -> Tag(if (c.enabled) "已连接" else "未开启")
+                                                    }
+                                                }) { Nav.open(Route.ConnectorDetail(c)) }
                                         }
                                     }
                                 }
@@ -160,14 +161,26 @@ fun ConnectorsScreen(route: Route.Connectors) {
                                     CardList {
                                         catalog.forEachIndexed { i, c ->
                                             if (i > 0) Hairline()
-                                            ListRow(c.title, c.description, connectorIcon(c.name), Pal.Link, subLines = 2, trailing = {
-                                                QuietButton("连接") { Draft.send(ctx, "帮我接入「${c.title}」连接器", includeDraft = false) }
-                                            })
+                                            ListRow(c.title, c.description, connectorIcon(c.icon.ifBlank { c.name }), Pal.Link, subLines = 2, trailing = {
+                                                QuietButton(if (c.fields == null) "即将支持" else "连接") { Nav.open(Route.ConnectorDetail(c)) }
+                                            }) { Nav.open(Route.ConnectorDetail(c)) }
                                         }
                                     }
                                 }
                             }
-                            if (connected.isEmpty() && catalog.isEmpty()) item { EmptyNote(if (query.isBlank()) "还没有云端连接器" else "没有找到匹配的应用") }
+                            if (custom.isNotEmpty()) {
+                                item { SectionTitle("自建连接器") }
+                                item {
+                                    CardList {
+                                        custom.forEachIndexed { i, c ->
+                                            if (i > 0) Hairline()
+                                            ListRow(c.title, c.description, connectorIcon(c.icon.ifBlank { c.name }), Pal.Link, subLines = 2,
+                                                trailing = { Tag("豆豆自建") })
+                                        }
+                                    }
+                                }
+                            }
+                            if (connected.isEmpty() && catalog.isEmpty() && custom.isEmpty()) item { EmptyNote(if (query.isBlank()) "还没有云端连接器" else "没有找到匹配的应用") }
                         }
                     }
                     else -> {
@@ -200,13 +213,18 @@ fun ConnectorsScreen(route: Route.Connectors) {
     }
 }
 
-private fun deviceStatus(d: Device): String =
+private fun deviceStatus(d: ConnectedDevice): String =
     if (d.online) "在线" else "离线" + if (d.lastSeen > 0) " · 上次在线 ${ago(d.lastSeen)}" else ""
 
 @Composable
-fun DevicesScreen() {
-    val (data, error) = load("connectors") { connections() }
+fun DevicesScreen(gateway: ConnectorGateway = CloudConnectors) {
+    val (data, error) = connectionData(gateway)
     var pairing by remember { mutableStateOf<String?>(null) }
+    var removing by remember { mutableStateOf<ConnectedDevice?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var removalError by remember { mutableStateOf("") }
+    var blocked by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     SubPage("设备") {
         item { BigTitle("设备", "在不同设备间，继续同一件事") }
         item {
@@ -221,7 +239,9 @@ fun DevicesScreen() {
             }
             data.others.forEach { d ->
                 item {
-                    DeviceCard(d.name, deviceStatus(d), d.kind, d.online) { Nav.open(Route.Connectors(2, d.id)) }
+                    DeviceCard(d.name, deviceStatus(d), d.kind, d.online,
+                        remove = if (d.online) null else ({ removing = d; removalError = ""; blocked = false }),
+                    ) { Nav.open(Route.Connectors(2, d.id)) }
                 }
             }
         }
@@ -233,6 +253,26 @@ fun DevicesScreen() {
                 ListRow("连接安卓手机", icon = Icons.Outlined.PhoneAndroid) { pairing = "安卓手机" }
             }
         }
+    }
+    removing?.let { device ->
+        RemovalDialog("移除设备", "移除「${device.name}」？这会清除它的设备登记，之后可以重新接入。", "移除", busy, removalError, blocked,
+            onDismiss = { removing = null },
+            onConfirm = {
+                if (!busy && !blocked) {
+                    busy = true
+                    scope.launch {
+                        try {
+                            gateway.removeDevice(device.id)
+                            removing = null
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            blocked = e is Api.ApiError && e.code == 409
+                            removalError = if (blocked) "设备在线，不能移除" else e.message ?: "设备移除失败"
+                        } finally { busy = false; connectionsChanged() }
+                    }
+                }
+            },
+        )
     }
     val kind = pairing
     if (kind != null) {
@@ -255,9 +295,10 @@ fun DevicesScreen() {
 }
 
 @Composable
-private fun DeviceCard(name: String, sub: String, kind: String, online: Boolean, onClick: () -> Unit) {
-    CardList(Modifier.padding(top = 14.dp).alpha(if (online) 1f else 0.6f)) {
-        ListRow(name, sub, deviceIcon(kind), Color(0xFF637DA0), subLines = 2, onClick = onClick)
+private fun DeviceCard(name: String, sub: String, kind: String, online: Boolean, remove: (() -> Unit)? = null, onClick: () -> Unit) {
+    CardList(Modifier.padding(top = 14.dp)) {
+        ListRow(name, sub, deviceIcon(kind), if (online) Color(0xFF637DA0) else Pal.Muted, subLines = 2,
+            trailing = remove?.let { action -> { TextButton(onClick = action) { Text("移除", color = Pal.Danger) } } }, onClick = onClick)
     }
 }
 

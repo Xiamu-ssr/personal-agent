@@ -58,6 +58,8 @@ import androidx.core.content.FileProvider
 import com.xiamu.agent.Api
 import com.xiamu.agent.Chat
 import com.xiamu.agent.Prefs
+import com.xiamu.agent.connectors.ConnectorInfo
+import com.xiamu.agent.connectors.ConnectorAccount
 import com.xiamu.agent.media.Images
 import kotlinx.coroutines.CancellationException
 import java.io.File
@@ -72,6 +74,8 @@ import java.util.Locale
 sealed interface Route {
     data object Settings : Route
     data class Connectors(val tab: Int = 0, val device: String? = null) : Route
+    data class ConnectorDetail(val connector: ConnectorInfo) : Route
+    data class ConnectorForm(val connector: ConnectorInfo, val account: ConnectorAccount? = null) : Route
     data object Devices : Route
     data object Skills : Route
     data class Web(val title: String, val path: String) : Route
@@ -97,11 +101,11 @@ private val cache = HashMap<String, Any?>()
 
 /** Load something from the server; reload when data/ changes. */
 @Composable
-fun <T> load(key: String, cacheValue: Boolean = true, block: suspend () -> T): Pair<T?, String> {
+fun <T> load(key: String, cacheValue: Boolean = true, revision: Int = 0, block: suspend () -> T): Pair<T?, String> {
     @Suppress("UNCHECKED_CAST")
     var value by remember(key) { mutableStateOf(if (cacheValue) cache[key] as T? else null) }
     var err by remember(key) { mutableStateOf("") }
-    LaunchedEffect(key, Chat.filesVersion.intValue) {
+    LaunchedEffect(key, Chat.filesVersion.intValue, revision) {
         runCatching { block() }
             .onSuccess { value = it; err = ""; if (cacheValue) cache[key] = it }
             .onFailure { if (it is CancellationException) throw it; err = it.message ?: "出错了" }
@@ -110,6 +114,7 @@ fun <T> load(key: String, cacheValue: Boolean = true, block: suspend () -> T): P
 }
 
 fun clearCache() = cache.clear()
+fun invalidateCache(key: String) { cache.remove(key) }
 
 @Composable
 fun RoutePage(r: Route) {
@@ -119,6 +124,8 @@ fun RoutePage(r: Route) {
         is Route.Image -> ImagePage(r.path)
         Route.Settings -> SettingsScreen()
         is Route.Connectors -> ConnectorsScreen(r)
+        is Route.ConnectorDetail -> ConnectorDetailScreen(r)
+        is Route.ConnectorForm -> ConnectorFormScreen(r)
         Route.Devices -> DevicesScreen()
         Route.Skills -> SkillsScreen()
         is Route.MemoryCategory -> MemoryCategoryScreen(r.dir)

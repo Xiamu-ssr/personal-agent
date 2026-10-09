@@ -1,0 +1,104 @@
+Personal Agent Android v0.3.0 本地验收（修订第 3 轮）
+
+本轮改动
+- 编辑账号解析 accounts[].values，预填全部非 secret 字段；custom preset 自动显示保存的 host、port。
+- secret 始终空白，占位为「不修改请留空」，留空或为「••••」时不放入 PUT。
+- values 缺失或为 null 时沿用原来的空白表单及局部 PUT；新增账号仍使用字段 default。
+- 新增脱敏账号 fixture、QQ / 手动服务器编辑场景和旧服务器回退测试。
+- 版本仍为 0.3.0 / 4；本轮未改版本号或访问真实服务器。
+
+本轮改动文件（相对 personal-agent/android/）
+- app/src/main/java/com/xiamu/agent/connectors/Connectors.kt
+- app/src/main/java/com/xiamu/agent/ui/ConnectorDetail.kt
+- app/src/debug/assets/connector-accounts.json
+- app/src/debug/java/com/xiamu/agent/FixtureConnectors.kt
+- app/src/debug/java/com/xiamu/agent/ConnectorReviewActivity.kt
+- app/src/androidTest/java/com/xiamu/agent/ConnectorChecks.kt
+- scripts/review_connectors.py
+- REVIEW-v0.3.0.txt
+
+已实现
+- 云端目录和已连接项进入连接器详情，不再向聊天发送接入请求。
+- cloud.custom 单独只读展示，标注「豆豆自建」；内置能力无需账号配置。
+- 详情展示多账号、状态点、错误原因，支持编辑、重新测试和二次确认删除。完成操作后重新读取服务端列表。
+- 根据 fields 动态生成 text、number、secret 和 select。select ≤3 个选项用分段控件，更多用下拉。
+- 新增表单填入 default，按 showIf 显隐，help 支持字符串和 preset 映射。隐藏字段不提交。
+- secret 使用密码框，可切换显示，关闭自动纠错和联想；表单输入仅保存在当前页面内存，不进入聊天或持久化草稿。
+- 提交显示「正在验证…」，按钮和输入禁用；400 显示原因并保留输入；成功返回账号列表。
+- 编辑通过 PUT 提交，secret 留空或为「••••」时省略该字段。
+- 离线设备可二次确认移除。409 显示「设备在线，不能移除」，移除按钮置灰，刷新设备状态。
+- 缺少 fields 的旧目录显示「即将支持」，详情禁用账号表单。
+- 版本 0.3.0，versionCode 4；视觉沿用银蓝背景、半透明卡片和香槟金选中态。
+
+编辑接口说明
+更新后的 GET /api/connectors.accounts 返回脱敏 values；编辑页按 fields 预填非 secret 字段，不把「••••」填入密码框。
+已有 values 时提交当前可见字段，允许清空可选备注；secret 留空时省略。缺少 values 的旧服务器仅提交用户填写的非空字段，不写入新增默认值。
+账号 fixture 使用接口的 values 形状，覆盖 preset、address、label、custom host 和数值 port，并保留缺失 / null 的回退验证。
+
+改动文件（均相对 personal-agent/android/）
+- app/build.gradle.kts：版本升级与 Compose 测试依赖。
+- app/src/main/java/com/xiamu/agent/Api.kt：新增账号 POST / PUT / DELETE、账号测试及设备 DELETE；路径逐段编码。
+- app/src/main/java/com/xiamu/agent/connectors/Connectors.kt：接口模型、字段解析、表单负载与可替换的数据源。
+- app/src/main/java/com/xiamu/agent/ui/Connections.kt：目录详情导航、自建只读展示、设备移除与数据刷新。
+- app/src/main/java/com/xiamu/agent/ui/ConnectorDetail.kt：详情、动态表单、账号操作和确认弹窗。
+- app/src/main/java/com/xiamu/agent/ui/Pages.kt：新增详情 / 表单路由及刷新版本参数。
+- app/src/debug/AndroidManifest.xml：仅 debug 的 fixture Activity 和本地网络配置。
+- app/src/debug/assets/connectors.json：按接口形状编写的本地数据。
+- app/src/debug/assets/connector-accounts.json：已保存账号的脱敏 values，包含预设邮箱及手动服务器。
+- app/src/debug/java/com/xiamu/agent/FixtureConnectors.kt：纯内存的账号、校验失败、延迟验证和设备冲突响应。
+- app/src/debug/java/com/xiamu/agent/ConnectorReviewActivity.kt：离线预览入口，使用本机地址及空口令，不启动聊天或设备服务。
+- app/src/debug/res/xml/local_checks_network.xml：仅 debug 允许 localhost / 127.0.0.1 明文测试。
+- app/src/androidTest/java/com/xiamu/agent/ConnectorChecks.kt：14 项表单 / Compose 测试。
+- app/src/androidTest/java/com/xiamu/agent/ConnectorApiChecks.kt：1 项本机 HTTP 协议测试。
+- scripts/review_connectors.py：仅允许 pa35 / emulator-5554 上的隔离 fixture Activity 操作与截图。
+- REVIEW-v0.3.0.txt：本报告。
+
+实际验证
+- ./gradlew assembleRelease assembleDebug assembleDebugAndroidTest：BUILD SUCCESSFUL。
+- 本轮最终测试：OK (15 tests)，30.3 秒；设备固定为 pa35 / emulator-5554。
+- 新增覆盖非 secret 预填、密码始终为空并省略、修改备注后的刷新、custom 的 showIf / 保存端口优先于 default，以及 values 缺失 / null 的局部 PUT 回退。
+- 首次运行有 1 项测试过早把表单中的新备注当作保存完成；改为等待返回账号列表后，完整测试组全部通过。
+- Compose 覆盖目录进入详情、自建标签、旧版降级、多账号 / 出错、重新测试刷新、条件字段、动态帮助、默认数值、两种 select、新增成功返回、400 保留输入、密码显隐、重复点击拦截、PUT 省略未修改字段和密钥、账号删除确认、离线设备删除确认及 409。
+- 本机 HTTP fixture 核对 GET / POST / PUT / DELETE 路径、账号测试路径、JSON {values}、鉴权头、路径编码、204 空响应、400 原因及 409 状态码。
+- 本轮新增并人工审看编辑页预填截图；第 2 轮的 15 张状态截图保留。
+- apksigner verify 通过；APK 元数据为 com.xiamu.agent、versionName 0.3.0、versionCode 4、SDK 35。
+- Release 不包含 fixture Activity、fixture JSON 或 localhost 网络配置。
+- git diff --check -- android 通过。
+- 测试包已卸载，模拟器已关闭。本轮未登录真实云端、未发送聊天 / 上传，也未触发设备注册。
+- fixture 的「读取范围」仅用于覆盖 ≤3 个选项的分段控件，不属于发布版邮箱字段。
+
+未验证
+- 新接口在真实云端的端到端行为，以及真实 IMAP 授权码 / 邮箱连接。
+- 真实账号的新增、编辑、重新测试、删除和真实设备登记移除。
+- 实体手机上的输入法差异。本轮仅在 SDK 35 模拟器运行本地 fixture。
+- 生产登录后路由的真实数据联调；相关页面使用相同生产 Composable 在隔离 debug 入口验证。
+
+签名 Release APK
+app/build/outputs/apk/release/app-release.apk
+
+截图（全部为本地 fixture）
+- 云端目录 / 自建只读：/tmp/pa-android-v03-cloud.png
+- 旧服务器 fields 缺失：/tmp/pa-android-v03-legacy.png
+- 空账号详情：/tmp/pa-android-v03-detail-empty.png
+- 多账号详情：/tmp/pa-android-v03-detail-multi.png
+- 账号出错详情：/tmp/pa-android-v03-detail-error.png
+- 默认表单：/tmp/pa-android-v03-form-default.png
+- 下拉菜单：/tmp/pa-android-v03-form-dropdown.png
+- showIf 手动服务器字段：/tmp/pa-android-v03-form-custom.png
+- 数值默认 / 三选项分段控件：/tmp/pa-android-v03-form-custom-bottom.png
+- 校验失败 / 保留输入：/tmp/pa-android-v03-form-failed.png
+- 正在验证 / 禁止重复提交：/tmp/pa-android-v03-form-validating.png
+- 旧服务器局部编辑（第 2 轮留存）：/tmp/pa-android-v03-form-edit.png
+- 编辑页已预填（本轮新增）：/tmp/pa-android-v03-form-edit-prefilled.png
+- 账号删除确认：/tmp/pa-android-v03-account-delete-confirm.png
+- 设备移除确认：/tmp/pa-android-v03-devices-remove-confirm.png
+- 409 在线冲突：/tmp/pa-android-v03-devices-conflict.png
+
+复现本地验证
+启动 pa35 后，仅用 adb -s emulator-5554 安装 app-debug.apk 和 app-debug-androidTest.apk。
+测试：adb -s emulator-5554 shell am instrument -w -e class 'com.xiamu.agent.ConnectorApiChecks,com.xiamu.agent.ConnectorChecks' com.xiamu.agent.checks.test/androidx.test.runner.AndroidJUnitRunner
+预览：python3 scripts/review_connectors.py open detail-multi
+截图：python3 scripts/review_connectors.py capture detail-multi
+支持的状态见脚本 SCENARIOS。验收后卸载两份 .checks 测试包并 adb -s emulator-5554 emu kill。
+
+未 commit / push / 发布 / 部署；未修改 cloud、mac、spec 或 .codex-handoff。

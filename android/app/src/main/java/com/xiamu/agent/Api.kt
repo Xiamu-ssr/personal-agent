@@ -75,6 +75,22 @@ object Api {
     suspend fun postJson(path: String, body: JSONObject = JSONObject()): JSONObject =
         call(req(path).post(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
 
+    private suspend fun putJson(path: String, body: JSONObject): JSONObject =
+        call(req(path).put(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
+
+    private fun accountsPath(name: String, id: String? = null) =
+        "/api/connectors/${enc(name)}/accounts" + if (id == null) "" else "/${enc(id)}"
+
+    suspend fun addConnectorAccount(name: String, values: JSONObject): JSONObject =
+        postJson(accountsPath(name), JSONObject().put("values", values))
+
+    suspend fun updateConnectorAccount(name: String, id: String, values: JSONObject): JSONObject =
+        putJson(accountsPath(name, id), JSONObject().put("values", values))
+
+    suspend fun testConnectorAccount(name: String, id: String): JSONObject = postJson(accountsPath(name, id) + "/test")
+    suspend fun deleteConnectorAccount(name: String, id: String) { call(req(accountsPath(name, id)).delete().build()) }
+    suspend fun removeDevice(id: String) { call(req("/api/devices/${enc(id)}").delete().build()) }
+
     private suspend fun postRaw(path: String, body: RequestBody): JSONObject = JSONObject(call(req(path).post(body).build(), slow))
 
     /** Raw bytes into data/uploads/<date>/. Returns `{path, name, size}`. */
