@@ -60,7 +60,7 @@ export default {
 
 | 接口 | 说明 |
 |---|---|
-| `GET /api/connectors` | 和现在一样，但 `cloud.catalog` 里的每一项都带上 `fields` 和 `multiAccount`。已配置账号的连接器移到 `cloud.installed`，并带上 `accounts:[{id,label,status,error,checkedAt}]`，不含 values。自建连接器放进 `cloud.custom`。 |
+| `GET /api/connectors` | 和现在一样，但 `cloud.catalog` 里的每一项都带上 `fields` 和 `multiAccount`。已配置账号的连接器移到 `cloud.installed`，并带上 `accounts:[{id,label,status,error,checkedAt,values}]`；values 里的 secret 一律是 `"••••"`，用于编辑页预填。自建连接器放进 `cloud.custom`。 |
 | `POST /api/connectors/<name>/accounts {values}` | 校验必填项 → `test()` → 成功就保存并返回 `{id,label,status:"ok"}`；失败返回 400 `{error}`，不保存。 |
 | `PUT /api/connectors/<name>/accounts/<id> {values}` | 修改账号；secret 字段传 `"••••"` 或不传，表示保持原值。同样要先 test。 |
 | `DELETE /api/connectors/<name>/accounts/<id>` | 删除账号；删到 0 个账号就卸掉这个 MCP server。 |

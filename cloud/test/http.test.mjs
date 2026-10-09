@@ -68,7 +68,8 @@ test("isolated HTTP CRUD/test/catalog via curl, safe errors, permissions and onl
   assert.equal(installed.installed[0].name, "email");
   assert.equal(installed.catalog.length, 0);
   assert.equal(installed.installed[0].accounts[0].id, id);
-  assert.equal("values" in installed.installed[0].accounts[0], false);
+  assert.equal(installed.installed[0].accounts[0].values.password, SECRET_MASK);
+  assert.equal(installed.installed[0].accounts[0].values.preset !== undefined, true);
   assert.equal((await curl(accountRoute, "PUT", { values: { password: SECRET_MASK, label: "Updated" } })).data.label, "Updated");
   assert.equal((await curl(accountRoute, "PUT", { values: { label: "Omitted secret" } })).status, 200);
   const before = fs.readFileSync(files[0], "utf8");

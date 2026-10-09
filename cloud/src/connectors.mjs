@@ -156,7 +156,7 @@ export class ConnectorManager {
       const accounts = this.accounts.get(definition.name) || [];
       const item = { name: definition.name, title: definition.title, description: definition.description, icon: definition.icon,
         fields: definition.fields, multiAccount: definition.multiAccount, status: accounts.length ? "on" : "off" };
-      if (accounts.length) installed.push({ ...item, accounts: accounts.map((a) => this.publicAccount(a)) });
+      if (accounts.length) installed.push({ ...item, accounts: accounts.map((a) => ({ ...this.publicAccount(a), values: this.maskedValues(definition.name, a.values) })) });
       else catalog.push(item);
     }
     const custom = customPlugins(this.customDir).map((plugin) => {

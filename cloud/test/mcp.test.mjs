@@ -49,7 +49,7 @@ test("real SDK MCP initialize/list/call exchange: management is safe and rebuilt
   assert.equal(safeMail.text.includes(SECRET_MASK), true);
   await call(management, "update_account", { name: "email", id: added.id, values: { password: SECRET_MASK, label: "Protocol test" } });
   const safeList = await call(management, "list");
-  assert.equal("values" in safeList.installed[0].accounts[0], false);
+  assert.equal(safeList.installed[0].accounts[0].values.password, SECRET_MASK);
   await call(management, "remove_account", { name: "email", id: added.id });
   assert.equal("email" in manager.mcpServers(), false);
 });
