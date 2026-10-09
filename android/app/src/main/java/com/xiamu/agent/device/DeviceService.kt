@@ -6,7 +6,6 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -14,9 +13,11 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.xiamu.agent.Api
 import com.xiamu.agent.App
+import com.xiamu.agent.Chat
 import com.xiamu.agent.MainActivity
 import com.xiamu.agent.Prefs
 import com.xiamu.agent.R
@@ -38,13 +39,20 @@ class DeviceService : Service() {
     private var ws: WebSocket? = null
     private var retry = 0
     private var running = false
+    private var locationForeground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!Prefs.configured) { stopSelf(); return START_NOT_STICKY }
         startInForeground()
         running = true
-        if (intent?.action == ACTION_REREGISTER) ws?.close(1000, "re-register")
+        if (intent?.action == ACTION_REREGISTER) {
+            val old = ws
+            ws = null
+            old?.close(1000, "re-register")
+            online.value = false
+        }
         if (ws == null) connect()
         return START_STICKY
     }
@@ -52,6 +60,8 @@ class DeviceService : Service() {
     override fun onDestroy() {
         running = false
         ws?.close(1000, null)
+        ws = null
+        main.removeCallbacksAndMessages(null)
         scope.cancel()
         online.value = false
         super.onDestroy()
@@ -61,44 +71,53 @@ class DeviceService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val n: Notification = NotificationCompat.Builder(this, App.CH_SERVICE)
             .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle("豆豆在线")
-            .setContentText("这台手机已连接，豆豆可以用你授权的能力")
+            .setContentTitle(if (online.value) "豆豆在线" else "豆豆连接中")
+            .setContentText(if (online.value) "这台手机已连接，豆豆可以用你授权的能力" else "正在连接云端")
             .setContentIntent(open)
             .setOngoing(true)
             .build()
+        if (Build.VERSION.SDK_INT < 34) return startForeground(1, n)
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        if (Prefs.granted("location") && has(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+        locationForeground = Capabilities.byName("location")!!.enabled(this) && (App.foreground || locationForeground)
+        if (locationForeground) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
-        if (Build.VERSION.SDK_INT < 34) return startForeground(1, n)
         try {
             startForeground(1, n, type)
         } catch (e: SecurityException) {
             // Started from the background (e.g. after boot): location type isn't allowed there.
             startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            locationForeground = false
         }
     }
 
-    private fun has(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
-
-    private fun enabledCaps(): List<Capability> =
-        Capabilities.all.filter { c -> Prefs.granted(c.name) && c.permissions.all { has(it) } }
+    private fun enabled(c: Capability) = c.enabled(this)
+    private fun enabledCaps(): List<Capability> = Capabilities.all.filter(::enabled)
 
     private fun connect() {
         if (!Prefs.configured || !running) return
         ws = Api.http.newWebSocket(Api.wsRequest("device"), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                retry = 0
-                val caps = JSONArray().apply { enabledCaps().forEach { put(it.toJson()) } }
-                val device = JSONObject().put("id", Prefs.deviceId).put("name", Prefs.deviceName).put("kind", "android")
-                    .put("capabilities", caps)
-                webSocket.send(JSONObject().put("t", "register").put("device", device).toString())
-                main.post { online.value = true }
+                main.post {
+                    if (ws !== webSocket || !running || !Prefs.configured) return@post
+                    retry = 0
+                    val caps = JSONArray().apply { Capabilities.all.forEach { put(it.toJson(enabled(it))) } }
+                    val device = JSONObject().put("id", Prefs.deviceId).put("name", Prefs.deviceName).put("kind", "android")
+                        .put("capabilities", caps)
+                    webSocket.send(JSONObject().put("t", "register").put("device", device).toString())
+                    online.value = true
+                    startInForeground()
+                    main.postDelayed({ if (ws === webSocket) Chat.filesVersion.intValue++ }, 400)
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (ws !== webSocket || !running || !Prefs.configured) return
                 val m = runCatching { JSONObject(text) }.getOrNull() ?: return
-                if (m.optString("t") == "call") scope.launch { handleCall(webSocket, m) }
+                when (m.optString("t")) {
+                    "call" -> scope.launch { handleCall(webSocket, m) }
+                    "event" -> onEvent(m.optString("kind"), m.optString("text"))
+                }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = dropped(webSocket)
@@ -111,12 +130,19 @@ class DeviceService : Service() {
     }
 
     private fun reconnectLater(webSocket: WebSocket) {
-        if (ws === webSocket) ws = null
+        if (ws !== webSocket) return
+        ws = null
         online.value = false
-        if (!running) return
+        if (!running || !Prefs.configured) return
+        startInForeground()
         val delay = (2000L shl retry.coerceAtMost(4)).coerceAtMost(60_000L)
         retry++
         main.postDelayed({ if (ws == null) connect() }, delay)
+    }
+
+    /** Replies and finished jobs pop up as notifications while the App isn't on screen. */
+    private fun onEvent(kind: String, text: String) {
+        onAgentEvent(this, kind, text)
     }
 
     private suspend fun handleCall(webSocket: WebSocket, m: JSONObject) {
@@ -144,6 +170,12 @@ class DeviceService : Service() {
     companion object {
         const val ACTION_REREGISTER = "reregister"
         val online = mutableStateOf(false)
+
+        internal fun onAgentEvent(ctx: Context, kind: String, text: String) {
+            if (App.foreground || !Prefs.notifyMessages || text.isBlank()) return
+            if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled()) return
+            Capabilities.notify(ctx, if (kind == "job") "豆豆 · 任务完成" else "豆豆", text)
+        }
 
         fun start(ctx: Context, reregister: Boolean = false) {
             if (!Prefs.configured) return

@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
 import { config } from "./config.mjs";
-import { readJson, writeJson, tailJsonl, dateIn } from "./store.mjs";
+import { readJson, writeJson, tailJsonl, firstTs, dateIn } from "./store.mjs";
 import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
 
@@ -156,7 +156,7 @@ export function startServer({ harness, hub, bus, log }) {
     if (p === "/api/state") {
       return json(res, 200, {
         busy: harness.busy, devices: hub.online(), model: config.model,
-        schedule: readJson(config.scheduleFile, []),
+        schedule: readJson(config.scheduleFile, []), firstChat: firstTs(config.chatLog),
       });
     }
     if (p === "/api/pair/new" && req.method === "POST") return json(res, 200, { code: issuePairCode() });
@@ -194,9 +194,19 @@ export function startServer({ harness, hub, bus, log }) {
       const day = dateIn(config.timezone);
       const stamp = new Intl.DateTimeFormat("sv-SE", { timeZone: config.timezone, hour: "2-digit", minute: "2-digit", second: "2-digit" })
         .format(new Date()).replace(/:/g, "");
-      const rel = path.join("data", "uploads", day, `${stamp}-${name}`);
       fs.mkdirSync(path.join(config.root, "data", "uploads", day), { recursive: true });
-      fs.writeFileSync(path.join(config.root, rel), buf);
+      // Phones often name every photo image.jpg; never overwrite an earlier upload from the same second.
+      const ext = path.extname(name);
+      let rel;
+      for (let i = 1; ; i++) {
+        rel = path.join("data", "uploads", day, `${stamp}-${i === 1 ? name : `${name.slice(0, name.length - ext.length)}-${i}${ext}`}`);
+        try {
+          fs.writeFileSync(path.join(config.root, rel), buf, { flag: "wx" });
+          break;
+        } catch (e) {
+          if (e.code !== "EEXIST") throw e;
+        }
+      }
       return json(res, 200, { path: rel, name, size: buf.length });
     }
     // Hold-to-talk: audio in, text out. Nothing is stored.

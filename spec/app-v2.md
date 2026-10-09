@@ -14,7 +14,7 @@
 |---|---|
 | `POST /api/pair` `{code}` → `{token}` | 6 位配对码换口令，不需要 token |
 | `POST /api/pair/new` → `{code}` | 已登录设备生成新配对码（顶掉旧码） |
-| `GET /api/state` → `{busy, devices, model, schedule}` | 登录校验也用它 |
+| `GET /api/state` → `{busy, devices, model, schedule, firstChat}` | 登录校验也用它；`firstChat` = 第一条聊天记录的毫秒时间戳（没有为 null），豆豆页算「N 天前」用 |
 | `GET /api/history?n=200` → `{items}` | 聊天记录，见下 |
 | `GET /api/connectors` | 连接应用和设备页的数据，见下 |
 | `GET /api/jobs` → `{running:[{label,started}], recent:[card…]}` | 任务页 |
@@ -104,7 +104,7 @@
    - 顶部总档卡（`data/memory/profile/总档.md` 的内容，Markdown 渲染；把行尾的 `→ xxx/yyy.md` 指针渲染成可点的小标签，而不是原样显示路径）。
    - 分类网格（两列卡片，图标 + 中文名 + N 项），只显示有文件的分类，顺序：工作、项目、生活、健康、人际、偏好、兴趣、财务、反馈、历史、自动化偏好、语音笔记、角色。分类目录名 → 中文名：work 工作、project 项目、life 生活、health 健康、people 人际、preferences 偏好、interests 兴趣、finance 财务、feedback 反馈、history 历史、automation-prefs 自动化偏好、voice-notes 语音笔记、role 角色。
    - 点分类 → 文件列表 → 文件详情（Markdown）。
-7. **豆豆**（主页）：大的银色头像（球体/豆子）、名字「豆豆」、一句话「从 N 天前第一次对话开始，慢慢了解你」（N 从最早聊天记录算，没有就不显示 N）。
+7. **豆豆**（主页）：大的银色头像（球体/豆子）、名字「豆豆」、一句话「从 N 天前第一次对话开始，慢慢了解你」（N 从 `/api/state.firstChat` 算，为 null 就不显示 N；不要为此拉全量历史）。
    - 「最近的日记」横向卡片（`data/diary/*.md`，日期 + 第一行标题 + 摘要），「查看所有日记」进列表。点开日记详情（Markdown）。没有日记就「豆豆每晚 22:30 写一篇日记」。
    - 「豆豆的设定」一行：打开 `data/memory/role/角色.md`。
 8. **设置**：豆豆头像 + 「豆豆 · Personal Agent」。

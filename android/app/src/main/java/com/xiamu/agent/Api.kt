@@ -2,13 +2,24 @@ package com.xiamu.agent
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.IOException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 object Api {
     val http: OkHttpClient = OkHttpClient.Builder()
@@ -17,12 +28,17 @@ object Api {
         .pingInterval(25, TimeUnit.SECONDS)
         .build()
 
+    private val slow: OkHttpClient = http.newBuilder().writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build()
+
     val authHeader: Map<String, String> get() = mapOf("Authorization" to "Bearer ${Prefs.token}")
 
     fun url(path: String) = Prefs.server + path
 
-    fun fileUrl(dataPath: String) =
-        url("/files/" + dataPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") })
+    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
+    /** `/files/<path under the repo root>`, each segment URL-encoded. Paths look like `data/briefs/...`. */
+    fun filePath(dataPath: String) = "/files/" + dataPath.split("/").joinToString("/") { enc(it) }
+    fun fileUrl(dataPath: String) = url(filePath(dataPath))
 
     fun wsRequest(role: String): Request {
         val base = Prefs.server.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
@@ -31,36 +47,110 @@ object Api {
 
     private fun req(path: String) = Request.Builder().url(url(path)).header("Authorization", "Bearer ${Prefs.token}")
 
-    suspend fun getText(path: String): String = withContext(Dispatchers.IO) {
-        http.newCall(req(path).build()).execute().use { r ->
-            if (!r.isSuccessful) throw ApiError(r.code, r.body?.string().orEmpty())
-            r.body!!.string()
-        }
+    private suspend fun <T> fetch(r: Request, client: OkHttpClient, read: (Response) -> T): T = suspendCancellableCoroutine { cont ->
+        val call = client.newCall(r)
+        cont.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (cont.isActive) cont.resumeWithException(ApiError(0, ""))
+            }
+            override fun onResponse(call: Call, response: Response) {
+                response.use { res ->
+                    try {
+                        if (!res.isSuccessful) throw ApiError(res.code, res.body?.string().orEmpty())
+                        val value = read(res)
+                        if (cont.isActive) cont.resume(value)
+                    } catch (e: Exception) {
+                        if (cont.isActive) cont.resumeWithException(if (e is IOException) ApiError(0, "") else e)
+                    }
+                }
+            }
+        })
     }
 
-    suspend fun getJson(path: String): JSONObject = JSONObject(getText(path))
+    private suspend fun call(r: Request, client: OkHttpClient = http): String = fetch(r, client) { it.body?.string().orEmpty() }
 
-    suspend fun postJson(path: String, body: JSONObject): JSONObject = withContext(Dispatchers.IO) {
-        val rb = body.toString().toRequestBody("application/json".toMediaType())
-        http.newCall(req(path).post(rb).build()).execute().use { r ->
-            val s = r.body?.string().orEmpty()
-            if (!r.isSuccessful) throw ApiError(r.code, s)
-            if (s.isBlank()) JSONObject() else JSONObject(s)
-        }
+    suspend fun getText(path: String): String = call(req(path).build())
+    suspend fun getJson(path: String): JSONObject = JSONObject(getText(path))
+    suspend fun postJson(path: String, body: JSONObject = JSONObject()): JSONObject =
+        call(req(path).post(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
+
+    private suspend fun postRaw(path: String, body: RequestBody): JSONObject = JSONObject(call(req(path).post(body).build(), slow))
+
+    /** Raw bytes into data/uploads/<date>/. Returns `{path, name, size}`. */
+    suspend fun upload(name: String, bytes: ByteArray): JSONObject =
+        postRaw("/api/upload?name=" + enc(name), bytes.toRequestBody("application/octet-stream".toMediaType()))
+
+    suspend fun upload(name: String, file: File): JSONObject = upload(name, withContext(Dispatchers.IO) { file.readBytes() })
+
+    /** Hold-to-talk: audio in, text out; the server keeps nothing. */
+    suspend fun transcribe(file: File, format: String = "aac"): String =
+        postRaw("/api/transcribe?format=$format", withContext(Dispatchers.IO) {
+            require(file.length() <= 10 * 1024 * 1024) { "录音太大了，上限 10MB" }
+            file.readBytes()
+        }.toRequestBody("application/octet-stream".toMediaType()))
+            .optString("text").trim()
+
+    suspend fun bytes(dataPath: String): ByteArray = fetch(req(filePath(dataPath)).build(), http) { it.body?.bytes() ?: byteArrayOf() }
+
+    suspend fun download(dataPath: String, dest: File) {
+        val b = bytes(dataPath)
+        withContext(Dispatchers.IO) { dest.parentFile?.mkdirs(); dest.writeBytes(b) }
     }
 
     suspend fun tree(dir: String): List<Entry> {
-        val j = getJson("/api/tree?dir=" + URLEncoder.encode(dir, "UTF-8"))
-        val arr = j.getJSONArray("entries")
+        val arr = getJson("/api/tree?dir=" + enc(dir)).getJSONArray("entries")
         return (0 until arr.length()).map {
             val e = arr.getJSONObject(it)
             Entry(e.getString("name"), e.getBoolean("dir"), e.optLong("size"), e.optLong("mtime"))
         }
     }
 
-    suspend fun readFile(dataPath: String): String = getText(fileUrl(dataPath).removePrefix(Prefs.server))
+    /** Missing directories are just empty. */
+    suspend fun treeOrEmpty(dir: String): List<Entry> = try {
+        tree(dir)
+    } catch (e: ApiError) {
+        if (e.code == 404) emptyList() else throw e
+    }
+
+    suspend fun readFile(dataPath: String): String = getText(filePath(dataPath))
+
+    suspend fun firstChatTime(): Long? = firstChatTime(getJson("/api/state"))
+
+    internal fun firstChatTime(state: JSONObject): Long? =
+        if (state.isNull("firstChat")) null else state.optLong("firstChat").takeIf { it > 0 }
+
+    /**
+     * 账号 = server URL, 密码 = 6-digit pairing code or the raw token. On success the token is saved;
+     * on failure the previous login is left untouched.
+     */
+    suspend fun login(server: String, password: String): JSONObject {
+        val base = server.trim().trimEnd('/')
+        val parsed = base.toHttpUrlOrNull()
+        require(parsed != null && parsed.query == null && parsed.fragment == null && parsed.username.isEmpty() && parsed.password.isEmpty()) { "账号请填写完整的云端地址" }
+        val pw = password.trim()
+        val token = if (pw.matches(Regex("\\d{6}"))) {
+            val body = JSONObject().put("code", pw).toString().toRequestBody("application/json".toMediaType())
+            JSONObject(call(Request.Builder().url("$base/api/pair").post(body).build())).getString("token")
+        } else pw
+        val state = JSONObject(call(Request.Builder().url("$base/api/state").header("Authorization", "Bearer $token").build()))
+        Prefs.server = base
+        Prefs.token = token
+        return state
+    }
 
     data class Entry(val name: String, val dir: Boolean, val size: Long, val mtime: Long)
 
-    class ApiError(val code: Int, body: String) : Exception(if (code == 401) "token 不对" else "HTTP $code $body")
+    class ApiError(val code: Int, body: String) : Exception(
+        runCatching { JSONObject(body).optString("error") }.getOrNull()?.ifBlank { null }
+            ?: when (code) {
+                0 -> "连不上云端，检查网络和地址"
+                401 -> "密码不对"
+                404 -> "找不到"
+                else -> "出错了（HTTP $code）"
+            },
+    )
 }
+
+fun JSONArray?.objects(): List<JSONObject> = if (this == null) emptyList() else (0 until length()).mapNotNull { optJSONObject(it) }
+fun JSONArray?.strings(): List<String> = if (this == null) emptyList() else (0 until length()).map { optString(it) }

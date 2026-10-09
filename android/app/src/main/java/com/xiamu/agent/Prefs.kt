@@ -23,15 +23,18 @@ object Prefs {
         get() = sp.getString("token", "")!!
         set(v) = sp.edit().putString("token", v.trim()).apply()
 
+    /** The capability onboarding is shown once, after the first login. */
     var onboarded: Boolean
         get() = sp.getBoolean("onboarded", false)
         set(v) = sp.edit().putBoolean("onboarded", v).apply()
 
+    var notifyMessages: Boolean
+        get() = sp.getBoolean("notifyMessages", true)
+        set(v) = sp.edit().putBoolean("notifyMessages", v).apply()
+
     val deviceId: String get() = sp.getString("deviceId", "android")!!
 
-    var deviceName: String
-        get() = sp.getString("deviceName", "${Build.MANUFACTURER} ${Build.MODEL}")!!
-        set(v) = sp.edit().putString("deviceName", v.trim()).apply()
+    val deviceName: String get() = sp.getString("deviceName", "${Build.MANUFACTURER} ${Build.MODEL}")!!
 
     fun granted(cap: String): Boolean = sp.getBoolean("cap.$cap", false)
     fun setGranted(cap: String, on: Boolean) = sp.edit().putBoolean("cap.$cap", on).apply()

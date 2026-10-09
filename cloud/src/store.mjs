@@ -22,6 +22,23 @@ export function appendJsonl(file, value) {
   fs.appendFileSync(file, JSON.stringify(value) + "\n");
 }
 
+// ts of the first line; reads only the head of the file.
+export function firstTs(file) {
+  try {
+    const fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(64 * 1024);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    for (const l of buf.subarray(0, n).toString("utf8").split("\n")) {
+      try {
+        const ts = JSON.parse(l).ts;
+        if (ts) return ts;
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
+
 export function tailJsonl(file, n) {
   let text;
   try {
