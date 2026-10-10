@@ -2,5 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:networkSecurityConfig="@xml/local_checks_network">
         <activity android:name=".ConnectorReviewActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".TaskReviewActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

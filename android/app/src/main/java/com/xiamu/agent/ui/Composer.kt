@@ -55,7 +55,6 @@ import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -80,6 +79,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -288,6 +288,8 @@ fun Dock(modifier: Modifier = Modifier) {
             Text(note, fontSize = 12.sp, color = Pal.Danger, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
         }
         if (tab != 4) {
+            BackgroundTasks()
+            ReplyActivity()
             if (Draft.picked.isNotEmpty()) PickedRow()
             InputPill(tabSpecs[tab].hint)
         }
@@ -350,7 +352,6 @@ private fun InputPill(hint: String) {
     val c = ctx()
     var text by Draft.text
     val sending = Draft.sending.value
-    val busy = Chat.busy.value
     var menu by remember { mutableStateOf(false) }
     var cameraPath by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -413,10 +414,10 @@ private fun InputPill(hint: String) {
             HoldToTalk(Modifier.weight(1f).padding(vertical = 5.dp))
         } else {
             BasicTextField(
-                value = text, onValueChange = { text = it }, maxLines = 5, enabled = !sending,
+                value = text, onValueChange = { text = it }, maxLines = 5,
                 textStyle = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, color = Pal.Ink),
                 cursorBrush = SolidColor(Pal.Gold),
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 12.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 12.dp).testTag("composer"),
                 decorationBox = { inner ->
                     Box {
                         if (text.isEmpty()) Text(hint, fontSize = 15.sp, color = Pal.Faint, maxLines = 1)
@@ -430,10 +431,6 @@ private fun InputPill(hint: String) {
             sending -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(Modifier.size(18.dp), color = Pal.Gold, strokeWidth = 2.dp)
             }
-            busy -> Box(
-                Modifier.padding(4.dp).size(36.dp).clip(CircleShape).background(Color(0xFF4A5A6E)).tap { Chat.interrupt() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Rounded.Stop, "停下", tint = Color.White, modifier = Modifier.size(18.dp)) }
             canSend -> Box(
                 Modifier.padding(4.dp).size(36.dp).gold().tap { Draft.send(c) },
                 contentAlignment = Alignment.Center,

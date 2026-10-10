@@ -25,25 +25,17 @@ data class Attachment(val path: String, val name: String, val kind: String, val 
     }
 }
 
-sealed class ChatItem {
-    /** [pending]: sent from here, waiting for the server's echo (which carries voice transcripts). */
-    data class User(val text: String, val attachments: List<Attachment> = emptyList(), val pending: Boolean = false, val ts: Long = 0) : ChatItem()
-    data class Assistant(val text: String, val ts: Long = 0) : ChatItem()
-    data class Card(val title: String, val label: String, val path: String?, val ts: Long = 0) : ChatItem()
-    data class Note(val text: String) : ChatItem()
-}
-
-/** Something running on the server: a scheduled/isolated job or a sub-task of the main thread. */
-data class Running(val id: String, val label: String, val started: Long)
-
 /** The App's live connection to the main thread. All state is Compose-observable. */
 object Chat {
     val items = mutableStateListOf<ChatItem>()
     val streaming = mutableStateOf("")
     val busy = mutableStateOf(false)
+    val reason = mutableStateOf("")
+    val turnClosed = mutableStateOf(true)
     val connected = mutableStateOf(false)
     val toolHint = mutableStateOf("")
     val running = mutableStateListOf<Running>()
+    val tasks = mutableStateListOf<BackgroundTask>()
     val error = mutableStateOf("")
     val jobsError = mutableStateOf("")
     val jobsLoading = mutableStateOf(false)
@@ -53,12 +45,24 @@ object Chat {
 
     private val main = Handler(Looper.getMainLooper())
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val state = Conversation(items)
     private var ws: WebSocket? = null
     private var wanted = false
     private var retry = 0
     private var generation = 0
     private var jobsRevision = 0
     private var historyRevision = 0
+    private var tasksRevision = 0
+
+    private fun publish() {
+        streaming.value = state.streaming
+        busy.value = state.busy
+        reason.value = state.reason
+        toolHint.value = state.toolHint
+        turnClosed.value = state.turnClosed
+        val next = state.background.tasks
+        if (tasks.toList() != next) { tasks.clear(); tasks.addAll(next) }
+    }
 
     fun connect() {
         if (!Prefs.configured) return
@@ -73,6 +77,8 @@ object Chat {
         ws?.close(1000, null)
         ws = null
         connected.value = false
+        state.disconnected()
+        publish()
         running.clear()
         jobsLoading.value = false
         toolHint.value = ""
@@ -95,13 +101,23 @@ object Chat {
             error.value = "还没连上，稍等再发"
             return false
         }
-        items.add(ChatItem.User(text, attachments, pending = true, ts = System.currentTimeMillis()))
+        state.sent(text, attachments, System.currentTimeMillis())
         historyRevision++
         return true
     }
 
     fun interrupt() {
-        ws?.send(JSONObject().put("t", "interrupt").toString())
+        if (ws?.send(JSONObject().put("t", "interrupt").toString()) != true) error.value = "连接断开了，没能停止回复"
+    }
+
+    fun stopTask(id: String) {
+        val previousError = state.background.tasks.firstOrNull { it.id == id }?.error
+        if (!state.background.requestStop(id)) return
+        if (!previousError.isNullOrBlank() && error.value == previousError) error.value = ""
+        if (!connected.value || ws?.send(JSONObject().put("t", "stop_task").put("id", id).toString()) != true) {
+            state.background.stopResult(id, false, "连接断开了，请重新连接后再停止任务")
+        }
+        publish()
     }
 
     private fun ui(block: () -> Unit) {
@@ -109,7 +125,7 @@ object Chat {
     }
 
     private fun parseItem(h: JSONObject): ChatItem? = when (h.optString("role")) {
-        "user" -> ChatItem.User(h.optString("text"), h.optJSONArray("attachments").objects().map(Attachment::from), ts = h.optLong("ts"))
+        "user" -> incomingUser(h.optString("text"), h.optString("source"), h.optJSONArray("attachments").objects().map(Attachment::from), h.optLong("ts"))
         "assistant" -> ChatItem.Assistant(h.optString("text"), h.optLong("ts"))
         "card" -> ChatItem.Card(h.optString("title"), h.optString("label"), h.optJSONArray("outputs").strings().firstOrNull(), h.optLong("ts"))
         else -> null
@@ -117,6 +133,7 @@ object Chat {
 
     /** The server is the source of truth for what's running; called on every (re)connect. */
     fun refreshRunning() {
+        refreshTasks()
         val session = generation
         val revision = jobsRevision
         jobsLoading.value = true
@@ -131,6 +148,23 @@ object Chat {
                 if (session == generation) jobsError.value = it.message ?: "任务加载失败"
             }
             if (session == generation) jobsLoading.value = false
+        }
+    }
+
+    private fun parseTasks(a: JSONArray?) = a.objects().mapNotNull {
+        val id = it.optString("id")
+        if (id.isBlank()) null else BackgroundTask(id, it.optString("description").ifBlank { "后台任务" }, it.optLong("startedAt"))
+    }
+
+    private fun refreshTasks() {
+        val session = generation
+        val revision = tasksRevision
+        io.launch {
+            runCatching { Api.getJson("/api/state") }.onSuccess { j ->
+                if (session != generation || revision != tasksRevision) return@onSuccess
+                state.background.snapshot(parseTasks(j.optJSONArray("tasks")))
+                publish()
+            }
         }
     }
 
@@ -150,41 +184,31 @@ object Chat {
     private fun handle(m: JSONObject) {
         when (m.optString("t")) {
             "hello" -> {
-                items.clear()
-                m.optJSONArray("history").objects().mapNotNullTo(items, ::parseItem)
+                generation++
+                tasksRevision++
+                historyRevision++
+                state.hello(m.optJSONArray("history").objects().mapNotNull(::parseItem), m.optBoolean("busy"), m.optString("reason"), parseTasks(m.optJSONArray("tasks")))
+                connected.value = true
                 historyVersion.intValue++
-                busy.value = m.optBoolean("busy")
-                streaming.value = ""
-                toolHint.value = ""
-                // Sub-tasks can't be queried after a reconnect; drop them rather than show stale ones.
-                running.removeAll { !it.id.startsWith("job:") }
+                running.clear()
                 refreshRunning()
                 refreshHistory()
                 filesVersion.intValue++
             }
             "user" -> {
-                val echo = ChatItem.User(m.optString("text"), m.optJSONArray("attachments").objects().map(Attachment::from), ts = System.currentTimeMillis())
-                val i = items.indexOfLast { it is ChatItem.User && it.pending && it.text == echo.text && it.attachments.map { a -> a.path } == echo.attachments.map { a -> a.path } }
-                if (i >= 0) items[i] = echo else items.add(echo)
+                state.user(m.optString("text"), m.optString("source"), m.optJSONArray("attachments").objects().map(Attachment::from), m.optLong("ts", System.currentTimeMillis()))
                 historyRevision++
             }
-            "status" -> busy.value = m.optBoolean("busy")
-            "delta" -> {
-                streaming.value += m.optString("text")
-                toolHint.value = ""
+            "status" -> {
+                if (state.status(m.optBoolean("busy"), m.opt("reason") as? String)) {
+                    error.value = ""
+                    historyRevision++
+                }
             }
-            "tool" -> {
-                toolHint.value = toolLabel(m.optString("name"), m.optString("hint"))
-                // Text before a tool call is a finished paragraph; keep it visible.
-                if (streaming.value.isNotBlank() && !streaming.value.endsWith("\n\n")) streaming.value += "\n\n"
-            }
+            "delta" -> state.delta(m.optString("text"))
+            "tool" -> state.tool(toolLabel(m.optString("name"), m.optString("hint")))
             "turn_end" -> {
-                val text = m.optString("text")
-                if (text.isNotBlank()) items.add(ChatItem.Assistant(text, System.currentTimeMillis()))
-                if (m.has("error")) items.add(ChatItem.Note("这一轮出错了：${m.optString("error")}"))
-                streaming.value = ""
-                toolHint.value = ""
-                busy.value = false
+                state.endTurn(m.opt("text") as? String, m.opt("error") as? String ?: "", System.currentTimeMillis())
                 historyRevision++
             }
             "memory_updated" -> {
@@ -195,12 +219,22 @@ object Chat {
             }
             "files_changed" -> filesVersion.intValue++
             "task" -> {
-                val id = "task:" + m.optString("id")
-                val started = running.firstOrNull { it.id == id }?.started ?: System.currentTimeMillis()
-                running.removeAll { it.id == id }
-                val status = m.optString("status")
-                val finished = m.optString("phase") in setOf("notification", "done", "completed", "failed", "stopped") || status in setOf("completed", "failed", "stopped")
-                if (!finished) running.add(Running(id, m.optString("description").ifBlank { "子任务" }, started))
+                tasksRevision++
+                val id = m.optString("id")
+                val background = state.background
+                if (m.optString("phase") == "snapshot") background.snapshot(parseTasks(m.optJSONArray("tasks")))
+                else if (m.optBoolean("background")) when (m.optString("phase")) {
+                    "started" -> background.started(BackgroundTask(id, m.optString("description"), m.optLong("startedAt", System.currentTimeMillis())))
+                    "progress" -> background.update(id, m.opt("description") as? String)
+                    "updated" -> m.optJSONObject("patch")?.let { background.update(id, it.opt("description") as? String, it.opt("status") as? String) }
+                    "notification" -> background.notification(id, m.optString("status"))
+                }
+            }
+            "task_stop" -> {
+                val ok = m.optBoolean("ok")
+                val why = if (ok) "" else taskStopError(m.optString("code"), m.optString("error"))
+                state.background.stopResult(m.optString("id"), ok, why)
+                if (!ok) error.value = why
             }
             "job" -> {
                 jobsRevision++
@@ -216,6 +250,7 @@ object Chat {
                 }
             }
         }
+        publish()
     }
 
     private fun toolLabel(name: String, hint: String): String = when {
@@ -233,7 +268,6 @@ object Chat {
     private class Listener : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) = ui {
             if (ws !== webSocket || !wanted) return@ui
-            connected.value = true
             error.value = ""
             retry = 0
         }
@@ -241,6 +275,11 @@ object Chat {
         override fun onMessage(webSocket: WebSocket, text: String) {
             val m = runCatching { JSONObject(text) }.getOrNull() ?: return
             ui { if (ws === webSocket && wanted) handle(m) }
+        }
+
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            webSocket.close(1000, null)
+            dropped(webSocket, null)
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = dropped(webSocket, null)
@@ -252,7 +291,11 @@ object Chat {
             if (ws !== webSocket) return@ui
             ws = null
             connected.value = false
+            generation++
+            state.disconnected()
+            publish()
             running.clear()
+            jobsLoading.value = false
             toolHint.value = ""
             if (why != null) error.value = why
             if (wanted) {

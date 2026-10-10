@@ -36,6 +36,7 @@ import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Pause
@@ -64,6 +65,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -87,7 +89,7 @@ fun ChatScreen(list: LazyListState, bottom: Dp) {
     val items = Chat.items
     val streaming = Chat.streaming.value
     val busy = Chat.busy.value
-    val extra = if (busy || streaming.isNotBlank()) 1 else 0
+    val extra = if ((busy && !Chat.turnClosed.value) || streaming.isNotBlank()) 1 else 0
     var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var highlight by remember { mutableIntStateOf(-1) }
@@ -115,7 +117,7 @@ fun ChatScreen(list: LazyListState, bottom: Dp) {
         ) {
             if (items.isEmpty() && !busy) item { EmptyChat() }
             itemsIndexed(items) { i, it -> ChatRow(it, highlight == i) }
-            if (extra == 1) item { Streaming(streaming, Chat.toolHint.value) }
+            if (extra == 1) item { Streaming(streaming, Chat.toolHint.value, busy && !Chat.turnClosed.value) }
         }
         // Header floats over the list with a fade so messages scroll under it.
         Column(
@@ -248,6 +250,7 @@ private fun SearchBar(query: String, onChange: (String) -> Unit, onClose: () -> 
 private fun itemText(it: ChatItem): String = when (it) {
     is ChatItem.User -> it.text + it.attachments.joinToString(" ") { a -> a.name + " " + (a.transcript ?: "") }
     is ChatItem.Assistant -> it.text
+    is ChatItem.Alarm -> it.text
     is ChatItem.Card -> it.title
     is ChatItem.Note -> ""
 }
@@ -267,7 +270,7 @@ private fun SearchResults(query: String, onPick: (Int) -> Unit) {
             val start = (at - 18).coerceAtLeast(0)
             val snippet = (if (start > 0) "…" else "") + text.substring(start)
             Column(Modifier.fillMaxWidth().tap { onPick(i) }.padding(vertical = 11.dp)) {
-                Text(if (it is ChatItem.User) "我" else "豆豆", fontSize = 11.sp, color = Pal.Faint)
+                Text(when (it) { is ChatItem.User -> "我"; is ChatItem.Alarm -> "定时提醒"; else -> "豆豆" }, fontSize = 11.sp, color = Pal.Faint)
                 Text(
                     buildAnnotatedString {
                         var k = 0
@@ -304,16 +307,23 @@ private fun ChatRow(item: ChatItem, highlight: Boolean) {
             Spacer(Modifier.width(48.dp))
             Column(
                 Modifier.weight(1f, fill = false).clip(RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp))
-                    .background(if (highlight) Color(0x66E2C88E) else Pal.UserBubble)
+                    .background(if (highlight) Color(0x66E2C88E) else if (item.queued) Pal.UserBubble.copy(alpha = 0.1f) else Pal.UserBubble)
+                    .testTag(if (item.queued) "queued-message" else "user-message")
                     .padding(horizontal = 14.dp, vertical = 11.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.End,
             ) {
                 Attachments(item.attachments)
-                if (item.text.isNotBlank()) SelectionContainer { Text(item.text, fontSize = 15.sp, lineHeight = 23.sp, color = Pal.UserText) }
+                if (item.text.isNotBlank()) SelectionContainer { Text(item.text, fontSize = 15.sp, lineHeight = 23.sp, color = if (item.queued) Pal.UserText.copy(alpha = 0.65f) else Pal.UserText) }
+                if (item.queued) Text("排队中", fontSize = 10.sp, color = Pal.Muted.copy(alpha = 0.8f))
             }
         }
         is ChatItem.Assistant -> Bubble(highlight) { SelectionContainer { Markdown(item.text, color = Color(0xFF3A4757)) } }
+        is ChatItem.Alarm -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("schedule-message"),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Alarm, null, tint = Pal.Muted, modifier = Modifier.size(14.dp))
+            Text(item.text, fontSize = 12.sp, color = Pal.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
+        }
         is ChatItem.Card -> {
             val c = ctx()
             val scope = rememberCoroutineScope()
@@ -353,11 +363,11 @@ private fun Bubble(highlight: Boolean = false, content: @Composable () -> Unit) 
 }
 
 @Composable
-private fun Streaming(text: String, hint: String) {
+private fun Streaming(text: String, hint: String, active: Boolean) {
     Bubble {
         Column {
             if (text.isNotBlank()) Markdown(text, color = Color(0xFF3A4757))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = if (text.isNotBlank()) 8.dp else 0.dp)) {
+            if (active) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = if (text.isNotBlank()) 8.dp else 0.dp)) {
                 CircularProgressIndicator(Modifier.size(12.dp), color = Pal.Gold, strokeWidth = 1.5.dp)
                 Text(hint.ifBlank { if (text.isBlank()) "在想" else "还在写" }, fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(start = 8.dp))
             }

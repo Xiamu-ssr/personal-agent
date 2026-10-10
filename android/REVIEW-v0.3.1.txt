@@ -1,0 +1,84 @@
+Personal Agent Android 0.3.1 本地验收
+
+实现方式
+- 输入框不再随主线程 busy 变成停止按钮，忙时照常打字 / 发送；上传期间也允许继续修改文字草稿。
+- 用户气泡区分 pending（等待服务端回显）和 queued（排队），排队使用浅色背景、淡文字及右下角「排队中」。
+- 以服务端回显顺序为准，下一次新 user 回合按 FIFO 解除一个已确认消息的排队状态；重复 status 不重复解除。也覆盖两个设备的消息竞争及相同文字 / 附件的回显。
+- 忙闲仅由 status / hello 决定；turn_end 只提交结果，不强制 idle。新回合重置流式文字、工具提示及当前错误提示。
+- 没有 user 事件的 task_result 回合仍正常接收 delta / turn_end，历史 assistant 和简报 card / job.done 继续显示。
+- 输入框上方按 reason 显示「豆豆正在处理子任务结果…」「豆豆正在安排定时任务…」或「豆豆正在回复…」。独立「停止回复」按钮只发送 interrupt，不弹窗，也不删除后台任务或队列消息。
+- 后台任务单独按 id 维护，与 /api/jobs 的隔离作业分开。hello / state / task.snapshot 替换列表；started 幂等；progress / updated 只更新已知任务；终态 notification / patch 移除对应 id。
+- 空 snapshot 清空任务；完成 id 有有限去重记录，防止乱序 started / progress 复活。历史 card 不用于还原运行任务。
+- 输入框上方的任务条显示「后台还有 N 个任务在跑」，展开后显示描述、已运行时长和每项停止按钮。任务页的进行中也显示这些后台任务及停止入口。
+- 按任务停止发送 {t:"stop_task",id}；按钮禁用并显示「停止中…」。task_stop 成功仅代表控制请求被接受，仍等待 notification 或 snapshot 移除。失败恢复按钮并显示中文原因，支持重试。
+- source:schedule 的历史和实时 user 消息都转换为居中灰字，使用 Material Alarm 图标，从「该出「X」了」提取「X时间到了」；普通用户写 [定时] 不会误判。
+- 断线立即清除 busy、流式文字、工具提示和运行列表。主动关闭握手会触发重连；新 hello 恢复服务端列表和 busy，清除旧停止状态。请求 generation / task revision 防止迟到 HTTP 响应覆盖新连接或复活已结束任务。
+- 版本 0.3.1，versionCode 5。
+
+改动文件（相对 personal-agent/android/）
+- app/build.gradle.kts：版本、JUnit 单元测试依赖、仅 debug 的 MockWebServer。
+- app/src/main/java/com/xiamu/agent/ChatState.kt：独立协议状态、排队合并、任务列表、闹钟判断及中文错误转换。
+- app/src/main/java/com/xiamu/agent/Chat.kt：WS 事件接入、状态发布、state 列表刷新、两类停止、关闭握手及重连保护。
+- app/src/main/java/com/xiamu/agent/ui/Composer.kt：忙时发送与输入框上方状态 / 任务条。
+- app/src/main/java/com/xiamu/agent/ui/ChatScreen.kt：排队气泡、闹钟行及依据 busy 的加载提示。
+- app/src/main/java/com/xiamu/agent/ui/TaskActivity.kt：忙碌行、后台任务展开和停止状态。
+- app/src/main/java/com/xiamu/agent/ui/Tabs.kt：任务页同时展示后台任务，支持按任务停止和错误提示。
+- app/src/test/java/com/xiamu/agent/ChatStateTest.kt：15 项纯 JVM 单元测试。
+- app/src/androidTest/java/com/xiamu/agent/TaskChecks.kt：10 项本地 WS / Compose 集成测试。
+- app/src/debug/AndroidManifest.xml：仅 debug 的任务 fixture Activity。
+- app/src/debug/assets/chat-tasks.json：按协议构造的场景帧。
+- app/src/debug/java/com/xiamu/agent/TaskFixture.kt：纯 loopback WebSocket / HTTP 服务、请求记录、失败 / 延迟 / 重连控制。
+- app/src/debug/java/com/xiamu/agent/TaskReviewActivity.kt：使用相同生产 ChatScreen / Dock 的隔离预览，不启动设备服务。
+- scripts/review_tasks.py：限定 pa35 / emulator-5554、限定任务 fixture 的截图及 UI 操作。
+- verification/tasks-*.png：本轮六张截图。
+- REVIEW-v0.3.1.txt：本报告。
+
+实际验证
+- ./gradlew testDebugUnitTest assembleRelease assembleDebug assembleDebugAndroidTest：BUILD SUCCESSFUL，最终构建 15 秒。
+- JVM：15 tests，0 failure，0 error。覆盖 snapshot / started / notification 合并、终态 patch、停止成功等待结束 / 失败重试、排队 FIFO / 多设备回显 / 重复消息、schedule 判断、无 user 的 task_result、idle 与 result 的两种顺序、新回合清理及 hello / disconnect。
+- 模拟器：pa35 / emulator-5554，10 项任务交互 + 15 项现有连接器 / HTTP 回归，OK (25 tests)，48.082 秒。
+- 最后调整握手响应码和灰字单行排版后，重跑全部 10 项任务交互测试：OK (10 tests)，18.219 秒。
+- WS / Compose 验证忙时打字和发送、真实 send / interrupt / stop_task 帧、按任务停止后计数保持、失败中文提示与恢复、通知和 snapshot 清空、无 user 的结果显示、两种 reason 文案、历史 / 实时闹钟、card / job.done、主动断线重连，以及迟到 state 响应不复活任务。
+- 六张截图均人工检查：输入和导航保持银蓝金风格，排队标记、停止按钮和灰字均可见。
+- Release 签名验证通过；APK Manifest 为 com.xiamu.agent、0.3.1 / 5、minSdk 28、target / compileSdk 35。
+- Release 无 TaskReviewActivity、TaskFixture、fixture JSON 或 MockWebServer 类（核对 Manifest、DEX 及 R8 类映射）。
+- git diff --check -- android 通过。
+- 两份 .checks 测试包已卸载，模拟器已关闭。测试服务仅绑定 127.0.0.1；未登录真实云端、未注册模拟器设备、未向真实云端发消息 / 上传 / 连接应用 / 运行任务。
+
+过程中修复的问题
+- 第一次模拟器测试在 debug fixture 清理时调用服务端 WebSocket.cancel 导致 NPE；改用正常关闭握手，已消除。
+- 第二次测试 24 / 25 通过，主动关闭后的重连超时；发现生产 Listener 缺少 onClosing 回应。补齐握手及断线处理后，完整测试组通过。
+- APK 检查最初用字符串搜索判断 MockWebServer，误命中 OkHttp 的日志标签；改为核对 R8 类定义 / Manifest / fixture assets，无测试服务类进入 Release。
+
+未验证与协议边界
+- 未对真实云端进行发送、停止或定时任务的端到端操作；测试覆盖生产 WS 客户端及 Composable，服务端为本机假服务。
+- 未验证实体手机上的输入法、录音 / 附件操作及系统后台回收，本轮只测 SDK 35 模拟器。
+- 协议没有消息 id 或队列 snapshot。排队标记根据当前连接的提交 / 回显及 reason:user 顺序维护；重连以服务端历史展示，不猜测旧历史消息是否还在队列中。
+- 本轮不增加撤回 / 编辑排队消息，也不持久化运行任务或停止请求。
+
+截图（均为本地 fixture，相对 personal-agent/android/）
+- verification/tasks-queued.png：浅色排队气泡、排队中标签，忙时仍显示发送按钮。
+- verification/tasks-busy-task-result.png：子任务结果忙碌提示，前面没有 user 事件。
+- verification/tasks-busy-schedule.png：定时任务忙碌提示与闹钟灰字。
+- verification/tasks-background-expanded.png：后台任务条展开、描述、时长和逐项停止。
+- verification/tasks-stopping.png：第一项停止中、第二项仍可停止，计数仍为 2。
+- verification/tasks-alarm.png：历史与实时闹钟灰字，以及保留的简报卡片。
+
+签名 Release APK
+- 路径：app/build/outputs/apk/release/app-release.apk
+- 绝对路径：android/app/build/outputs/apk/release/app-release.apk
+- 大小：2,788,762 字节（约 2.66 MiB）
+- SHA-256：a23e49d95e81e2a2b0cc684e3eb25ace9664cad901281793603d6923376d0ef3
+
+复现（仅本地 fixture）
+构建：ANDROID_HOME=/opt/homebrew/share/android-commandlinetools ./gradlew testDebugUnitTest assembleRelease assembleDebug assembleDebugAndroidTest
+安装 debug 和 androidTest APK 后，测试：
+adb -s emulator-5554 shell am instrument -w -e class 'com.xiamu.agent.TaskChecks,com.xiamu.agent.ConnectorApiChecks,com.xiamu.agent.ConnectorChecks' com.xiamu.agent.checks.test/androidx.test.runner.AndroidJUnitRunner
+预览：python3 scripts/review_tasks.py open background
+展开：python3 scripts/review_tasks.py tap '后台还有 2 个任务在跑'
+截图：python3 scripts/review_tasks.py capture background-expanded
+停止：python3 scripts/review_tasks.py tap '停止整理报价简报'
+截图：python3 scripts/review_tasks.py capture stopping
+用完卸载 .checks 和 .checks.test 包并 adb -s emulator-5554 emu kill。
+
+仅改 android/；未改 cloud、mac、spec、.codex-handoff；未 commit / push / 发布 / 部署。

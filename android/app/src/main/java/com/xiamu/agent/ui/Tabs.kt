@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiamu.agent.Api
 import com.xiamu.agent.Chat
+import com.xiamu.agent.Running
 import com.xiamu.agent.objects
 import com.xiamu.agent.strings
 import kotlinx.coroutines.delay
@@ -244,7 +245,7 @@ fun TasksScreen(bottom: Dp) {
         item { SegTabs(listOf("进行中", "已完成", "定时"), seg, Modifier.padding(top = 4.dp, bottom = 12.dp)) { seg = it } }
         when (seg) {
             0 -> item {
-                val running = Chat.running
+                val running = Chat.running.toList() + Chat.tasks.map { Running("task:${it.id}", it.description, it.startedAt) }
                 if (running.isEmpty() && Chat.jobsLoading.value) Loading()
                 else if (running.isEmpty() && Chat.jobsError.value.isNotBlank()) ErrorNote(Chat.jobsError.value)
                 else if (running.isEmpty()) Box(Modifier.fillMaxWidth().card().padding(horizontal = 20.dp)) { EmptyNote("现在没有在跑的任务") }
@@ -252,7 +253,14 @@ fun TasksScreen(bottom: Dp) {
                     running.forEachIndexed { i, r ->
                         if (i > 0) Hairline()
                         ListRow(r.label, "进行中 · 已运行 ${elapsed(r.started, now)}", if (r.id.startsWith("job:")) Icons.Outlined.Schedule else Icons.Outlined.Sync,
-                            Color(0xFF697DA2), trailing = { CircularProgressIndicator(Modifier.size(16.dp), color = Pal.Gold, strokeWidth = 2.dp) })
+                            Color(0xFF697DA2), trailing = {
+                                val task = Chat.tasks.firstOrNull { "task:${it.id}" == r.id }
+                                if (task != null) TaskStopButton(task)
+                                else CircularProgressIndicator(Modifier.size(16.dp), color = Pal.Gold, strokeWidth = 2.dp)
+                            })
+                        Chat.tasks.firstOrNull { "task:${it.id}" == r.id }?.error?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, fontSize = 11.sp, color = Pal.Danger, modifier = Modifier.padding(start = 70.dp, end = 20.dp, bottom = 12.dp))
+                        }
                     }
                 }
             }
