@@ -15,7 +15,8 @@ function queryFixture(calls) {
     const messages = [], waiters = [];
     let closed = false;
     const q = {
-      options, received: [], closed: false,
+      options, received: [], closed: false, flagSettings: [],
+      async applyFlagSettings(settings) { q.flagSettings.push(settings); },
       emit(message) { const waiter = waiters.shift(); waiter ? waiter({ value: message, done: false }) : messages.push(message); },
       close() {
         closed = true; q.closed = true;
@@ -129,4 +130,120 @@ test("a message arriving after the SDK query ended is dispatched to a new query,
   assert.equal(calls.length, 2);
   assert.equal(calls[1].received[0].message.content, "arrived during reconnect delay");
   assert.equal(calls[1].options.resume, "same-fictional-session");
+});
+
+test("main, isolated and subagent env share the model cap and the 95K estimated input trigger", async (t) => {
+  const { calls, harness } = setup(t);
+  await flush(harness);
+  const opts = harness.options({ isolated: true, onWrite: () => {} });
+  for (const o of [calls[0].options, opts]) {
+    assert.equal(o.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, "128000");
+    assert.equal(o.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "128000");
+    assert.equal(o.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, "100");
+    assert.equal(o.env.CLAUDE_CODE_SUBAGENT_MODEL, config.model);
+    assert.deepEqual(o.settings.modelOverrides, { "claude-haiku-5-5": config.model });
+  }
+  for (const server of Object.values(opts.mcpServers)) await server.instance.close();
+  await calls[0].options.hooks.PreCompact[0].hooks[0]();
+  assert.deepEqual(calls[0].flagSettings.at(-1), { effortLevel: "low", maxEffortLevel: "low" });
+  await calls[0].options.hooks.PostCompact[0].hooks[0]();
+  assert.deepEqual(calls[0].flagSettings.at(-1), { effortLevel: config.effort, maxEffortLevel: "max" });
+});
+
+test("stuck resumed conversation resets once, replays only a turn without tools, and keeps queued turns/data/state", async (t) => {
+  const { calls, harness, events } = setup(t);
+  writeJson(config.stateFile, { mainSessionId: "same-fictional-session", unrelated: "keep" });
+  await flush(harness);
+  await harness.send("继续处理 data/todos.md");
+  await harness.send("queued after recovery");
+  calls[0].emit({ type: "assistant", message: { content: [{ type: "text", text: "本轮刚确认：待办还有一个供应商报价要核对。" }] } });
+  calls[0].emit({ type: "assistant", error: "invalid_request", message: { content: [{ type: "text", text: "Prompt is too long · automatic compaction failed: API Error: exceeded the 32000 output token maximum" }] } });
+  calls[0].emit({ type: "result", subtype: "error_during_execution", errors: ["Prompt is too long"] });
+  await flush(harness);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].options.resume, undefined);
+  assert.match(calls[1].received[0].message.content, /会话恢复交接/);
+  assert.match(calls[1].received[0].message.content, /data\/todos.md/);
+  assert.match(calls[1].received[0].message.content, /供应商报价/);
+  assert.equal(readJson(config.stateFile, {}).unrelated, "keep");
+  assert.ok(events.some((e) => e.t === "turn_end" && e.text.includes("记忆不受影响")));
+  assert.equal(JSON.stringify(events).includes("32000"), false);
+  calls[1].emit({ type: "assistant", message: { content: [{ type: "text", text: "recovered reply" }] } });
+  calls[1].emit({ type: "result", subtype: "success" });
+  await flush(harness);
+  assert.equal(readJson(config.stateFile, {}).mainRecovery, undefined);
+  assert.equal(calls[1].received[1].message.content, "queued after recovery");
+});
+
+test("fallback has a bounded retry and does not repeat a turn that already used tools", async (t) => {
+  const { calls, harness } = setup(t);
+  await flush(harness);
+  await harness.send("a large message");
+  for (let i = 0; i < 2; i++) {
+    calls[i].emit({ type: "assistant", error: "invalid_request", message: { content: [{ type: "text", text: "Prompt is too long" }] } });
+    calls[i].emit({ type: "result", subtype: "error_during_execution" });
+    await flush(harness);
+  }
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].received.length, 0, "no third automatic model turn");
+  await harness.send("execute once");
+  calls[2].emit({ type: "assistant", message: { content: [{ type: "tool_use", name: "Write", input: { file_path: "data/todos.md" } }] } });
+  calls[2].emit({ type: "system", subtype: "status", compact_result: "failed", compact_error: "output token maximum", status: null });
+  calls[2].emit({ type: "result", subtype: "error_during_execution" });
+  await flush(harness);
+  assert.equal(calls.length, 4);
+  assert.equal(calls[3].received.length, 0, "side effects are never automatically replayed");
+});
+
+test("ordinary API errors become Chinese without erasing a resumable session", async (t) => {
+  const { calls, harness, events } = setup(t);
+  await flush(harness);
+  await harness.send("hello");
+  calls[0].emit({ type: "assistant", error: "authentication_failed", message: { content: [{ type: "text", text: "API Error: 401 Unauthorized" }] } });
+  calls[0].emit({ type: "result", subtype: "error_during_execution" });
+  await flush(harness);
+  assert.equal(calls.length, 1);
+  assert.equal(readJson(config.stateFile, {}).mainSessionId, "same-fictional-session");
+  assert.match(events.findLast((e) => e.t === "turn_end").text, /授权/);
+  assert.equal(JSON.stringify(events).includes("Unauthorized"), false);
+});
+
+test("manual compaction failure opens a fresh session without replaying /compact", async (t) => {
+  const { calls, harness, events } = setup(t);
+  await flush(harness);
+  assert.equal(harness.compactMain(), true);
+  await flush(harness);
+  assert.match(calls[0].received[0].message.content, /^\/compact .*1500 tokens/);
+  calls[0].emit({ type: "system", subtype: "status", status: "compacting", compact_output_chars: 0 });
+  calls[0].emit({ type: "system", subtype: "status", status: "compacting", compact_output_chars: 12 });
+  calls[0].emit({ type: "system", subtype: "local_command_output", content: "Error during compaction: API Error: exceeded the 32000 output token maximum" });
+  calls[0].emit({ type: "result", subtype: "success" });
+  await flush(harness);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].received.length, 0);
+  assert.equal(calls[1].options.resume, undefined);
+  assert.equal(JSON.stringify(events).includes("API Error"), false);
+  assert.equal(events.filter((e) => e.t === "delta" && e.text.includes("正在整理上下文")).length, 1);
+});
+
+test("a normal answer discussing a past API error does not reset the session", async (t) => {
+  const { calls, harness } = setup(t);
+  await flush(harness);
+  await harness.send("Explain that error.");
+  calls[0].emit({ type: "assistant", message: { model: config.model, content: [{ type: "text", text: "Prompt is too long 是以前的错误，现在可以继续。" }] } });
+  calls[0].emit({ type: "result", subtype: "success" });
+  await flush(harness);
+  assert.equal(calls.length, 1);
+  assert.equal(readJson(config.stateFile, {}).mainSessionId, "same-fictional-session");
+});
+
+test("a process ending during a turn releases busy state and reports a Chinese failure", async (t) => {
+  const { calls, harness, events } = setup(t);
+  await flush(harness);
+  await harness.send("hello");
+  calls[0].close();
+  await flush(harness);
+  assert.equal(harness.busy, false);
+  assert.match(events.findLast((e) => e.t === "turn_end").text, /模型服务/);
+  assert.equal(readJson(config.stateFile, {}).mainSessionId, "same-fictional-session");
 });
