@@ -311,7 +311,7 @@ struct ComposerBar: View {
     let placeholder: String
     @Bindable private var c = Composer.shared
     private var chat: ChatClient { .shared }
-    @FocusState private var focused: Bool
+    @State private var focused = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -363,16 +363,9 @@ struct ComposerBar: View {
     }
 
     private var field: some View {
-        TextField(placeholder, text: $c.text, axis: .vertical)
-            .textFieldStyle(.plain)
-            .font(.system(size: 14))
-            .foregroundStyle(Theme.ink)
-            .lineLimit(1...5)
-            .disabled(c.sending)
-            .focused($focused)
-            .onSubmit { c.send() }
-            .padding(.vertical, 10)
-            .frame(minHeight: 38)
+        GrowingInput(text: $c.text, focused: $focused, placeholder: placeholder, enabled: !c.sending,
+                     onSubmit: { c.send() }, onAttachmentPaste: { c.paste($0) })
+            .frame(maxWidth: .infinity)
     }
 
     private var holdButton: some View {
@@ -406,7 +399,7 @@ struct ComposerBar: View {
             Button { c.send() } label: {
                 ZStack {
                     GoldBase()
-                    if c.sending { ProgressView().controlSize(.small) } else {
+                    if c.sending { ActiveProgress().controlSize(.small) } else {
                         Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.goldText)
                     }
                 }
@@ -470,7 +463,7 @@ struct RecordingPanel: View {
     var body: some View {
         HStack(spacing: 14) {
             if c.transcribing {
-                ProgressView().controlSize(.small)
+                ActiveProgress().controlSize(.small)
                 Text("正在转写…").font(.system(size: 13)).foregroundStyle(Theme.sub)
                 Spacer()
             } else {

@@ -11,6 +11,8 @@ fi
 swiftc -swift-version 5 -D MAC_VERIFY -parse-as-library -sdk "$SDK" "${FIX[@]}" Sources/*.swift tools/verify.swift -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "build/豆豆.app/Contents/Info.plist" -o verification/verify
 if [[ "${1:-}" == "--live" ]]; then
   verification/verify --live "$PWD/verification/screenshots"
+elif [[ "${1:-}" == "--input-review" ]]; then
+  verification/verify --input-review
 elif [[ "${1:-}" == "--memory-review" ]]; then
   verification/verify --memory-review "$PWD/verification/review-1/screenshots"
 else

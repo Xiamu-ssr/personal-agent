@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build 豆豆.app (universal, ad-hoc signed) and a DMG with only the Command Line Tools — no Xcode needed.
-#   VERSION=0.2.0 bash mac/build.sh   ->  mac/build/doudou-0.2.0.dmg
+#   VERSION=0.2.1 bash mac/build.sh   ->  mac/build/doudou-0.2.1.dmg
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION=${VERSION:-0.2.0}
+VERSION=${VERSION:-0.2.1}
 BUILD=${BUILD:-1}
 OUT=build
 APP="$OUT/豆豆.app"

@@ -5,6 +5,7 @@ struct MainView: View {
     private var session: Session { .shared }
     private var nav: Nav { .shared }
     @State private var dropping = false
+    @State private var windowActivity = WindowActivity()
 
     var body: some View {
         ZStack {
@@ -44,6 +45,8 @@ struct MainView: View {
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 920, minHeight: 640)
         .preferredColorScheme(.light)
+        .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
+        .environment(\.interactiveWindow, windowActivity.active)
         .onAppear { AppDelegate.openMain = { openWindow(id: "main") } }
         .animation(.easeOut(duration: 0.2), value: nav.toast)
     }

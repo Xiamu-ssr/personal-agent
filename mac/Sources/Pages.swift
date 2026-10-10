@@ -120,7 +120,7 @@ struct WebRoute: View {
 
     var body: some View {
         SubPage(title: title, scrolls: false) {
-            if loading { ProgressView().controlSize(.small) }
+            if loading { ActiveProgress().controlSize(.small) }
             Button {
                 Task { @MainActor in
                     do { try await Api.openExternally(path.hasSuffix(".html") ? path : path + "/index.html") } catch { Nav.shared.show("打不开：\(error.localizedDescription)") }
@@ -382,6 +382,7 @@ func cronText(_ cron: String) -> String {
 }
 
 struct TasksPage: View {
+    @Environment(\.interactiveWindow) private var active
     @Environment(\.scenePhase) private var scenePhase
     private var chat: ChatClient { .shared }
     @State private var seg = 0
@@ -440,7 +441,7 @@ struct TasksPage: View {
     }
 
     private var runningCard: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { ctx in
+        TimelineView(.animation(minimumInterval: 30, paused: !active)) { ctx in
             Group {
                 if allRunning.isEmpty {
                     Note(text: loaded ? "现在没有在跑的任务" : "加载中…", icon: "checkmark.circle")
@@ -448,7 +449,7 @@ struct TasksPage: View {
                     Rows(items: allRunning) { t in
                         ListRow(icon: t.id.hasPrefix("job:") ? "clock" : "arrow.triangle.branch", tint: Color(hex: 0x3F7F87),
                                 title: t.label, subtitle: "\(t.detail) · 已运行 \(Fmt.duration(ctx.date.timeIntervalSince(t.started)))") {
-                            ProgressView().controlSize(.small)
+                            ActiveProgress().controlSize(.small)
                         }
                     }
                 }

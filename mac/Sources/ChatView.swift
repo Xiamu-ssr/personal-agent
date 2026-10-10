@@ -13,6 +13,8 @@ struct ChatPage: View {
     private var chat: ChatClient { .shared }
     private var device: DeviceClient { .shared }
     private var nav: Nav { .shared }
+    @Environment(\.interactiveWindow) private var active
+    @State private var follower = BottomFollower()
     @State private var searching = false
     @State private var query = ""
     @State private var highlight: UUID? = nil
@@ -133,18 +135,20 @@ struct ChatPage: View {
     private var messages: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    if chat.items.isEmpty && chat.streaming.isEmpty {
-                        Note(text: chat.connected ? "跟豆豆说点什么吧" : statusLine(chat, device), icon: "bubble.left.and.bubble.right")
-                            .padding(.top, 80)
+                VStack(alignment: .leading, spacing: 14) {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        if chat.items.isEmpty && chat.streaming.isEmpty {
+                            Note(text: chat.connected ? "跟豆豆说点什么吧" : statusLine(chat, device), icon: "bubble.left.and.bubble.right")
+                                .padding(.top, 80)
+                        }
+                        ForEach(chat.items) { item in
+                            MessageRow(item: item).equatable()
+                                .id(item.id)
+                                .background(RoundedRectangle(cornerRadius: 18).fill(Color(hex: 0xF3DFB0, alpha: highlight == item.id ? 0.45 : 0)).padding(-6))
+                                .animation(.easeOut(duration: 0.3), value: highlight)
+                        }
                     }
-                    ForEach(chat.items) { item in
-                        MessageRow(item: item)
-                            .id(item.id)
-                            .background(RoundedRectangle(cornerRadius: 18).fill(Color(hex: 0xF3DFB0, alpha: highlight == item.id ? 0.45 : 0)).padding(-6))
-                            .animation(.easeOut(duration: 0.3), value: highlight)
-                    }
-                    if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming) }
+                    if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, messageID: chat.streamID).id("streaming") }
                     if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.toolHint) }
                     Color.clear.frame(height: 1).id("end")
                 }
@@ -154,9 +158,22 @@ struct ChatPage: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollContentBackground(.hidden)
-            .onAppear { proxy.scrollTo("end", anchor: .bottom) }
-            .onChange(of: chat.items.count) { proxy.scrollTo("end", anchor: .bottom) }
-            .onChange(of: chat.streaming) { proxy.scrollTo("end", anchor: .bottom) }
+            .onAppear { follower.request() }
+            .onChange(of: chat.items.count) { if active { follower.request() } }
+            .onChange(of: chat.streaming) { if active { follower.request() } }
+            .onChange(of: active) { _, value in
+                if value { follower.request() } else { follower.cancel() }
+            }
+            .onChange(of: follower.revision) {
+                guard active else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { proxy.scrollTo("end", anchor: .bottom) }
+                #if MAC_PERF
+                PerfProbe.shared.record("scroll_to_bottom")
+                #endif
+            }
+            .onDisappear { follower.cancel() }
             .onChange(of: jump) { _, id in
                 guard let id else { return }
                 withAnimation { proxy.scrollTo(id, anchor: .center) }
@@ -168,15 +185,16 @@ struct ChatPage: View {
 
 /// Background jobs and sub-agent tasks: a thin bar under the header that expands into a list.
 struct LiveStrip: View {
+    @Environment(\.interactiveWindow) private var active
     private var chat: ChatClient { .shared }
     @State private var open = false
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { ctx in
+        TimelineView(.animation(minimumInterval: 30, paused: !active)) { ctx in
             VStack(alignment: .leading, spacing: 8) {
                 Button { withAnimation(.easeOut(duration: 0.2)) { open.toggle() } } label: {
                     HStack(spacing: 8) {
-                        ProgressView().controlSize(.mini)
+                        ActiveProgress().controlSize(.mini)
                         Text(summary(ctx.date)).font(.system(size: 12)).foregroundStyle(Theme.ink.opacity(0.85)).lineLimit(1)
                         Spacer()
                         Image(systemName: open ? "chevron.up" : "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
@@ -213,33 +231,35 @@ struct LiveStrip: View {
 
 struct Thinking: View {
     let hint: String
-    @State private var phase = 0.0
+    @Environment(\.interactiveWindow) private var active
 
     var body: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 4) {
-                ForEach(0..<3) { i in
-                    Circle().fill(Theme.faint).frame(width: 5, height: 5)
-                        .opacity(0.35 + 0.65 * max(0, sin(phase + Double(i) * 0.9)))
+        TimelineView(.animation(minimumInterval: 0.1, paused: !active)) { context in
+            let phase = active ? context.date.timeIntervalSinceReferenceDate * .pi * 2 / 1.2 : 0
+            HStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    ForEach(0..<3) { i in
+                        Circle().fill(Theme.faint).frame(width: 5, height: 5)
+                            .opacity(0.35 + 0.65 * max(0, sin(phase + Double(i) * 0.9)))
+                    }
                 }
+                Text(hint.isEmpty ? "豆豆在想…" : hint).font(.system(size: 12.5)).foregroundStyle(Theme.sub)
             }
-            Text(hint.isEmpty ? "豆豆在想…" : hint).font(.system(size: 12.5)).foregroundStyle(Theme.sub)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .background(Capsule().fill(.white.opacity(0.7)))
         }
-        .padding(.horizontal, 14)
-        .frame(height: 34)
-        .background(Capsule().fill(.white.opacity(0.7)))
-        .onAppear { withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) { phase = .pi * 2 } }
     }
 }
 
-struct MessageRow: View {
+struct MessageRow: View, Equatable {
     let item: ChatItem
     var compact = false
 
     var body: some View {
         switch item.kind {
         case .user: UserBubble(item: item, compact: compact)
-        case .assistant: AssistantBubble(text: item.text, compact: compact)
+        case .assistant: AssistantBubble(text: item.text, compact: compact, messageID: item.id)
         case .note:
             Text(item.text).font(.system(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
         case .card: CardMessage(item: item)
@@ -273,13 +293,14 @@ struct UserBubble: View {
     }
 }
 
-struct AssistantBubble: View {
+struct AssistantBubble: View, Equatable {
     let text: String
     var compact = false
+    var messageID: UUID? = nil
 
     var body: some View {
         HStack {
-            MarkdownView(text: text, size: compact ? 13 : 14)
+            MarkdownView(text: text, size: compact ? 13 : 14, cacheID: messageID)
                 .textSelection(.enabled)
                 .card(radius: compact ? 14 : 20, padding: compact ? 11 : 16)
             Spacer(minLength: compact ? 30 : 80)
@@ -374,7 +395,7 @@ struct RemoteImage: View {
             } else {
                 RoundedRectangle(cornerRadius: 14).fill(Color(hex: 0xE8EDF3))
                     .frame(width: maxSide * 0.7, height: maxSide * 0.5)
-                    .overlay(failed ? AnyView(Image(systemName: "photo").foregroundStyle(Theme.faint)) : AnyView(ProgressView().controlSize(.small)))
+                    .overlay(failed ? AnyView(Image(systemName: "photo").foregroundStyle(Theme.faint)) : AnyView(ActiveProgress().controlSize(.small)))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -393,7 +414,7 @@ struct VoiceNote: View {
     @State private var playing = false
     @State private var progress = 0.0
     @State private var loading = false
-    private let tick = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    @Environment(\.interactiveWindow) private var active
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -401,7 +422,7 @@ struct VoiceNote: View {
                 Button(action: toggle) {
                     ZStack {
                         GoldBase()
-                        if loading { ProgressView().controlSize(.mini) } else {
+                        if loading { ActiveProgress().controlSize(.mini) } else {
                             Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 11)).foregroundStyle(Theme.goldText)
                         }
                     }
@@ -426,12 +447,12 @@ struct VoiceNote: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.userBubble))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.7), lineWidth: 1))
-        .onReceive(tick) { _ in
-            guard let p = player else { return }
-            progress = p.duration > 0 ? p.currentTime / p.duration : 0
-            if playing && !p.isPlaying {
-                playing = false
-                progress = 0
+        .task(id: playing && active) {
+            guard playing && active else { return }
+            while !Task.isCancelled, let p = player {
+                progress = p.duration > 0 ? p.currentTime / p.duration : 0
+                if !p.isPlaying { playing = false; progress = 0; break }
+                do { try await Task.sleep(nanoseconds: 100_000_000) } catch { break }
             }
         }
         .onDisappear { player?.stop() }

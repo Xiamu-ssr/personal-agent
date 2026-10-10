@@ -17,10 +17,54 @@ struct MDItem: Hashable {
     var text: String
 }
 
+private final class MarkdownBlocks: NSObject {
+    let text: String
+    let blocks: [MDBlock]
+    init(text: String, blocks: [MDBlock]) { self.text = text; self.blocks = blocks }
+}
+
+private final class MarkdownInline: NSObject {
+    let value: AttributedString
+    init(_ value: AttributedString) { self.value = value }
+}
+
 enum Markdown {
+    private static let expressions: NSCache<NSString, NSRegularExpression> = {
+        let cache = NSCache<NSString, NSRegularExpression>()
+        cache.countLimit = 16
+        return cache
+    }()
+    private static let blocksCache: NSCache<NSString, MarkdownBlocks> = {
+        let cache = NSCache<NSString, MarkdownBlocks>()
+        cache.countLimit = 512; cache.totalCostLimit = 4 << 20
+        return cache
+    }()
+    private static let inlineCache: NSCache<NSString, MarkdownInline> = {
+        let cache = NSCache<NSString, MarkdownInline>()
+        cache.countLimit = 1024; cache.totalCostLimit = 4 << 20
+        return cache
+    }()
+
+    static func blocks(_ text: String, id: UUID?) -> [MDBlock] {
+        let key = (id.map { "message:" + $0.uuidString } ?? ("text:" + text)) as NSString
+        if let cached = blocksCache.object(forKey: key), cached.text == text { return cached.blocks }
+        let blocks = parse(text)
+        blocksCache.setObject(MarkdownBlocks(text: text, blocks: blocks), forKey: key, cost: text.utf8.count * 4)
+        return blocks
+    }
+
+    static func clearCache() { blocksCache.removeAllObjects(); inlineCache.removeAllObjects() }
+
     private static func match(_ s: String, _ pattern: String) -> [String]? {
-        guard let re = try? NSRegularExpression(pattern: pattern),
-              let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return nil }
+        let key = pattern as NSString
+        let re: NSRegularExpression
+        if let cached = expressions.object(forKey: key) { re = cached }
+        else {
+            guard let compiled = try? NSRegularExpression(pattern: pattern) else { return nil }
+            expressions.setObject(compiled, forKey: key)
+            re = compiled
+        }
+        guard let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return nil }
         return (0..<m.numberOfRanges).map { i in Range(m.range(at: i), in: s).map { String(s[$0]) } ?? "" }
     }
 
@@ -32,6 +76,9 @@ enum Markdown {
     }
 
     static func parse(_ text: String) -> [MDBlock] {
+        #if MAC_PERF
+        PerfProbe.shared.record("markdown_parse")
+        #endif
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
         var blocks: [MDBlock] = []
         var para: [String] = []
@@ -101,11 +148,16 @@ enum Markdown {
 
     /// Inline Markdown (bold, italics, code, links) with a soft background behind code spans.
     static func inline(_ s: String) -> AttributedString {
+        if let cached = inlineCache.object(forKey: s as NSString) { return cached.value }
+        #if MAC_PERF
+        PerfProbe.shared.record("markdown_inline")
+        #endif
         var a = (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
         for run in a.runs where run.inlinePresentationIntent?.contains(.code) == true {
             a[run.range].backgroundColor = Color(hex: 0xE6ECF3)
             a[run.range].foregroundColor = Color(hex: 0x3D5470)
         }
+        inlineCache.setObject(MarkdownInline(a), forKey: s as NSString, cost: s.utf8.count * 4)
         return a
     }
 
@@ -123,12 +175,13 @@ enum Markdown {
 struct MarkdownView: View {
     let text: String
     var size: CGFloat = 14
+    var cacheID: UUID? = nil
     /// When set, trailing "→ path.md" pointers become tags that call this with the path.
     var onPointer: ((String) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: size * 0.6) {
-            ForEach(Array(Markdown.parse(text).enumerated()), id: \.offset) { _, b in block(b) }
+            ForEach(Array(Markdown.blocks(text, id: cacheID).enumerated()), id: \.offset) { _, b in block(b) }
         }
         .foregroundStyle(Theme.ink)
         .tint(Theme.accent)
@@ -142,9 +195,14 @@ struct MarkdownView: View {
                 .font(.system(size: level == 1 ? size + 6 : level == 2 ? size + 3 : size + 1, weight: level <= 2 ? .bold : .semibold))
                 .padding(.top, level <= 2 ? 4 : 2)
         case .paragraph(let s):
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(s.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                    pointerLine(line)
+            if onPointer == nil && s.utf8.count > 1_000 {
+                // TextKit lays out long replies line by line without SwiftUI's large attributed-text drawing path.
+                MarkdownParagraph(text: s, size: size)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(s.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
+                        pointerLine(line)
+                    }
                 }
             }
         case .list(let items):
@@ -217,6 +275,38 @@ struct MarkdownView: View {
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0xF3F6F9, alpha: 0.9)))
     }
+}
+
+/// A selectable native paragraph. Its size query only reads a separate, cached TextKit layout.
+struct MarkdownParagraph: NSViewRepresentable {
+    let text: String
+    let size: CGFloat
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> GrowingInputContainer {
+        let view = GrowingInputContainer(fontSize: size, verticalPadding: 0, maximumLines: nil)
+        view.editor.isEditable = false
+        view.editor.identifier = NSUserInterfaceItemIdentifier("markdown-paragraph")
+        view.editor.isSelectable = true
+        view.editor.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
+        return view
+    }
+
+    func updateNSView(_ view: GrowingInputContainer, context: Context) {
+        guard context.coordinator.text != text else { return }
+        context.coordinator.text = text
+        view.editor.textStorage?.setAttributedString(MemoryPointerText.rendered(text: text, refs: [], size: size))
+        view.textChanged(force: true)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: GrowingInputContainer, context: Context) -> CGSize? {
+        let width = proposal.width ?? max(1, nsView.bounds.width)
+        guard width.isFinite else { return nil }
+        return CGSize(width: width, height: nsView.measuredHeight(width: max(1, width)))
+    }
+
+    final class Coordinator { var text = "" }
 }
 
 /// "生活 · 居住" tag for a memory file pointer.
@@ -297,6 +387,7 @@ struct MemoryPointerText: NSViewRepresentable {
                 if intent?.contains(.emphasized) == true { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
             }
             attributes[.font] = font
+            if intent?.contains(.strikethrough) == true { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             if let link = run.link { attributes[.link] = link }
             result.append(NSAttributedString(string: String(markdown[run.range].characters), attributes: attributes))
         }

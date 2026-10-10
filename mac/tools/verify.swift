@@ -4,6 +4,7 @@ import AVFoundation
 import EventKit
 import SwiftUI
 import WebKit
+import Observation
 
 struct VerificationError: Error, CustomStringConvertible {
     let description: String
@@ -31,6 +32,13 @@ final class FixtureProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+@Observable
+final class InputFixtureModel {
+    var text = ""
+    var focused = false
+    var enabled = true
+}
+
 @main
 struct Verify {
     static func main() {
@@ -38,7 +46,9 @@ struct Verify {
         app.setActivationPolicy(.regular)
         Task { @MainActor in
             do {
-                if CommandLine.arguments.contains("--memory-review") {
+                if CommandLine.arguments.contains("--input-review") {
+                    try await inputFixtures()
+                } else if CommandLine.arguments.contains("--memory-review") {
                     try await memoryFixtures()
                     try await memoryReview()
                 } else {
@@ -56,6 +66,119 @@ struct Verify {
         app.run()
     }
 
+
+    @MainActor
+    static func inputFixtures() async throws {
+        let model = InputFixtureModel()
+        var submitted = 0
+        let pasteboard = NSPasteboard.withUniqueName()
+        let image = NSImage(size: NSSize(width: 40, height: 20))
+        image.lockFocus(); NSColor.blue.setFill(); NSRect(x: 0, y: 0, width: 40, height: 20).fill(); image.unlockFocus()
+        pasteboard.declareTypes([.tiff, .string], owner: nil)
+        pasteboard.setData(image.tiffRepresentation!, forType: .tiff)
+        pasteboard.setString("图片附带文字", forType: .string)
+        struct TestRoot: View {
+            @Bindable var model: InputFixtureModel
+            let submitted: () -> Void
+            var body: some View {
+                let _ = model.text
+                let _ = model.focused
+                VStack {
+                    GrowingInput(text: $model.text, focused: $model.focused,
+                                 placeholder: "测试占位文字", enabled: model.enabled,
+                                 onSubmit: submitted, onAttachmentPaste: { Composer.shared.paste($0) })
+                        .frame(maxWidth: .infinity)
+                    Spacer()
+                }.padding(20)
+            }
+        }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 200),
+                              styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: TestRoot(model: model, submitted: { submitted += 1 }))
+        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        defer { window.close(); pasteboard.clearContents(); Composer.shared.reset() }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        func find(_ view: NSView) -> GrowingInputContainer? {
+            if let input = view as? GrowingInputContainer { return input }
+            for child in view.subviews { if let found = find(child) { return found } }
+            return nil
+        }
+        guard let container = find(window.contentView!) else { throw VerificationError(description: "native input mounted") }
+        let editor = container.editor
+        try check(editor.placeholder == "测试占位文字" && editor.string.isEmpty, "native placeholder")
+        model.text = String(repeating: "中文和abcdefghijklmnopqrstuvwxyz0123456789\n", count: 100)
+        model.focused = true
+        try await Task.sleep(nanoseconds: 100_000_000)
+        window.contentView!.layoutSubtreeIfNeeded()
+        let height = container.measuredHeight(width: 400), measures = container.measurementCount
+        for _ in 0..<100 { try check(container.measuredHeight(width: 400) == height, "repeat measurement must be stable") }
+        try check(container.measurementCount == measures, "unchanged text/width must not remeasure")
+        print("Input diagnostic: chars=\(editor.string.utf16.count), height=\(height), document=\(editor.frame.height), viewport=\(container.contentSize), frame=\(container.frame.size), measures=\(measures)")
+        try check(height < 150 && container.editor.frame.height > container.contentSize.height, "five-line cap with internal scrolling")
+        try check(window.firstResponder === editor, "native input focus")
+        model.text = "测试发送"
+        try await Task.sleep(nanoseconds: 50_000_000)
+        func enter(_ flags: NSEvent.ModifierFlags = []) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                            context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)!
+        }
+        editor.keyDown(with: enter())
+        try check(submitted == 1, "Return submits exactly once")
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.keyDown(with: enter(.option))
+        try check(submitted == 1 && editor.string.hasSuffix("\n"), "Option-Return inserts newline")
+        editor.setMarkedText("中文组字", selectedRange: NSRange(location: 4, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        try check(editor.hasMarkedText(), "marked text fixture")
+        editor.keyDown(with: enter())
+        try check(submitted == 1, "Return while marked must never submit")
+        editor.unmarkText()
+        let before = editor.string
+        try check(editor.pasteAttachment(from: pasteboard) && Composer.shared.drafts.first?.kind == "image" && editor.string == before,
+                  "picture and text clipboard must prefer attachment")
+        model.enabled = false
+        try await Task.sleep(nanoseconds: 50_000_000)
+        editor.keyDown(with: enter())
+        try check(!editor.isEditable && submitted == 1 && !editor.pasteAttachment(from: pasteboard), "sending disables submit and paste")
+        model.enabled = true
+        model.text = "中文"
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let oneLine = container.measuredHeight(width: 400)
+        model.text = "中文\n"
+        try await Task.sleep(nanoseconds: 50_000_000)
+        try check(container.measuredHeight(width: 400) > oneLine, "trailing newline reserves an empty caret line")
+        print("PASS: native input height cache, five lines/scrolling, focus, Return/Option-Return, marked text and image-first paste")
+
+        let chat = ChatClient()
+        for _ in 0..<100 { chat.handle(["t": "delta", "text": "字"]) }
+        try check(chat.streaming.isEmpty, "streaming publication must coalesce")
+        try await Task.sleep(nanoseconds: 320_000_000)
+        try check(chat.streaming == String(repeating: "字", count: 100), "coalescing must preserve every delta")
+        let longDelta = String(repeating: "x", count: 17_000)
+        chat.handle(["t": "delta", "text": longDelta])
+        try await Task.sleep(nanoseconds: 320_000_000)
+        try check(chat.streaming.utf8.count == 300, "long output uses a slower publication cadence")
+        try await Task.sleep(nanoseconds: 900_000_000)
+        try check(chat.streaming.hasSuffix(longDelta), "adaptive coalescing preserves long output")
+        chat.handle(["t": "delta", "text": "尾"])
+        chat.handle(["t": "tool", "name": "bash", "hint": "测试"])
+        try check(chat.streaming.hasSuffix("尾\n\n"), "tool event flushes pending text before paragraph")
+        chat.handle(["t": "delta", "text": "不能复活"])
+        chat.handle(["t": "turn_end", "text": "完整的最终消息"])
+        try await Task.sleep(nanoseconds: 320_000_000)
+        try check(chat.streaming.isEmpty && chat.items.last?.text == "完整的最终消息", "turn end cancels stale publication")
+        chat.handle(["t": "delta", "text": "停止后不能复活"])
+        chat.stop()
+        try await Task.sleep(nanoseconds: 320_000_000)
+        try check(chat.streaming.isEmpty, "stop cancels buffered deltas")
+        let id = UUID()
+        let old = Markdown.blocks("旧内容", id: id)
+        let updated = Markdown.blocks("新内容", id: id)
+        try check(old != updated && Markdown.blocks("新内容", id: id) == updated, "Markdown cache invalidates by id and content")
+        print("PASS: stream coalescing, tool flush, turn/stop cancellation and Markdown cache invalidation")
+    }
 
     /// Focused review checks: metadata only, inline tag line wrapping, and the original pointer callback.
     @MainActor

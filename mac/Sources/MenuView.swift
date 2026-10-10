@@ -4,6 +4,9 @@ import SwiftUI
 struct MenuView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var input = ""
+    @State private var focused = false
+    @State private var windowActivity = WindowActivity()
+    @State private var follower = BottomFollower()
     private var chat: ChatClient { .shared }
     private var device: DeviceClient { .shared }
     private var session: Session { .shared }
@@ -29,6 +32,8 @@ struct MenuView: View {
         .frame(width: 380, height: 540)
         .background(Theme.canvas)
         .preferredColorScheme(.light)
+        .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
+        .environment(\.interactiveWindow, windowActivity.active)
         .onAppear { AppDelegate.openMain = { openWindow(id: "main") } }
     }
 
@@ -61,28 +66,41 @@ struct MenuView: View {
     private var messages: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(chat.items.suffix(60)) { MessageRow(item: $0, compact: true) }
-                    if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, compact: true) }
+                VStack(alignment: .leading, spacing: 10) {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(chat.items.suffix(60)) { MessageRow(item: $0, compact: true).equatable() }
+                    }
+                    if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, compact: true, messageID: chat.streamID).id("streaming") }
                     if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.toolHint) }
                     Color.clear.frame(height: 1).id("end")
                 }
                 .padding(12)
             }
-            .onAppear { proxy.scrollTo("end", anchor: .bottom) }
-            .onChange(of: chat.items.count) { proxy.scrollTo("end", anchor: .bottom) }
-            .onChange(of: chat.streaming) { proxy.scrollTo("end", anchor: .bottom) }
+            .onAppear { follower.request() }
+            .onChange(of: chat.items.count) { if windowActivity.active { follower.request() } }
+            .onChange(of: chat.streaming) { if windowActivity.active { follower.request() } }
+            .onChange(of: windowActivity.active) { _, active in
+                if active { follower.request() } else { follower.cancel() }
+            }
+            .onChange(of: follower.revision) {
+                guard windowActivity.active else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { proxy.scrollTo("end", anchor: .bottom) }
+                #if MAC_PERF
+                PerfProbe.shared.record("scroll_to_bottom")
+                #endif
+            }
+            .onDisappear { follower.cancel() }
         }
     }
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("跟豆豆说…（⌥↩ 换行）", text: $input, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .lineLimit(1...5)
-                .onSubmit(send)
-                .padding(.vertical, 8)
+            GrowingInput(text: $input, focused: $focused, placeholder: "跟豆豆说…（⌥↩ 换行）",
+                         enabled: !Composer.shared.sending, fontSize: 13, verticalPadding: 8,
+                         onSubmit: send, onAttachmentPaste: { pasteAttachment($0) })
+                .frame(maxWidth: .infinity)
             if chat.busy {
                 Button { chat.interrupt() } label: { Image(systemName: "stop.fill").frame(width: 30, height: 30) }
                     .buttonStyle(.plain).help("让豆豆停下")
@@ -102,6 +120,14 @@ struct MenuView: View {
         .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.85)))
         .padding(10)
+    }
+
+    private func pasteAttachment(_ pasteboard: NSPasteboard) -> Bool {
+        guard !Composer.shared.sending, Composer.shared.paste(pasteboard) else { return false }
+        if !input.isEmpty { Composer.shared.text = input; input = "" }
+        Nav.shared.go(.chat)
+        openMain()
+        return true
     }
 
     private func send() {

@@ -28,6 +28,7 @@ final class Session {
         Composer.shared.reset()
         ConnectorStore.shared.reset()
         Api.clearCache()
+        Markdown.clearCache()
         Prefs.signOut()
         Nav.shared.preview = nil
         Nav.shared.tab = .chat

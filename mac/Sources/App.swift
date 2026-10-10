@@ -6,8 +6,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// Set by any SwiftUI view that has `openWindow`, so the Dock icon and notifications can bring the window back.
     static var openMain: (() -> Void)?
 
-    private var pasteMonitor: Any?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
         if Prefs.configured {
@@ -18,13 +16,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             guard Prefs.configured else { return }
             ChatClient.shared.reconnect()
             DeviceClient.shared.reregister()
-        }
-        // ⌘V with a picture or copied files goes into the composer as an attachment.
-        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
-            guard e.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, e.charactersIgnoringModifiers == "v",
-                  !(e.window is NSPanel), Session.shared.configured, Nav.shared.tab.prompt != nil,
-                  Nav.shared.stacks[Nav.shared.tab]?.isEmpty ?? true else { return e }
-            return Composer.shared.paste() ? nil : e
         }
     }
 

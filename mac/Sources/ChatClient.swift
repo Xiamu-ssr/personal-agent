@@ -26,8 +26,8 @@ struct Attachment: Hashable {
     }
 }
 
-struct ChatItem: Identifiable {
-    enum Kind { case user, assistant, card, note }
+struct ChatItem: Identifiable, Equatable {
+    enum Kind: Equatable { case user, assistant, card, note }
     var id = UUID()
     let kind: Kind
     var text: String
@@ -55,6 +55,7 @@ final class ChatClient {
 
     var items: [ChatItem] = []
     var streaming = ""
+    var streamID = UUID()
     var busy = false
     var connected = false
     var toolHint = ""
@@ -69,6 +70,44 @@ final class ChatClient {
     @ObservationIgnored private let socket = Socket(role: "app")
     @ObservationIgnored private var historyTask: Task<Void, Never>?
     private var connectionVersion = 0
+    @ObservationIgnored private var pendingDelta = ""
+    @ObservationIgnored private var streamFlush: Task<Void, Never>?
+    @ObservationIgnored private var streamGeneration = 0
+
+    private func cancelDeltas() {
+        streamFlush?.cancel()
+        streamFlush = nil
+        pendingDelta = ""
+        streamGeneration += 1
+    }
+
+    private func flushDeltas() {
+        streamFlush?.cancel()
+        streamFlush = nil
+        streamGeneration += 1
+        guard !pendingDelta.isEmpty else { return }
+        streaming += pendingDelta
+        pendingDelta = ""
+        #if MAC_PERF
+        PerfProbe.shared.record("stream_flush")
+        #endif
+    }
+
+    private func queueDelta(_ text: String) {
+        guard !text.isEmpty else { return }
+        if streaming.isEmpty && pendingDelta.isEmpty { streamID = UUID() }
+        pendingDelta += text
+        guard streamFlush == nil else { return }
+        let generation = streamGeneration
+        // Keep short replies fluid; long command output needs fewer full text layouts.
+        let bytes = streaming.utf8.count + pendingDelta.utf8.count
+        let delay: UInt64 = bytes > 16_000 ? 1_000_000_000 : bytes > 4_000 ? 500_000_000 : 250_000_000
+        streamFlush = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: delay) } catch { return }
+            guard let self, !Task.isCancelled, generation == self.streamGeneration else { return }
+            self.flushDeltas()
+        }
+    }
 
     init() {
         socket.onOpen = { [weak self] in
@@ -95,6 +134,7 @@ final class ChatClient {
     }
 
     func stop() {
+        cancelDeltas()
         socket.stop()
         historyTask?.cancel()
         connectionVersion += 1
@@ -199,6 +239,7 @@ final class ChatClient {
     func handle(_ m: [String: Any]) {
         switch Self.str(m["t"]) {
         case "hello":
+            cancelDeltas()
             connectionVersion += 1
             jobsVersion += 1
             items = (m["history"] as? [[String: Any]] ?? []).compactMap(Self.item)
@@ -223,13 +264,15 @@ final class ChatClient {
         case "status":
             busy = m["busy"] as? Bool ?? false
         case "delta":
-            streaming += Self.str(m["text"])
+            queueDelta(Self.str(m["text"]))
             toolHint = ""
         case "tool":
+            flushDeltas()
             toolHint = Self.toolLabel(Self.str(m["name"]), Self.str(m["hint"]))
             // Text before a tool call is a finished paragraph; keep it visible.
             if !streaming.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !streaming.hasSuffix("\n\n") { streaming += "\n\n" }
         case "turn_end":
+            cancelDeltas()
             let text = Self.str(m["text"])
             if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { add(ChatItem(kind: .assistant, text: text, ts: Date())) }
             if let err = m["error"] as? String { add(ChatItem(kind: .note, text: "这一轮出错了：\(err)")) }
