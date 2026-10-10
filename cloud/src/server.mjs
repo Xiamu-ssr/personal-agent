@@ -9,6 +9,7 @@ import { readJson, writeJson, tailJsonl, firstTs, dateIn } from "./store.mjs";
 import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
 import { ConnectorManager } from "./connectors.mjs";
+import { runScheduledTask } from "./scheduler.mjs";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8", ".json": "application/json",
@@ -137,6 +138,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     if (p === "/api/state") {
       return json(res, 200, {
         busy: harness.busy, devices: hub.online(), model: config.model,
+        tasks: harness.backgroundTasks?.() || [],
         schedule: readJson(config.scheduleFile, []), firstChat: firstTs(config.chatLog),
       });
     }
@@ -149,6 +151,18 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       if (!text?.trim() && !attachments?.length) return json(res, 400, { error: "empty" });
       await harness.send((text || "").trim(), "http", attachments || []);
       return json(res, 200, { ok: true });
+    }
+    const taskStop = p.match(/^\/api\/tasks\/([^/]+)\/stop$/);
+    if (taskStop && req.method === "POST") {
+      try {
+        const id = decodeURIComponent(taskStop[1]);
+        await harness.stopTask(id);
+        return json(res, 200, { ok: true, id });
+      } catch (e) {
+        if (e instanceof URIError) return json(res, 400, { error: "任务 id 格式不对", code: "invalid_task_id" });
+        if (!e.status) log("task stop failed:", connectors.redact(e.message));
+        return json(res, e.status || 502, { error: e.status ? e.message : "停止任务失败，请稍后再试", code: e.code || "task_stop_failed" });
+      }
     }
     if (p === "/api/connectors") {
       return json(res, 200, {
@@ -231,10 +245,14 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     if (p === "/api/run" && req.method === "POST") {
       const { id } = await readBody(req);
       const job = readJson(config.scheduleFile, []).find((j) => j.id === id);
-      if (!job || job.kind) return json(res, 404, { error: "no such job" });
-      const prompt = job.prompt?.startsWith("[") ? job.prompt : `[定时任务] ${job.name || job.id}\n\n${job.prompt || ""}`;
-      harness.runIsolated(job.name || job.id, prompt);
-      return json(res, 202, { ok: true });
+      if (!job || (job.kind && job.kind !== "brief")) return json(res, 404, { error: "no such job" });
+      try {
+        const mode = await runScheduledTask(harness, job);
+        return json(res, 202, { ok: true, mode });
+      } catch (e) {
+        log("manual run failed:", connectors.redact(e.message));
+        return json(res, 503, { error: "任务暂时无法启动，请稍后再试" });
+      }
     }
     if (p === "/api/tree") {
       const abs = dataPath(url.searchParams.get("dir"));
@@ -288,7 +306,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
   function onApp(ws) {
     apps.add(ws);
     ws.on("close", () => apps.delete(ws));
-    ws.send(JSON.stringify({ t: "hello", busy: harness.busy, devices: hub.online(), history: tailJsonl(config.chatLog, 100) }));
+    ws.send(JSON.stringify({ t: "hello", busy: harness.busy, tasks: harness.backgroundTasks?.() || [], devices: hub.online(), history: tailJsonl(config.chatLog, 100) }));
     ws.on("message", (raw) => {
       let msg;
       try {
@@ -300,6 +318,15 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         harness.send((msg.text || "").trim(), "app", msg.attachments || []).catch((e) => log("send failed:", e.message));
       }
       if (msg.t === "interrupt") harness.interrupt();
+      if (msg.t === "stop_task") {
+        harness.stopTask(msg.id).then(() => {
+          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "task_stop", id: msg.id, ok: true }));
+        }).catch((e) => {
+          if (!e.status) log("task stop failed:", connectors.redact(e.message));
+          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "task_stop", id: msg.id, ok: false,
+            error: e.status ? e.message : "停止任务失败，请稍后再试", code: e.code || "task_stop_failed" }));
+        });
+      }
     });
   }
 

@@ -49,10 +49,21 @@ export function cleanWorkspace(log) {
   log(`workspace cleanup: removed ${removed}`);
 }
 
-export function startScheduler({ harness, log }) {
+// Cron and /api/run share the same routing. Maintenance deliberately has no main-session context.
+export async function runScheduledTask(harness, job) {
+  const label = job.name || job.id;
+  if (/^\[(?:补读|夜间整理)\]/.test(job.prompt || "")) {
+    harness.runIsolated(label, job.prompt).catch((e) => harness.log("scheduled maintenance failed:", harness.connectors.redact(e.message)));
+    return "isolated";
+  }
+  await harness.send(`[定时] 该出「${label}」了\n\n${job.prompt || ""}`, "schedule");
+  return "alarm";
+}
+
+export function startScheduler({ harness, log, clock = () => new Date() }) {
   let lastKey = "";
   const tick = () => {
-    const now = new Date();
+    const now = clock();
     const key = now.toISOString().slice(0, 16);
     if (key === lastKey) return;
     lastKey = key;
@@ -72,12 +83,11 @@ export function startScheduler({ harness, log }) {
       } else if (job.kind === "cleanup") {
         cleanWorkspace(log);
       } else {
-        // Prompts that already carry a session tag (e.g. "[夜间整理]") are sent as-is.
-        const prompt = job.prompt?.startsWith("[") ? job.prompt : `[定时任务] ${job.name || job.id}\n\n${job.prompt || ""}`;
-        harness.runIsolated(job.name || job.id, prompt);
+        runScheduledTask(harness, job).catch((e) => log("cron failed:", harness.connectors.redact(e.message)));
       }
     }
   };
-  setInterval(tick, 15_000);
+  const timer = setInterval(tick, 15_000);
   tick();
+  return { tick, stop: () => clearInterval(timer) };
 }

@@ -1,4 +1,4 @@
-// The Claude Harness: one long-lived main thread + isolated sessions for cron / catch-up.
+// One long-lived main thread: user/schedule turns, native background forks, isolated maintenance.
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -10,6 +10,7 @@ import { ConnectorManager, customPlugins, customConnectorEnv, writePrivateJson }
 import { checkConnectorAccess, CONNECTOR_GUARD_TOOLS } from "./connector-guard.mjs";
 import { COMPACT_INSTRUCTIONS, inputUsage } from "./context-policy.mjs";
 import { contextFailure, humanError, recoveryContext, withRecovery, RECOVERY_NOTICE } from "./conversation-recovery.mjs";
+import { BackgroundTasks, TaskError } from "./background-tasks.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const IMAGE_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
@@ -163,6 +164,7 @@ export class Harness {
       mcpServers: { devices: this.hub.mcpServer(), ...this.connectors.mcpServers() },
       includePartialMessages: !isolated,
       agentProgressSummaries: true,
+      perTaskStopAffordance: !isolated, // The App's per-task stop controls target the open main query.
       spawnClaudeCodeProcess: (o) => {
         // Log only these numeric policy values, never the subprocess's full environment.
         this.log(`[sdk env] max_output=${o.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS} compact_window=${o.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW} compact_pct=${o.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE}`);
@@ -177,6 +179,13 @@ export class Harness {
         ANTHROPIC_DEFAULT_SONNET_MODEL: m,
         ANTHROPIC_DEFAULT_OPUS_MODEL: m,
         CLAUDE_CODE_SUBAGENT_MODEL: m,
+        CLAUDE_CODE_FORK_SUBAGENT: "1",
+        // SDK_READS_SESSION_STATE alone marks frames sdk_host_only; sdk.mjs consumes those internally.
+        // Explicit emission makes the native lifecycle visible to this harness as SDKMessage frames.
+        CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
+        // CLI defaults to treating background agents as session "running" even between main turns.
+        // We expose their separate activity list, so idle must describe the main thread alone.
+        CLAUDE_CODE_BG_TASKS_REPORT_RUNNING: "0",
         // Last in the env overlay: project/custom .env cannot disable the 100K policy.
         ...config.context.env,
       },
@@ -189,7 +198,7 @@ export class Harness {
           { matcher: CONNECTOR_GUARD_TOOLS, hooks: [async (input) => checkConnectorAccess(input)] },
           { matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] },
         ],
-        PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => (onWrite(rel(input.tool_input?.file_path)), {})] }],
+        PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => (onWrite(rel(input.tool_input?.file_path || input.tool_input?.notebook_path), input), {})] }],
       },
       stderr: (d) => {
         const s = String(d).trim();
@@ -226,6 +235,24 @@ export class Harness {
     if (job && r.endsWith(".html") && (r.startsWith("data/briefs/") || r.startsWith("data/sites/"))) job.outputs.add(r);
   }
 
+  backgroundTasks() { return this.main?.tasks.list() || []; }
+
+  noteMainWrite(r, input) {
+    this.noteWrite(r);
+    if (input?.agent_id && r.endsWith(".html") && (r.startsWith("data/briefs/") || r.startsWith("data/sites/"))) {
+      this.main?.tasks.record({ task_id: input.agent_id })?.outputs.add(r);
+    }
+  }
+
+  taskCard(task, notification) {
+    if (!task.outputs.size) return;
+    const entry = { role: "card", label: task.description, title: task.description + (notification.status === "completed" ? "" : "（未完成）"),
+      outputs: [...task.outputs], ok: notification.status === "completed", ts: Date.now(), taskId: task.id };
+    appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - task.startedAt });
+    appendJsonl(config.chatLog, entry);
+    this.bus.emit({ t: "job", phase: "done", ...entry }); // Same card/files protocol as isolated briefs.
+  }
+
   reloadSoon() {
     // SDK setMcpServers() keeps an already-registered same-name SDK instance.
     // Reconstruct the query BEFORE dispatching the next turn instead of replacing it in a running tool call.
@@ -241,17 +268,20 @@ export class Harness {
     const inbox = new Inbox();
     let q;
     const compaction = this.compactionControl(() => q);
-    const opts = this.options({ isolated: false, onWrite: (r) => this.noteWrite(r), compaction });
+    const opts = this.options({ isolated: false, onWrite: (r, input) => this.noteMainWrite(r, input), compaction });
     if (state.mainSessionId) opts.resume = state.mainSessionId;
     q = this.queryFactory({ prompt: inbox, options: opts });
-    const main = { q, inbox, compaction, reply: "", recoveryContext: state.mainRecovery?.context,
+    const tasks = new BackgroundTasks({ bus: this.bus, log: this.log, redact: (s) => this.connectors.redact(s),
+      onComplete: (task, m) => this.taskCard(task, m) });
+    tasks.reset(); // Process-local activity: never restore a stale running list from disk.
+    const main = { q, inbox, compaction, tasks, reply: "", recoveryContext: state.mainRecovery?.context,
       reloadRevision: this.reloadRevision, connectorRevision: this.connectors.revision };
     this.main = main;
     this.busy = false;
     main.finished = (async () => {
       try {
         for await (const m of q) this.onMainMessage(m, main);
-        if (!main.intentionalClose && main.active) {
+        if (!main.intentionalClose && main.turnOpen) {
           if (!main.failure) this.recordFailure(main, "SDK process ended before a result");
           this.finishMainTurn(main, { subtype: "error_during_execution" });
         }
@@ -262,6 +292,7 @@ export class Harness {
           this.finishMainTurn(main, { subtype: "error_during_execution" });
         }
       }
+      main.tasks.reset();
       if (main.intentionalClose || this.main !== main) return;
       main.ended = true;
       main.inbox.close();
@@ -292,15 +323,30 @@ export class Harness {
       this.log("main query rebuilt");
     }
     if (!this.turnQueue.length) return;
-    await this.main.compaction.restore();
+    const main = this.main;
+    await main.compaction.restore();
+    // A native task-result turn can start while the control request above is awaiting acknowledgement.
+    if (this.busy || this.main !== main || main.ended) return;
     const active = this.turnQueue.shift();
-    this.main.active = active;
-    this.main.toolsUsed = false;
-    this.main.failure = null;
-    this.main.reply = "";
+    this.beginMainTurn(main, active, active.source === "schedule" ? "schedule" : "user");
+    main.inbox.push(withRecovery(active.input, main.recoveryContext));
+  }
+
+  beginMainTurn(main, active = null, reason = "task_result") {
+    main.active = active; // Native turns have no user envelope and can never be auto-replayed.
+    main.toolsUsed = false;
+    main.failure = null;
+    main.reply = "";
+    main.compacting = false;
+    main.turnOpen = true;
     this.busy = true;
-    this.bus.emit({ t: "status", busy: true });
-    this.main.inbox.push(withRecovery(active.input, this.main.recoveryContext));
+    this.bus.emit({ t: "status", busy: true, reason });
+  }
+
+  releaseMainTurn() {
+    this.busy = false;
+    this.bus.emit({ t: "status", busy: false });
+    this.scheduleDispatch().catch((e) => this.log("dispatch failed:", this.connectors.redact(e.message)));
   }
 
   scheduleDispatch() {
@@ -310,7 +356,26 @@ export class Harness {
 
   onMainMessage(m, main = this.main) {
     if (this.main !== main || main.intentionalClose) return;
+    if (m.type === "system" && m.subtype === "session_state_changed") {
+      main.hasSessionStateSignal = true;
+      main.sdkState = m.state;
+      if (m.state === "running") {
+        if (!main.turnOpen) this.beginMainTurn(main);
+      } else if (m.state === "requires_action") {
+        // Waiting for an action is busy, but it can belong to a background task between main turns.
+        // Do not invent an open reply/result in that case; a subsequent idle must be able to release it.
+        if (!this.busy) this.bus.emit({ t: "status", busy: true });
+        this.busy = true;
+      } else if (m.state === "idle") {
+        // result can precede native follow-up turns. Only idle certifies the CLI's entire turn is over.
+        // If a model-less command emits idle before result, persist that result before dispatching too.
+        if (!main.turnOpen) this.releaseMainTurn();
+      }
+      return;
+    }
     if (m.type === "system" && m.subtype === "init") {
+      // Init is also native, per-turn metadata. Covers another result inside a still-running bg do-while.
+      if (main.hasSessionStateSignal && main.sdkState !== "idle" && !main.turnOpen) this.beginMainTurn(main);
       const state = readJson(config.stateFile, {});
       if (state.mainSessionId !== m.session_id) writePrivateJson(config.stateFile, { ...state, mainSessionId: m.session_id });
       this.log(`main session ${m.session_id} mode=${m.permissionMode} model=${m.model}`);
@@ -339,16 +404,7 @@ export class Harness {
       this.log("[api retry]", m.error, m.error_status, `attempt=${m.attempt}`);
       return;
     }
-    if (m.type === "system" && m.subtype?.startsWith("task_")) {
-      if (m.ambient) return;
-      const taskError = contextFailure(m.summary || "") || /^(?:API Error|Error during)/i.test(m.summary || "");
-      if (taskError) this.log("[task model error]", this.connectors.redact(m.summary));
-      this.bus.emit({
-        t: "task", phase: m.subtype.slice(5), id: m.task_id,
-        description: m.description, summary: taskError ? humanError(m.summary) : m.summary, status: m.status,
-      });
-      return;
-    }
+    if (m.type === "system" && main.tasks.handle(m)) return;
     if (m.parent_tool_use_id) return; // subagent internals stay out of the chat
     if (m.type === "stream_event") {
       const ev = m.event;
@@ -421,10 +477,11 @@ export class Harness {
     }
     main.reply = "";
     main.active = null;
-    this.busy = false;
+    main.turnOpen = false;
     if (text) appendJsonl(config.chatLog, { role: "assistant", text, ts: Date.now(), ...(error && { error: true }) });
     this.bus.emit({ t: "turn_end", text, error });
-    this.scheduleDispatch().catch((e) => this.log("dispatch failed:", this.connectors.redact(e.message)));
+    // Older/fake queries without state events retain the result fallback; 0.3.295 waits for native idle.
+    if (!main.hasSessionStateSignal || main.sdkState === "idle") this.releaseMainTurn();
   }
 
   // attachments: [{ path: "data/uploads/...", name, kind: "image" | "file" | "voice" }], already uploaded.
@@ -449,7 +506,7 @@ export class Harness {
     if (atts.length) entry.attachments = atts;
     appendJsonl(config.chatLog, entry);
     this.bus.emit({ t: "user", text, source, attachments: atts });
-    this.turnQueue.push({ input: { type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null } });
+    this.turnQueue.push({ source, input: { type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null } });
     await this.scheduleDispatch();
   }
 
@@ -457,7 +514,21 @@ export class Harness {
     try {
       await this.main?.q?.interrupt();
     } catch (e) {
-      this.log("interrupt failed:", e.message);
+      this.log("interrupt failed:", this.connectors.redact(e.message));
+    }
+  }
+
+  async stopTask(id) {
+    const main = this.main;
+    if (!main || main.ended) throw new TaskError("主会话暂时不可用，请稍后再试", 503, "session_unavailable");
+    const task = main.tasks.running(id);
+    task.stopping = true;
+    try { await main.q.stopTask(id); }
+    catch (e) {
+      task.stopping = false;
+      this.log("stop task failed:", this.connectors.redact(e.message));
+      if (task.ended || !main.tasks.live.has(id)) throw new TaskError("任务已经结束", 409, "task_ended");
+      throw new TaskError("停止任务失败，请稍后再试", 502, "task_stop_failed");
     }
   }
 

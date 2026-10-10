@@ -5,7 +5,8 @@ import { Harness } from "../src/agent.mjs";
 import { ConnectorManager } from "../src/connectors.mjs";
 import { DeviceHub } from "../src/devices.mjs";
 import { config } from "../src/config.mjs";
-import { readJson, writeJson } from "../src/store.mjs";
+import { readJson, writeJson, tailJsonl } from "../src/store.mjs";
+import { runScheduledTask } from "../src/scheduler.mjs";
 import email from "../connectors/email/index.mjs";
 import { setImmediate as tick } from "node:timers/promises";
 
@@ -15,7 +16,7 @@ function queryFixture(calls) {
     const messages = [], waiters = [];
     let closed = false;
     const q = {
-      options, received: [], closed: false, flagSettings: [],
+      options, received: [], stopped: [], closed: false, flagSettings: [],
       async applyFlagSettings(settings) { q.flagSettings.push(settings); },
       emit(message) { const waiter = waiters.shift(); waiter ? waiter({ value: message, done: false }) : messages.push(message); },
       close() {
@@ -24,6 +25,7 @@ function queryFixture(calls) {
         for (const server of Object.values(options.mcpServers)) server.instance.close().catch(() => {});
       },
       async interrupt() { q.emit({ type: "result", subtype: "success" }); },
+      async stopTask(id) { q.stopped.push(id); q.emit({ type: "system", subtype: "task_notification", task_id: id, status: "stopped" }); },
       [Symbol.asyncIterator]() { return this; },
       async next() {
         if (messages.length) return { value: messages.shift(), done: false };
@@ -246,4 +248,116 @@ test("a process ending during a turn releases busy state and reports a Chinese f
   assert.equal(harness.busy, false);
   assert.match(events.findLast((e) => e.t === "turn_end").text, /模型服务/);
   assert.equal(readJson(config.stateFile, {}).mainSessionId, "same-fictional-session");
+});
+
+test("native task-result turn resets stale state, stays busy until idle, and queues users in order", async (t) => {
+  const { harness, calls, events } = setup(t), q = calls[0];
+  await flush(harness);
+  q.emit({ type: "system", subtype: "session_state_changed", state: "requires_action" });
+  await flush(harness);
+  assert.equal(harness.busy, true);
+  assert.notEqual(harness.main.turnOpen, true, "waiting alone does not invent a result-bearing main turn");
+  q.emit({ type: "system", subtype: "session_state_changed", state: "idle" });
+  await flush(harness);
+  assert.equal(harness.busy, false);
+  harness.main.failure = { raw: "previous failure" };
+  harness.main.active = { input: { message: { content: "old user" } } };
+  harness.main.reply = "old reply"; harness.main.toolsUsed = true;
+  q.emit({ type: "system", subtype: "task_notification", task_id: "native-fork", status: "completed", summary: "done" });
+  q.emit({ type: "system", subtype: "session_state_changed", state: "running" });
+  await flush(harness);
+  assert.equal(harness.busy, true);
+  assert.equal(harness.main.active, null);
+  assert.equal(harness.main.failure, null);
+  assert.equal(harness.main.reply, "");
+  assert.equal(harness.main.toolsUsed, false);
+  assert.deepEqual(events.findLast((e) => e.t === "status"), { t: "status", busy: true, reason: "task_result" });
+  await harness.send("queued first"); await harness.send("queued second");
+  assert.equal(q.received.length, 0);
+  q.emit({ type: "assistant", message: { content: [{ type: "text", text: "background result" }] } });
+  q.emit({ type: "result", subtype: "success" });
+  await flush(harness);
+  assert.equal(harness.busy, true, "result is not authoritative idle");
+  assert.equal(q.received.length, 0);
+  q.emit({ type: "system", subtype: "session_state_changed", state: "idle" });
+  await flush(harness);
+  assert.equal(q.received[0].message.content, "queued first");
+  q.emit({ type: "system", subtype: "session_state_changed", state: "running" });
+  q.emit({ type: "system", subtype: "session_state_changed", state: "idle" });
+  await flush(harness);
+  assert.equal(q.received.length, 1, "idle before result must also wait for the reply to be saved");
+  q.emit({ type: "result", subtype: "success" });
+  await flush(harness);
+  assert.equal(q.received[1].message.content, "queued second");
+  assert.ok(tailJsonl(config.chatLog, 100).some((e) => e.role === "assistant" && e.text === "background result"));
+});
+
+test("a spontaneous context failure uses recovery without replaying a notification or an old user", async (t) => {
+  const { harness, calls, events } = setup(t);
+  await flush(harness);
+  calls[0].emit({ type: "system", subtype: "session_state_changed", state: "running" });
+  await flush(harness);
+  calls[0].emit({ type: "system", subtype: "status", status: null, compact_result: "failed", compact_error: "Prompt is too long" });
+  calls[0].emit({ type: "result", subtype: "error_during_execution" });
+  calls[0].emit({ type: "system", subtype: "session_state_changed", state: "idle" });
+  await flush(harness);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].options.resume, undefined);
+  assert.equal(calls[1].received.length, 0);
+  assert.ok(events.some((e) => e.t === "turn_end" && e.text.includes("记忆不受影响")));
+  await harness.send("continue after native failure");
+  await flush(harness);
+  assert.equal(calls[1].received.length, 1);
+  assert.match(calls[1].received[0].message.content, /会话恢复交接/);
+});
+
+test("background level replaces activity, stop targets one task, and process end clears activity", async (t) => {
+  const { harness, calls, events } = setup(t), q = calls[0];
+  const a = { task_id: "task-a", description: "A", task_type: "local_agent", run_id: "001" };
+  const b = { task_id: "task-b", description: "B", task_type: "local_agent" };
+  q.emit({ type: "system", subtype: "background_tasks_changed", tasks: [a, b, { task_id: "ambient", ambient: true }] });
+  q.emit({ type: "system", subtype: "task_started", ...a, is_backgrounded: true });
+  await flush(harness);
+  assert.deepEqual(harness.backgroundTasks().map((x) => x.id), ["task-a", "task-b"]);
+  const startedAt = harness.backgroundTasks()[0].startedAt;
+  await harness.stopTask("task-a");
+  await flush(harness);
+  assert.deepEqual(q.stopped, ["task-a"]);
+  await assert.rejects(harness.stopTask("task-a"), (e) => e.status === 409);
+  await assert.rejects(harness.stopTask("unknown"), (e) => e.status === 404);
+  await assert.rejects(harness.stopTask(undefined), (e) => e.status === 400);
+  q.emit({ type: "system", subtype: "background_tasks_changed", tasks: [b] });
+  q.emit({ type: "system", subtype: "task_started", ...a, is_backgrounded: true }); // late edge cannot resurrect A
+  await flush(harness);
+  assert.deepEqual(harness.backgroundTasks().map((x) => x.id), ["task-b"]);
+  assert.ok(startedAt > 0);
+  assert.ok(events.some((e) => e.t === "task" && e.phase === "notification" && e.id === "task-a" && e.status === "stopped"));
+  const stop = q.stopTask;
+  q.stopTask = async () => { throw new Error("fictional SDK control failure"); };
+  await assert.rejects(harness.stopTask("task-b"), (e) => e.status === 502 && /停止任务失败/.test(e.message));
+  assert.equal(harness.main.tasks.records.get("task-b").stopping, false, "failed control permits retry");
+  q.stopTask = stop;
+  q.close(); await flush(harness);
+  assert.deepEqual(harness.backgroundTasks(), []);
+  assert.deepEqual(events.findLast((e) => e.t === "task").tasks, []);
+});
+
+test("an alarm joins the same queue, retains its source, and native turn during restore cannot interleave it", async (t) => {
+  const { harness, calls } = setup(t), q = calls[0];
+  await flush(harness);
+  let raced = false;
+  harness.main.compaction.restore = async () => {
+    if (raced) return;
+    raced = true; q.emit({ type: "system", subtype: "session_state_changed", state: "running" });
+    await tick();
+  };
+  assert.equal(await runScheduledTask(harness, { id: "brief", name: "报价简报", prompt: "按最近的报价做简报" }), "alarm");
+  await flush(harness);
+  assert.equal(q.received.length, 0);
+  assert.equal(harness.turnQueue.length, 1);
+  q.emit({ type: "result", subtype: "success" });
+  q.emit({ type: "system", subtype: "session_state_changed", state: "idle" });
+  await flush(harness);
+  assert.match(q.received[0].message.content, /^\[定时\] 该出「报价简报」了/);
+  assert.ok(tailJsonl(config.chatLog, 100).some((e) => e.role === "user" && e.source === "schedule" && e.text.includes("报价简报")));
 });
