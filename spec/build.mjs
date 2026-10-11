@@ -1,5 +1,5 @@
 // Run from any directory: node personal-agent/spec/build.mjs
-// Only the marked generated region in index.html is replaced. No network or cloud imports.
+// Compile the product spec and current prompt text into a single offline page.
 import fs from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
@@ -8,10 +8,11 @@ import { fileURLToPath } from "node:url";
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const pageFile = path.join(dir, "index.html");
 const START = "<!-- spec-build:start -->", END = "<!-- spec-build:end -->";
-const [page, yamlText, parser, license] = await Promise.all([
-  fs.readFile(pageFile, "utf8"), fs.readFile(path.join(dir, "spec.yaml"), "utf8"),
+const [page, yamlText, parser, markdown] = await Promise.all([
+  fs.readFile(pageFile, "utf8"),
+  fs.readFile(path.join(dir, "spec.yaml"), "utf8"),
   fs.readFile(path.join(dir, "vendor/js-yaml.min.js"), "utf8"),
-  fs.readFile(path.join(dir, "vendor/js-yaml.LICENSE"), "utf8"),
+  fs.readFile(path.join(dir, "vendor/markdown.js"), "utf8"),
 ]);
 const context = vm.createContext({});
 vm.runInContext(parser, context, { timeout: 1000 });
@@ -22,60 +23,53 @@ vm.runInContext(validation[1], context, { timeout: 1000 });
 const errors = context.validateSpec(spec);
 if (errors.length) throw new Error("spec.yaml 校验失败：\n" + errors.join("\n"));
 
-// References are source excerpts, never evaluated as cloud code. Restrict reads to public sources.
+// Only these three prompt sources are read. Cloud modules are never imported or evaluated.
+const files = ["prompts/system-prompt.md", "../cloud/seed/system/schedule.json", "prompts/brief-guide.md"];
 async function readSource(file) {
-  if (!/^(?:prompts\/|\.\.\/cloud\/(?:src|seed|scripts)\/)/.test(file)) throw new Error(`不支持的提示词来源：${file}`);
-  const full = await fs.realpath(path.resolve(dir, file));
-  const allowed = ["prompts", "../cloud/src", "../cloud/seed", "../cloud/scripts"].map(p => path.resolve(dir, p) + path.sep);
-  if (!allowed.some(prefix => full.startsWith(prefix))) throw new Error(`提示词来源越过目录边界：${file}`);
-  return (await fs.readFile(full, "utf8")).replace(/\r\n/g, "\n");
+  const resolved = path.resolve(dir, file);
+  const full = await fs.realpath(resolved);
+  if (full !== resolved) throw new Error(`提示词来源不能是符号链接：${file}`);
+  return (await fs.readFile(full, "utf8")).replace(/\r\n/g, "\n").trimEnd();
 }
-const lineAt = (raw, offset) => raw.slice(0, offset).split("\n").length;
-const escapeRegex = text => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-async function resolveSource(source) {
-  const raw = await readSource(source.file), lines = raw.split("\n");
-  if (lines.at(-1) === "") lines.pop();
-  let text, startLine, endLine;
-  if (source.kind === "file") {
-    text = raw.trimEnd(); startLine = 1; endLine = lines.length;
-  } else if (source.kind === "json") {
-    const rows = JSON.parse(raw), matches = rows.filter(row => row.id === source.item);
-    if (matches.length !== 1 || typeof matches[0][source.field] !== "string") throw new Error(`JSON 提示词缺失或重复：${source.file} / ${source.item}`);
-    text = matches[0][source.field];
-    const id = new RegExp('"id"\\s*:\\s*' + escapeRegex(JSON.stringify(source.item))).exec(raw);
-    const remainder = raw.slice(id.index + id[0].length);
-    const value = new RegExp('"' + escapeRegex(source.field) + '"\\s*:\\s*("(?:[^"\\\\]|\\\\.)*")').exec(remainder);
-    if (!value || JSON.parse(value[1]) !== text) throw new Error(`无法定位 JSON 提示词行号：${source.item}`);
-    const offset = id.index + id[0].length + value.index;
-    startLine = lineAt(raw, offset); endLine = lineAt(raw, offset + value[0].length);
-  } else {
-    const starts = lines.flatMap((line, i) => line.includes(source.start) ? [i] : []);
-    if (starts.length !== 1) throw new Error(`代码 start 锚点应唯一：${source.file} / ${source.start}（${starts.length} 处）`);
-    const start = starts[0], end = source.end ? lines.findIndex((line, i) => i > start && line.includes(source.end)) : start + 1;
-    if (end < 0) throw new Error(`代码 end 锚点不存在：${source.file} / ${source.end}`);
-    const selected = lines.slice(start, end);
-    while (selected.at(-1)?.trim() === "") selected.pop();
-    text = selected.join("\n"); startLine = start + 1; endLine = start + selected.length;
-  }
-  return { file: source.file, kind: source.kind, startLine, endLine, text };
-}
-const sources = {};
-for (const prompt of spec.prompts) for (const source of prompt.sources) {
-  const key = context.sourceKey(source);
-  if (!sources[key]) sources[key] = await resolveSource(source);
+const sources = Object.fromEntries(await Promise.all(files.map(async file => [file, await readSource(file)])));
+const schedule = JSON.parse(sources["../cloud/seed/system/schedule.json"]);
+if (!Array.isArray(schedule)) throw new Error("定时配置必须是数组");
+
+function trigger(cron) {
+  const match = /^(\d{1,2}) (\d{1,2}) \* \* (\*|[0-7])$/.exec(cron || "");
+  if (!match || +match[1] > 59 || +match[2] > 23) throw new Error("定时提示词需要每天或每周的固定触发时间");
+  const time = `${+match[2]}:${match[1].padStart(2, "0")}`;
+  return match[3] === "*" ? `每天 ${time}` : `每周${"日一二三四五六"[+match[3] % 7]} ${time}`;
 }
 
-// A new released connector must be documented in YAML before generating the page.
-const registry = await fs.readFile(path.resolve(dir, spec.connectors.source), "utf8");
+spec.prompts = spec.prompts.map(prompt => {
+  const { source, ...product } = prompt;
+  if (!source || !files.includes(source.file)) throw new Error(`提示词 ${prompt.id} 的来源无效`);
+  const raw = sources[source.file];
+  if (source.file === "../cloud/seed/system/schedule.json") {
+    const rows = schedule.filter(item => item.id === source.item);
+    if (rows.length !== 1 || typeof rows[0].prompt !== "string" || !rows[0].prompt.trim()) throw new Error(`定时提示词缺失或重复：${source.item}`);
+    return { ...product, when: trigger(rows[0].cron), text: rows[0].prompt };
+  }
+  if (!product.when) throw new Error(`提示词 ${prompt.id} 缺少触发条件`);
+  // The system prompt's author notes above its separator are not part of the prompt.
+  const separator = source.file === "prompts/system-prompt.md" ? raw.indexOf("\n---\n") : -1;
+  const text = (separator < 0 ? raw : raw.slice(separator + 5)).trim();
+  if (!text) throw new Error(`提示词 ${prompt.id} 为空`);
+  return { ...product, text };
+});
+
+// Keep the product service list in step with the released connector registry.
+const registry = await fs.readFile(path.resolve(dir, "../cloud/connectors/index.mjs"), "utf8");
 const released = [...registry.matchAll(/import\s+\w+\s+from\s+["']\.\/([^/]+)\/index\.mjs["']/g)].map(match => match[1]).sort();
 const listed = spec.connectors.items.map(item => item.id).sort();
-if (JSON.stringify(released) !== JSON.stringify(listed)) throw new Error("YAML 连接器目录与 cloud/connectors/index.mjs 不一致，请先更新 connectors.items");
+if (JSON.stringify(released) !== JSON.stringify(listed)) throw new Error("连接应用的产品目录与已发布服务不一致");
 
-// JSON in inert script tags is escaped so prompt/YAML text cannot close a tag or execute HTML.
+// Inert JSON and escaped Markdown keep prompt text from creating scripts or requests.
 const json = value => JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-const generated = `${START}\n<!-- Generated by build.mjs. Edit spec.yaml and source prompts, then rebuild. -->\n<script id="yaml-parser">\n/* js-yaml 4.1.1; MIT\n${license.trim()}\n*/\n${parser.trim().replace(/<\/script/gi, "<\\/script")}\n</script>\n<script type="application/json" id="spec-yaml">${json(yamlText)}</script>\n<script type="application/json" id="prompt-sources">${json(sources)}</script>\n${END}`;
+const generated = `${START}\n<!-- Generated locally by build.mjs. -->\n<script type="application/json" id="spec-data">${json(spec)}</script>\n<script id="markdown-renderer">\n${markdown.trim().replace(/<\/script/gi, "<\\/script")}\n</script>\n${END}`;
 const start = page.indexOf(START), end = page.indexOf(END);
 if (start < 0 || end < start || page.indexOf(START, start + START.length) >= 0 || page.indexOf(END, end + END.length) >= 0) throw new Error("index.html 的生成区标记缺失或重复");
 const output = page.slice(0, start) + generated + page.slice(end + END.length);
 if (output !== page) await fs.writeFile(pageFile, output);
-console.log(`已构建 spec/index.html：${spec.domains.length} 个域、${spec.flows.length} 个场景、${spec.connectors.items.length} 个连接器、${spec.prompts.length} 项提示词（${Object.keys(sources).length} 个来源）`);
+console.log(`已构建 spec/index.html：${spec.domains.length} 个域、${spec.flows.length} 个场景、${spec.connectors.items.length} 个连接器、${spec.prompts.length} 条提示词`);
