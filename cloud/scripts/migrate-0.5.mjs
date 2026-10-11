@@ -17,20 +17,24 @@ function blockHtml(block) {
 export function convertBrief(value) {
   if (value?.v!==1 || !Array.isArray(value.cards) || !value.name || !value.time) throw new Error("JSON 简报缺少 v、name、time 或 cards");
   const section=(s)=>`<section class="card">${s}</section>`;
-  const cards=value.cards.flatMap((c)=>{
+  const build=(split)=>value.cards.flatMap((c)=>{
     const header=`<span class="chip">${e(c.chip)}</span><h1 class="title">${e(c.title)}</h1>`;
     let current=header+(c.summary?`<p class="summary">${e(c.summary)}</p>`:""), out=[];
     const parts=(c.blocks||[]).map(blockHtml);
     if (c.action) parts.push(`<button class="button" data-prompt="${e(c.action.prompt)}">${e(c.action.label)}</button>`);
     for (const part of parts) {
-      if (/内容过高/.test(validateBrief(section(current+part)).error||"")) {out.push(section(current));current=header;}
+      if (split && /内容过高/.test(validateBrief(section(current+part)).error||"")) {out.push(section(current));current=header;}
       current+=part;
     }
     out.push(section(current));return out;
-  }).join("\n");
+  });
+  // Splitting tall cards can push a brief past six cards; then keep the original cards and let the App scroll inside them.
+  let parts=build(true), tall=false;
+  if (parts.length>6) {parts=build(false);tall=true;}
+  const cards=parts.join("\n");
   const html=`<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><meta name="brief-name" content="${e(value.name)}"><meta name="brief-time" content="${e(value.time)}"></head><body>\n${cards}\n</body></html>\n`;
   const result=validateBrief(html);
-  if (result.error) throw new Error(result.error);
+  if (result.error && !(tall && /内容过高/.test(result.error))) throw new Error(result.error);
   return html;
 }
 
