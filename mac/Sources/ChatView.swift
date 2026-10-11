@@ -326,11 +326,10 @@ struct AssistantBubble: View, Equatable {
     }
 }
 
-/// JSON brief preview; clicking navigates to its native cards on 今日.
+/// Completion cards show the brief name and time, and focus its HTML cards on 今日.
 struct CardMessage: View {
     let item: ChatItem
     @State private var hover = false
-    @State private var brief: BriefCard?
 
     var body: some View {
         HStack {
@@ -340,15 +339,10 @@ struct CardMessage: View {
                 HStack(spacing: 12) {
                     IconTile(icon: "doc.richtext", tint: Color(hex: 0x527AAA), size: 40)
                     VStack(alignment: .leading, spacing: 3) {
-                        if let brief, !brief.chip.isEmpty { Text(brief.chip).font(.system(size: 11)).foregroundStyle(Theme.goldText) }
-                        Text(brief?.title ?? (item.text.isEmpty ? (item.label.isEmpty ? "简报" : item.label) : item.text))
+                        Text(item.label.isEmpty ? (item.text.isEmpty ? "简报" : item.text) : item.label)
                             .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(2).multilineTextAlignment(.leading)
-                        if let brief, !brief.summary.isEmpty {
-                            Text(brief.summary).font(.system(size: 12)).foregroundStyle(Theme.sub).lineLimit(2).multilineTextAlignment(.leading)
-                        } else {
-                            Text([item.label, item.ts.map(Fmt.when) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                            Text(item.ts.map(Fmt.when) ?? "")
                                 .font(.system(size: 11.5)).foregroundStyle(Theme.faint)
-                        }
                     }
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
@@ -362,13 +356,6 @@ struct CardMessage: View {
             .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hover = h } }
             .disabled(item.outputs.isEmpty)
             Spacer()
-        }
-        .task(id: "\(item.outputs.first ?? "")#\(ChatClient.shared.filesVersion)") {
-            brief = nil
-            if let path = item.outputs.first, path.hasPrefix("data/briefs/"), path.hasSuffix(".json"),
-               let data = try? await Api.data(Api.filePath(path)), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                brief = BriefItem.parse(["path": path, "brief": json])?.cards.first
-            }
         }
     }
 }

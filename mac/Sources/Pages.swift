@@ -110,6 +110,8 @@ struct RouteView: View {
         case .connectorForm(let name, let accountID): ConnectorFormPage(name: name, accountID: accountID)
         case .devices: DevicesPage()
         case .skills: SkillsPage()
+        case .agentSetting(let setting): AgentSettingPage(setting: setting)
+        case .taskDetail(let id, let title, let briefPath): TaskDetailPage(id: id, title: title, briefPath: briefPath)
         }
     }
 }
@@ -218,8 +220,7 @@ struct TasksPage: View {
     @Environment(\.interactiveWindow) private var active
     @Environment(\.scenePhase) private var scenePhase
     private var chat: ChatClient { .shared }
-    @State private var recent: [ChatItem] = []
-    @State private var okFlags: [UUID: Bool] = [:]
+    @State private var recent: [TaskSummary] = []
     @State private var schedule: [ScheduleJob]? = nil
     @State private var loaded = false
     @State private var err = ""
@@ -248,13 +249,7 @@ struct TasksPage: View {
             let (r, st) = try await (jobsResponse, stateResponse)
             guard version == chat.jobsVersion, !Task.isCancelled else { return }
             chat.applyJobs(r["running"] as? [[String: Any]] ?? [], version: version)
-            var flags: [UUID: Bool] = [:]
-            recent = (r["recent"] as? [[String: Any]] ?? []).compactMap { j in
-                guard let item = ChatClient.item(j) else { return nil }
-                flags[item.id] = j["ok"] as? Bool ?? true
-                return item
-            }
-            okFlags = flags
+            recent = (r["recent"] as? [[String: Any]] ?? []).compactMap(TaskSummary.parse)
             schedule = (st["schedule"] as? [[String: Any]] ?? []).map {
                 ScheduleJob(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? ($0["id"] as? String ?? ""),
                             cron: $0["cron"] as? String ?? "", kind: $0["kind"] as? String ?? "")
@@ -270,7 +265,9 @@ struct TasksPage: View {
 
     /// Server list plus live sub-agent tasks from the socket (which the server's job list doesn't track).
     private var allRunning: [LiveTask] {
-        chat.live + chat.backgroundTasks.map { LiveTask(id: "task:" + $0.id, label: $0.description, started: $0.startedAt, detail: $0.summary.isEmpty ? "后台任务" : $0.summary) }
+        let background = chat.backgroundTasks.map { LiveTask(id: $0.id, label: $0.title, started: $0.startedAt, detail: $0.summary.isEmpty ? "后台任务" : $0.summary) }
+        let ids = Set(background.map(\.id))
+        return background + chat.live.filter { !ids.contains($0.id) }
     }
 
     private var runningCard: some View {
@@ -280,14 +277,19 @@ struct TasksPage: View {
                     Note(text: loaded ? "现在没有在跑的任务" : "加载中…", icon: "checkmark.circle")
                 } else {
                     Rows(items: allRunning) { t in
-                        ListRow(icon: t.id.hasPrefix("job:") ? "clock" : "arrow.triangle.branch", tint: Color(hex: 0x3F7F87),
-                                title: t.label, subtitle: "\(t.detail) · 已运行 \(Fmt.duration(ctx.date.timeIntervalSince(t.started)))") {
+                        HStack(spacing: 10) {
+                        ListRow(icon: chat.backgroundTasks.contains(where: { $0.id == t.id }) ? "arrow.triangle.branch" : "clock", tint: Color(hex: 0x3F7F87),
+                                title: t.label, subtitle: "\(t.detail) · 已运行 \(Fmt.duration(ctx.date.timeIntervalSince(t.started)))",
+                                action: { Nav.shared.push(.taskDetail(id: t.id, title: t.label, briefPath: nil)) }) {
                             ActiveProgress().controlSize(.small)
-                            if t.id.hasPrefix("task:") {
-                                let id = String(t.id.dropFirst(5))
-                                Button(chat.stoppingTasks.contains(id) ? "停止中…" : "停止") { chat.stopTask(id) }
-                                    .buttonStyle(SoftButtonStyle()).disabled(chat.stoppingTasks.contains(id))
-                            }
+                        }
+                        .accessibilityLabel(t.label)
+                        .verificationAction(t.label)
+                        if chat.backgroundTasks.contains(where: { $0.id == t.id }) {
+                            Button(chat.stoppingTasks.contains(t.id) ? "停止中…" : "停止") { chat.stopTask(t.id) }
+                                .buttonStyle(SoftButtonStyle()).disabled(chat.stoppingTasks.contains(t.id))
+                                .padding(.trailing, 6)
+                        }
                         }
                     }
                 }
@@ -302,17 +304,20 @@ struct TasksPage: View {
                 Note(text: loaded ? "还没有任务" : "加载中…", icon: "tray").card(radius: 22, padding: 16)
             } else {
                 ForEach(["今天", "近 7 天", "更早"], id: \.self) { group in
-                    let entries = recent.filter { Self.completedGroup($0.ts) == group }.sorted { ($0.ts ?? .distantPast) > ($1.ts ?? .distantPast) }
+                    let entries = recent.filter { item in Self.completedGroup(item.time) == group && !allRunning.contains(where: { $0.id == item.id }) }.sorted { ($0.time ?? .distantPast) > ($1.time ?? .distantPast) }
                     if !entries.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             SectionTitle(text: group)
                             Rows(items: entries) { item in
-                                let ok = okFlags[item.id] ?? true
+                                let ok = item.status == .done
                                 ListRow(icon: ok ? "checkmark.circle" : "exclamationmark.triangle", tint: ok ? Color(hex: 0x3F7F87) : Theme.danger,
-                                        title: item.text.isEmpty ? item.label : item.text, subtitle: item.ts.map(Fmt.when) ?? "",
-                                        action: item.outputs.isEmpty ? nil : { Nav.shared.open(item.outputs[0], title: item.label) }) {
-                                    if ok { GoldTag(text: "完成") } else { Text("出错").font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.danger) }
+                                        title: item.title, subtitle: item.time.map(Fmt.when) ?? "",
+                                        action: { Nav.shared.push(.taskDetail(id: item.id, title: item.title,
+                                                                            briefPath: item.outputs.first(where: { BriefItem.validPath($0) }))) }) {
+                                    if ok { GoldTag(text: "完成") } else { Text(item.status.label).font(.system(size: 11.5, weight: .medium)).foregroundStyle(item.status == .error ? Theme.danger : Theme.sub) }
                                 }
+                                .accessibilityLabel(item.title)
+                                .verificationAction(item.title)
                             }.card(radius: 22, padding: 10)
                         }
                     }
@@ -335,7 +340,7 @@ struct TasksPage: View {
                     ListRow(icon: !j.isSystem ? "clock" : "gearshape.2", tint: !j.isSystem ? Color(hex: 0x3F7F87) : Theme.faint,
                             title: j.name, subtitle: cronText(j.cron) + (!j.isSystem ? "" : " · 系统任务")) {
                         if !j.isSystem {
-                            if launching.contains(j.id) || chat.live.contains(where: { $0.id == "job:" + j.name }) {
+                            if launching.contains(j.id) || chat.live.contains(where: { $0.label == j.name }) {
                                 Text(launching.contains(j.id) ? "启动中…" : "进行中").font(.system(size: 12)).foregroundStyle(Theme.sub)
                             } else {
                                 Button("立即运行") { run(j) }.buttonStyle(SoftButtonStyle())

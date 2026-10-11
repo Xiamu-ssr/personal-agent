@@ -8,6 +8,7 @@ struct MainView: View {
     @State private var windowActivity = WindowActivity()
 
     var body: some View {
+        GeometryReader { windowGeometry in
         ZStack {
             Theme.canvas.ignoresSafeArea()
             // A soft light from the top-right, like the brushed-metal reference.
@@ -41,6 +42,8 @@ struct MainView: View {
                 .transition(.opacity)
                 .allowsHitTesting(false)
             }
+        }
+        .environment(\.briefWindowHeight, windowGeometry.size.height)
         }
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 920, minHeight: 640)

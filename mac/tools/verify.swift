@@ -51,7 +51,7 @@ struct Verify {
                 } else if CommandLine.arguments.contains("--input-review") {
                     try await inputFixtures()
                 } else if CommandLine.arguments.contains("--local-review") {
-                    try await V04Review.run()
+                    try await V05Review.run()
                 } else {
                     try await fixtures()
                 }
@@ -357,15 +357,15 @@ struct Verify {
         print("PASS: image compression, cron, Markdown, complete capability registry")
 
         let chat = ChatClient()
-        chat.handle(["t": "job", "phase": "started", "label": "测试任务"])
+        chat.handle(["t": "job", "phase": "started", "id": "fixture-job", "label": "测试任务"])
         let snapshot = chat.jobsVersion
-        chat.handle(["t": "job", "phase": "done", "label": "测试任务"])
-        chat.applyJobs([["label": "测试任务", "started": 1000]], version: snapshot)
+        chat.handle(["t": "job", "phase": "done", "id": "fixture-job", "label": "测试任务"])
+        chat.applyJobs([["id": "fixture-job", "label": "测试任务", "started": 1000]], version: snapshot)
         try check(chat.live.isEmpty, "late job snapshot must not resurrect a finished task")
         chat.handle(["t": "task", "phase": "started", "id": "one", "description": "子任务"])
         chat.handle(["t": "task", "phase": "done", "id": "one"])
         try check(chat.backgroundTasks.isEmpty, "terminal task phase without status")
-        chat.handle(["t": "job", "phase": "started", "label": "旧任务"])
+        chat.handle(["t": "job", "phase": "started", "id": "old-job", "label": "旧任务"])
         chat.applyJobs([], version: chat.jobsVersion)
         try check(chat.live.isEmpty, "server truth clears jobs absent from its running list")
         chat.items = [ChatItem(kind: .user, text: "", attachments: [Attachment(path: "data/a.m4a", name: "a", kind: "voice")], pending: true),
@@ -389,8 +389,10 @@ struct Verify {
         print("PASS: failed transcription retains audio without uploading or sending")
         try await TaskProtocolFixtures.run()
         try await ConnectorFixtures.run()
-        try await V04Fixtures.run()
+        try await V05Fixtures.run()
+        try await SettingsTaskFixtures.run()
         try await memoryFixtures()
+        try await memoryPressureFixtures()
         try await inputFixtures()
     }
 

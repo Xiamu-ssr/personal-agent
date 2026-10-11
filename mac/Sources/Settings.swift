@@ -229,6 +229,21 @@ struct SettingsPage: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 18, alignment: .top)], alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 18) {
+                    CardSection(title: "模型与权限") {
+                        ListRow(icon: "sparkles", tint: Color(hex: 0x776AA3), title: "模型",
+                                subtitle: AgentSettingsStore.shared.snapshot?.label(.model) ?? "加载中…") {
+                            Nav.shared.push(.agentSetting(.model))
+                        }
+                        .accessibilityLabel("模型")
+                        .verificationAction("模型")
+                        RowDivider()
+                        ListRow(icon: "checkmark.shield", tint: Color(hex: 0x3F7F87), title: "权限",
+                                subtitle: AgentSettingsStore.shared.snapshot?.label(.permissionMode) ?? "加载中…") {
+                            Nav.shared.push(.agentSetting(.permissionMode))
+                        }
+                        .accessibilityLabel("权限")
+                        .verificationAction("权限")
+                    }
                     CardSection(title: "能力与连接") {
                         ListRow(icon: "square.grid.2x2", tint: Color(hex: 0x487FA6), title: "连接应用",
                                 subtitle: "本机 \(Capabilities.enabled.count) 项已开启 · 云端 \(store.connected.count) 项已连接") {
@@ -277,6 +292,7 @@ struct SettingsPage: View {
             }
         }
         .task(id: chat.devicesVersion) {
+            await AgentSettingsStore.shared.load()
             await ProfileStore.shared.load()
             await store.load()
         }

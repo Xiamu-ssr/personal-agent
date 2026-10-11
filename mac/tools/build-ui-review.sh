@@ -2,7 +2,7 @@
 # Local UI acceptance bundle only. No DMG, deployment or installation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-OUT="$PWD/verification/v0.4.0"
+OUT="$PWD/verification/v0.5.0"
 mkdir -p "$OUT"
 BUILD_WORK=$(mktemp -d "$OUT/build.XXXXXX")
 trap 'rm -rf "$BUILD_WORK"' EXIT
@@ -32,7 +32,7 @@ APP="$OUT/$NAME.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -swift-version 5 -O -parse-as-library -target "$(uname -m)-apple-macos14" -sdk "$SDK" "${FIX[@]}" "${SOURCES[@]}" -o "$APP/Contents/MacOS/Doudou"
 cp Info.plist "$APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.xiamu.agent.mac.$NAME" -c "Set :CFBundleName 豆豆界面验收" -c "Set :CFBundleDisplayName 豆豆界面验收" -c "Set :CFBundleShortVersionString 0.4.0" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.xiamu.agent.mac.$NAME" -c "Set :CFBundleName 豆豆界面验收" -c "Set :CFBundleDisplayName 豆豆界面验收" -c "Set :CFBundleShortVersionString 0.5.0" "$APP/Contents/Info.plist"
 if [[ -f build/豆豆.app/Contents/Resources/AppIcon.icns ]]; then cp build/豆豆.app/Contents/Resources/AppIcon.icns "$APP/Contents/Resources/"; fi
 codesign --force --deep --sign - "$APP"
 echo "$APP"

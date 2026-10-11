@@ -42,6 +42,8 @@ struct ChatItem: Identifiable, Equatable {
     var source = ""
     /// Server turnQueue identity, distinct from the stable local view identity.
     var serverID = ""
+    /// Task history identity on completion cards; independent of the chat message id.
+    var taskID = ""
 
     var scheduleTitle: String {
         guard let start = text.range(of: "该出「"), let end = text.range(of: "」了", range: start.upperBound..<text.endIndex) else {
@@ -51,7 +53,7 @@ struct ChatItem: Identifiable, Equatable {
     }
 }
 
-/// An isolated job (maintenance / legacy briefs); main-thread background tasks have their own ID list.
+/// An isolated maintenance job; ids come from the server and can open task history.
 struct LiveTask: Identifiable {
     let id: String
     var label: String
@@ -271,13 +273,13 @@ final class ChatClient {
 
     private func handleTask(_ message: [String: Any]) {
         let phase = Self.str(message["phase"])
-        if phase == "snapshot" { applyTasks(message["tasks"] as? [[String: Any]] ?? []); return }
+        if phase == "snapshot" { applyTasks(message["tasks"] as? [[String: Any]] ?? []); jobsVersion += 1; return }
         let id = Self.str(message["id"])
         guard !id.isEmpty else { return }
         let patch = message["patch"] as? [String: Any] ?? [:]
         let status = Self.str(patch["status"] ?? message["status"])
         if phase == "notification" || ["done", "completed", "failed", "stopped", "killed", "error"].contains(phase) ||
-            ["completed", "failed", "stopped", "killed", "error"].contains(status) { endTask(id); return }
+            ["completed", "failed", "stopped", "killed", "error"].contains(status) { endTask(id); jobsVersion += 1; return }
         guard message["background"] as? Bool != false, !endedTasks.contains(id) else { return }
         if let index = backgroundTasks.firstIndex(where: { $0.id == id }) {
             let description = Self.str(patch["description"] ?? message["description"])
@@ -304,7 +306,7 @@ final class ChatClient {
         case "assistant": return ChatItem(kind: .assistant, text: str(h["text"]), ts: date(h["ts"]))
         case "card":
             let outputs = (h["path"] as? String).map { [$0] } ?? h["outputs"] as? [String] ?? []
-            return ChatItem(kind: .card, text: str(h["title"]), outputs: outputs, label: str(h["label"]), ts: date(h["ts"]))
+            return ChatItem(kind: .card, text: str(h["title"]), outputs: outputs, label: str(h["label"]), ts: date(h["ts"]), taskID: str(h["taskId"]))
         default: return nil
         }
     }
@@ -317,11 +319,13 @@ final class ChatClient {
     /// Reconcile a server snapshot only if no newer socket event has arrived.
     func applyJobs(_ rows: [[String: Any]], version: Int) {
         guard jobsVersion == version else { return }
-        let running = rows.map {
-            LiveTask(id: "job:" + Self.str($0["label"]), label: Self.str($0["label"]),
-                     started: Self.date($0["started"]) ?? Date(), detail: "定时任务")
+        let running = rows.compactMap { row -> LiveTask? in
+            let id = Self.str(row["id"])
+            guard !id.isEmpty else { return nil }
+            return LiveTask(id: id, label: Self.str(row["label"]),
+                            started: Self.date(row["started"]) ?? Date(), detail: "定时任务")
         }
-        live = running + live.filter { !$0.id.hasPrefix("job:") }
+        live = running
     }
 
     private func refreshJobs() {
@@ -493,13 +497,17 @@ final class ChatClient {
         case "job":
             jobsVersion += 1
             let label = Self.str(m["label"])
+            let id = Self.str(m["id"])
             if Self.str(m["phase"]) == "started" {
-                live.removeAll { $0.id == "job:" + label }
-                live.append(LiveTask(id: "job:" + label, label: label, started: Date(), detail: "定时任务"))
+                if !id.isEmpty {
+                    live.removeAll { $0.id == id }
+                    live.append(LiveTask(id: id, label: label, started: Date(), detail: "定时任务"))
+                }
             } else {
-                live.removeAll { $0.id == "job:" + label }
+                live.removeAll { $0.id == id }
                 let outputs = (m["path"] as? String).map { [$0] } ?? m["outputs"] as? [String] ?? []
-                if !outputs.isEmpty { add(ChatItem(kind: .card, text: Self.str(m["title"]), outputs: outputs, label: label, ts: Date())) }
+                if !outputs.isEmpty { add(ChatItem(kind: .card, text: Self.str(m["title"]), outputs: outputs, label: label,
+                                                  ts: Self.date(m["ts"]) ?? Date(), taskID: Self.str(m["taskId"]))) }
                 jobsVersion += 1
                 filesVersion += 1
             }

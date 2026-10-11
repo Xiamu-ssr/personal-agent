@@ -370,16 +370,28 @@ struct ConnectorImage: View {
 
 private struct ConnectorSVG: NSViewRepresentable {
     let text: String
+    func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.defaultWebpagePreferences.allowsContentJavaScript = false
         let view = WKWebView(frame: .zero, configuration: config)
         view.setValue(false, forKey: "drawsBackground")
-        view.loadHTMLString("<html><head><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{width:100%;height:100%}</style></head><body>" + text + "</body></html>", baseURL: nil)
+        context.coordinator.load(view, text: text)
         return view
     }
-    func updateNSView(_ view: WKWebView, context: Context) {}
+    func updateNSView(_ view: WKWebView, context: Context) {
+        guard context.coordinator.text != text else { return }
+        context.coordinator.load(view, text: text)
+    }
+    static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) { view.stopLoading() }
+    final class Coordinator {
+        var text: String?
+        func load(_ view: WKWebView, text: String) {
+            self.text = text
+            view.loadHTMLString("<html><head><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{width:100%;height:100%}</style></head><body>" + text + "</body></html>", baseURL: nil)
+        }
+    }
 }
 
 struct ConnectorListRow: View {

@@ -63,6 +63,8 @@ enum Route: Hashable {
     case connectorForm(name: String, accountID: String?)
     case devices
     case skills
+    case agentSetting(AgentSetting)
+    case taskDetail(id: String, title: String, briefPath: String?)
 }
 
 /// Which page is showing: a sidebar tab, plus a stack of pages pushed inside it.
@@ -118,7 +120,7 @@ final class Nav {
     /// Open a data/ path the best way we can: web view, Markdown page, image viewer, or the default app.
     func open(_ path: String, title: String? = nil) {
         if path.hasPrefix("data/briefs/") {
-            guard path.hasSuffix(".json") else { show("这份简报不是 JSON 格式"); return }
+            guard BriefItem.validPath(path) else { show("这份简报暂时读不到"); return }
             stacks[.today] = []
             todaySection = 0
             tab = .today

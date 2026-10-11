@@ -49,7 +49,7 @@ enum Prefs {
 
     /// 接收消息通知: pop a system notification for replies and finished jobs while the app is in the background.
     static var notifyMessages: Bool {
-        get { d.object(forKey: "notifyMessages") as? Bool ?? true }
+        get { d.object(forKey: "notifyMessages") == nil ? true : d.bool(forKey: "notifyMessages") }
         set { d.set(newValue, forKey: "notifyMessages") }
     }
 

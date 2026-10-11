@@ -26,7 +26,8 @@ struct WebPage: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ web: WKWebView, coordinator: Coordinator) {
-        coordinator.work?.cancel()
+        coordinator.invalidate()
+        web.navigationDelegate = nil; web.uiDelegate = nil
         web.stopLoading()
     }
 
@@ -39,16 +40,34 @@ struct WebPage: NSViewRepresentable {
         var parent: WebPage
         var path = ""
         var work: Task<Void, Never>?
+        private var invalidated = false
+        private var publication: DispatchWorkItem?
+        private var pending: (Bool, String)?
 
         init(_ parent: WebPage) { self.parent = parent }
+
+        func invalidate() { invalidated = true; work?.cancel(); work = nil; publication?.cancel(); publication = nil; pending = nil }
+        private func publish(loading: Bool, failure: String = "") {
+            guard !invalidated else { return }
+            pending = (loading, failure)
+            guard publication == nil else { return }
+            let update = DispatchWorkItem { [weak self] in
+                guard let self, !invalidated else { return }
+                publication = nil
+                guard let value = pending else { return }; pending = nil
+                if parent.loading != value.0 { parent.loading = value.0 }
+                if parent.failed != value.1 { parent.failed = value.1 }
+            }
+            publication = update
+            DispatchQueue.main.async(execute: update)
+        }
 
         func load(_ web: WKWebView, _ path: String) {
             work?.cancel()
             self.path = path
             work = Task { @MainActor [weak self, weak web] in
                 guard let self, let web else { return }
-                parent.loading = true
-                parent.failed = ""
+                publish(loading: true)
                 do {
                     let cookies = try await Api.webCookies()
                     try Task.checkCancellation()
@@ -62,8 +81,7 @@ struct WebPage: NSViewRepresentable {
                     _ = web.load(req)
                 } catch is CancellationError {
                 } catch {
-                    parent.loading = false
-                    parent.failed = error.localizedDescription
+                    publish(loading: false, failure: error.localizedDescription)
                 }
             }
         }
@@ -91,27 +109,24 @@ struct WebPage: NSViewRepresentable {
         func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
                      decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
             if let http = response.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                parent.loading = false
-                parent.failed = "HTTP \(http.statusCode)"
+                publish(loading: false, failure: "HTTP \(http.statusCode)")
                 return decisionHandler(.cancel)
             }
             decisionHandler(.allow)
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            parent.loading = true
-            parent.failed = ""
+            publish(loading: true)
         }
 
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { parent.loading = false }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { publish(loading: false) }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fail(error) }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { fail(error) }
 
         private func fail(_ error: Error) {
             guard (error as NSError).code != NSURLErrorCancelled else { return }
-            parent.loading = false
-            parent.failed = error.localizedDescription
+            publish(loading: false, failure: error.localizedDescription)
         }
     }
 }

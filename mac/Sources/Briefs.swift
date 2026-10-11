@@ -1,163 +1,118 @@
 import SwiftUI
 
+struct BriefHTMLCard: Equatable {
+    let html: String
+}
+
 struct BriefItem: Identifiable {
     let date: String
     let name: String
     let time: Date
     let path: String
-    let cards: [BriefCard]
+    let cards: [BriefHTMLCard]
     var id: String { path }
 
-    static func parse(_ row: [String: Any]) -> BriefItem? {
-        guard let path = row["path"] as? String, path.hasPrefix("data/briefs/"), path.hasSuffix(".json"),
-              let brief = row["brief"] as? [String: Any], (brief["v"] as? Int) == 1 else { return nil }
-        let cards = (brief["cards"] as? [[String: Any]] ?? []).prefix(5).compactMap(BriefCard.parse)
-        guard !cards.isEmpty else { return nil }
-        let iso = ISO8601DateFormatter()
-        let timeText = row["time"] as? String ?? brief["time"] as? String ?? ""
-        var time = iso.date(from: timeText)
-        if time == nil { iso.formatOptions.insert(.withFractionalSeconds); time = iso.date(from: timeText) }
-        return BriefItem(date: row["date"] as? String ?? "", name: row["name"] as? String ?? brief["name"] as? String ?? "简报",
-                         time: time ?? .distantPast, path: path, cards: cards)
+    static func validPath(_ path: String) -> Bool {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        return parts.count == 4 && parts[0] == "data" && parts[1] == "briefs" &&
+            Fmt.dayKey.date(from: String(parts[2])) != nil && parts[3].hasSuffix(".html") &&
+            !parts.contains("..") && !path.contains("\\")
     }
 
-    static func fetch() async throws -> [BriefItem] {
-        let response = try await Api.json("/api/briefs?days=7")
+    static func parse(_ row: [String: Any]) -> BriefItem? {
+        guard let path = row["path"] as? String, validPath(path),
+              let date = row["date"] as? String, let name = row["name"] as? String,
+              let time = ProductTime.date(row["time"]),
+              let raw = row["cards"] as? [[String: Any]], (1...6).contains(raw.count) else { return nil }
+        let cards = raw.compactMap { card -> BriefHTMLCard? in
+            guard let html = card["html"] as? String, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return BriefHTMLCard(html: html)
+        }
+        guard cards.count == raw.count else { return nil }
+        return BriefItem(date: date, name: name, time: time, path: path, cards: cards)
+    }
+
+    static func fetch(days: Int = 7) async throws -> [BriefItem] {
+        let response = try await Api.json("/api/briefs?days=\(days)")
         return (response["items"] as? [[String: Any]] ?? []).compactMap(parse).sorted { $0.time > $1.time }
     }
 
-    /// A completed task can link to a JSON brief outside the default seven-day list.
+    /// The endpoint supplies complete card documents, including for older completion links.
     static func fetch(path: String) async throws -> BriefItem? {
-        guard path.hasPrefix("data/briefs/"), path.hasSuffix(".json") else { return nil }
-        let data = Data(try await Api.text(path).utf8)
-        guard let brief = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return parse(["path": path, "date": String(path.split(separator: "/").dropFirst(2).first ?? ""), "brief": brief])
+        guard validPath(path) else { return nil }
+        return try await fetch(days: 365).first { $0.path == path }
     }
 }
 
-struct BriefCard {
-    let chip: String
-    let title: String
-    let summary: String
-    let blocks: [BriefBlock]
-    let actionLabel: String
-    let actionPrompt: String
-
-    static func parse(_ json: [String: Any]) -> BriefCard? {
-        guard let title = json["title"] as? String, !title.isEmpty else { return nil }
-        let action = json["action"] as? [String: Any] ?? [:]
-        return BriefCard(chip: json["chip"] as? String ?? "", title: title, summary: json["summary"] as? String ?? "",
-                         blocks: (json["blocks"] as? [[String: Any]] ?? []).prefix(4).compactMap(BriefBlock.parse),
-                         actionLabel: action["label"] as? String ?? "", actionPrompt: action["prompt"] as? String ?? "")
+private struct BriefWindowHeightKey: EnvironmentKey { static let defaultValue: CGFloat = 640 }
+extension EnvironmentValues {
+    var briefWindowHeight: CGFloat {
+        get { self[BriefWindowHeightKey.self] }
+        set { self[BriefWindowHeightKey.self] = newValue }
     }
 }
 
-struct BriefBlock {
-    let type: String
-    let text: String
-    let items: [[String: String]]
-
-    static func parse(_ json: [String: Any]) -> BriefBlock? {
-        guard let type = json["type"] as? String else { return nil }
-        if type == "note" {
-            guard let text = json["text"] as? String, !text.isEmpty else { return nil }
-            return BriefBlock(type: type, text: text, items: [])
+/// Geometry callbacks only enqueue visibility; they never mutate SwiftUI state during that layout turn.
+private final class BriefVisibilityUpdates {
+    private var work: DispatchWorkItem?
+    private var next = false
+    @MainActor func schedule(_ visible: Bool, apply: @escaping (Bool) -> Void) {
+        next = visible
+        guard work == nil else { return }
+        let update = DispatchWorkItem { [weak self] in
+            guard let self else { return }; work = nil; apply(next)
         }
-        let required: [String]
-        let limit: Int
-        switch type {
-        case "timeline": required = ["when", "label"]; limit = 4
-        case "tiles": required = ["title", "text"]; limit = 3
-        case "metrics": required = ["label", "value"]; limit = 4
-        case "list": required = ["text"]; limit = 6
-        default: return nil
-        }
-        let items = (json["items"] as? [[String: Any]] ?? []).prefix(limit).compactMap { row -> [String: String]? in
-            let values = row.compactMapValues { $0 as? String }
-            return required.allSatisfy { !(values[$0] ?? "").isEmpty } ? values : nil
-        }
-        guard !items.isEmpty else { return nil }
-        return BriefBlock(type: type, text: "", items: items)
+        work = update
+        DispatchQueue.main.async(execute: update)
     }
+    func cancel() { work?.cancel(); work = nil }
+    deinit { work?.cancel() }
 }
 
+/// Only visible cards stay mounted. A measured placeholder retains scroll position after recycling.
 struct BriefCardView: View {
-    let card: BriefCard
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if !card.chip.isEmpty {
-                Text(card.chip).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.goldText)
-                    .padding(.horizontal, 11).padding(.vertical, 5).background(Theme.goldWash, in: Capsule())
-            }
-            Text(card.title).font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
-            if !card.summary.isEmpty { Text(card.summary).font(.system(size: 14)).foregroundStyle(Theme.sub).lineSpacing(5) }
-            ForEach(card.blocks.indices, id: \.self) { i in BriefBlockView(block: card.blocks[i]) }
-            if !card.actionLabel.isEmpty && !card.actionPrompt.isEmpty {
-                Button(card.actionLabel) { Nav.shared.ask(card.actionPrompt) }.buttonStyle(SoftButtonStyle())
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .card(radius: 24, padding: 22)
-    }
-}
+    let card: BriefHTMLCard
+    let viewport: CGSize
+    @Environment(\.briefWindowHeight) private var windowHeight
+    @State private var documentHeight: CGFloat = 1
+    @State private var visible = false
+    @State private var loading = true
+    @State private var failed = ""
+    @State private var visibilityUpdates = BriefVisibilityUpdates()
 
-private struct BriefBlockView: View {
-    let block: BriefBlock
-    private func tone(_ value: String?) -> Color {
-        switch value {
-        case "ok": return Theme.online
-        case "warn": return Color(hex: 0xA77936)
-        default: return Theme.accent
-        }
-    }
+    private var height: CGFloat { min(documentHeight > 1 ? documentHeight : 200, max(1, windowHeight * 0.75)) }
+
     var body: some View {
-        if block.type == "note" {
-            Text(block.text).font(.system(size: 12)).foregroundStyle(Theme.sub)
-                .padding(11).frame(maxWidth: .infinity, alignment: .leading).background(Theme.field, in: RoundedRectangle(cornerRadius: 12))
-        } else if block.type == "list" {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(block.items.indices, id: \.self) { i in
-                    let item = block.items[i]
-                    HStack(alignment: .top, spacing: 9) {
-                        Circle().fill(Theme.accent.opacity(0.5)).frame(width: 4, height: 4).padding(.top, 6)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(item["text"] ?? "").font(.system(size: 14)).foregroundStyle(Theme.ink)
-                            if let meta = item["meta"], !meta.isEmpty { Text(meta).font(.system(size: 11.5)).foregroundStyle(Theme.sub) }
-                        }
-                    }
-                }
+        ZStack {
+            if visible {
+                BriefWebView(html: card.html, documentHeight: $documentHeight, loading: $loading, failed: $failed)
+                    .frame(height: documentHeight > 1 ? height : 1)
             }
-        } else {
-            HStack(alignment: .top, spacing: 12) {
-                ForEach(block.items.indices, id: \.self) { i in
-                    let item = block.items[i]
-                    VStack(alignment: .leading, spacing: 6) {
-                        if block.type == "metrics" {
-                            Text(item["label"] ?? "").font(.system(size: 12)).foregroundStyle(Theme.sub)
-                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                Text(item["value"] ?? "").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.ink)
-                                Text(item["unit"] ?? "").font(.system(size: 11)).foregroundStyle(Theme.sub)
-                            }
-                            if let delta = item["delta"] { Text(delta).font(.system(size: 11.5)).foregroundStyle(Theme.sub) }
-                        } else if block.type == "timeline" {
-                            Text(item["when"] ?? "").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.accent)
-                            Text(item["label"] ?? "").font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink)
-                            if let text = item["text"] { Text(text).font(.system(size: 11.5)).foregroundStyle(Theme.sub) }
-                        } else {
-                            Text(item["title"] ?? "").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink)
-                            Text(item["text"] ?? "").font(.system(size: 12)).foregroundStyle(Theme.sub)
-                            if let tag = item["tag"], !tag.isEmpty {
-                                Text(tag).font(.system(size: 10.5, weight: .medium)).foregroundStyle(tone(item["tone"]))
-                                    .padding(.horizontal, 8).padding(.vertical, 3).background(tone(item["tone"]).opacity(0.1), in: Capsule())
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(block.type == "tiles" ? 12 : 0)
-                    .background(block.type == "tiles" ? Theme.field : .clear, in: RoundedRectangle(cornerRadius: 14))
-                }
+            if loading && visible { ActiveProgress().controlSize(.small) }
+            if !failed.isEmpty { Note(text: failed, icon: "exclamationmark.triangle") }
+        }
+        .frame(maxWidth: 480)
+        .frame(height: height)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 24))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.9), lineWidth: 1))
+        .shadow(color: Color(hex: 0x253751, alpha: 0.055), radius: 14, y: 6)
+        .background {
+            GeometryReader { geometry in
+                let frame = geometry.frame(in: .named("briefViewport"))
+                Color.clear
+                    .onAppear { updateVisibility(frame) }
+                    .onChange(of: frame) { updateVisibility(frame) }
+                    .onChange(of: viewport) { updateVisibility(frame) }
             }
         }
+        .onDisappear { visibilityUpdates.cancel(); visible = false }
+        .onChange(of: card.html) { documentHeight = 1; loading = true; failed = "" }
+    }
+
+    private func updateVisibility(_ frame: CGRect) {
+        let next = frame.intersects(CGRect(origin: .zero, size: viewport))
+        visibilityUpdates.schedule(next) { if $0 != visible { visible = $0 } }
     }
 }
 
@@ -170,17 +125,20 @@ struct TodayPage: View {
     @State private var error = ""
 
     var body: some View {
-        ScrollViewReader { proxy in
-            PageScaffold(title: "今日", tab: .today) {
-                PillTabs(titles: ["简报", "站点"], selection: Binding(get: { nav.todaySection }, set: { nav.todaySection = $0 }))
-                if nav.todaySection == 0 { briefList } else { siteGrid }
-                if !error.isEmpty { Note(text: error, icon: "wifi.exclamationmark") }
+        GeometryReader { viewport in
+            ScrollViewReader { proxy in
+                PageScaffold(title: "今日", tab: .today) {
+                    PillTabs(titles: ["简报", "站点"], selection: Binding(get: { nav.todaySection }, set: { nav.todaySection = $0 }))
+                    if nav.todaySection == 0 { briefList(viewport: viewport.size) } else { siteGrid }
+                    if !error.isEmpty { Note(text: error, icon: "wifi.exclamationmark") }
+                }
+                .task(id: chat.filesVersion) {
+                    await load()
+                    await focus(proxy)
+                }
+                .onChange(of: nav.briefFocus) { Task { await focus(proxy) } }
             }
-            .task(id: chat.filesVersion) {
-                await load()
-                await focus(proxy)
-            }
-            .onChange(of: nav.briefFocus) { Task { await focus(proxy) } }
+            .coordinateSpace(name: "briefViewport")
         }
     }
 
@@ -193,7 +151,7 @@ struct TodayPage: View {
             briefs = ((briefs ?? []) + [linked]).sorted { $0.time > $1.time }
         }
         try? await Task.sleep(nanoseconds: 150_000_000)
-        guard nav.briefFocus == path else { return }
+        guard !Task.isCancelled, nav.briefFocus == path else { return }
         if briefs?.contains(where: { $0.path == path }) == true { proxy.scrollTo(path, anchor: .top) }
         else if briefs != nil { Nav.shared.show("这份简报暂时读不到") }
         nav.briefFocus = nil
@@ -212,20 +170,24 @@ struct TodayPage: View {
     }
 
     @ViewBuilder
-    private var briefList: some View {
+    private func briefList(viewport: CGSize) -> some View {
         if let briefs, !briefs.isEmpty {
-            let days = Array(Set(briefs.map(\.date))).sorted(by: >)
-            ForEach(days, id: \.self) { day in
-                VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 22) {
+                let days = Array(Set(briefs.map(\.date))).sorted(by: >)
+                ForEach(days, id: \.self) { day in
                     SectionTitle(text: Self.dayLabel(day))
                     ForEach(briefs.filter { $0.date == day }) { brief in
                         VStack(alignment: .leading, spacing: 12) {
                             Text("\(Fmt.hm.string(from: brief.time)) \(brief.name)").font(.system(size: 12)).foregroundStyle(Theme.sub).padding(.leading, 4)
-                            ForEach(brief.cards.indices, id: \.self) { i in BriefCardView(card: brief.cards[i]) }
+                            ForEach(brief.cards.indices, id: \.self) { i in
+                                BriefCardView(card: brief.cards[i], viewport: viewport)
+                            }
                         }.id(brief.path)
                     }
                 }
             }
+            .frame(maxWidth: 480, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
         } else {
             Note(text: briefs == nil ? "加载中…" : "今天还没有简报" + (morningTime.isEmpty ? "" : " · 晨报 \(morningTime)"), icon: "sun.horizon")
                 .card(radius: 24, padding: 20)

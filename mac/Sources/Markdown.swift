@@ -296,8 +296,9 @@ struct MarkdownParagraph: NSViewRepresentable {
     }
 
     func updateNSView(_ view: GrowingInputContainer, context: Context) {
-        guard context.coordinator.text != text else { return }
-        context.coordinator.text = text
+        let key = NativeMarkdownContent(text: text, refs: [], size: size, lineHeight: lineHeight)
+        guard context.coordinator.content != key else { return }
+        context.coordinator.content = key
         view.editor.textStorage?.setAttributedString(MemoryPointerText.rendered(text: text, refs: [], size: size, lineHeight: lineHeight))
         view.textChanged(force: true)
     }
@@ -308,31 +309,116 @@ struct MarkdownParagraph: NSViewRepresentable {
         return CGSize(width: width, height: nsView.measuredHeight(width: max(1, width)))
     }
 
-    final class Coordinator { var text = "" }
+    final class Coordinator { var content: NativeMarkdownContent? }
 }
 
-/// "生活 · 居住" tag for a memory file pointer.
-struct PointerTag: View {
-    let path: String
-    let action: () -> Void
+struct NativeMarkdownContent: Hashable {
+    let text: String
+    let refs: [String]
+    let size: CGFloat
+    let lineHeight: CGFloat?
+}
 
-    var body: some View {
+private final class NativeMarkdownCacheKey: NSObject {
+    let content: NativeMarkdownContent
+    init(_ content: NativeMarkdownContent) { self.content = content }
+    override var hash: Int { content.hashValue }
+    override func isEqual(_ object: Any?) -> Bool { (object as? NativeMarkdownCacheKey)?.content == content }
+}
+
+/// Render with AppKit, outside SwiftUI's view graph. The same file reuses one bounded bitmap cache entry.
+@MainActor private enum PointerCapsule {
+    static let images: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>(); cache.countLimit = 128; cache.totalCostLimit = 4 << 20; return cache
+    }()
+    static func image(path: String) -> NSImage? {
+        if let cached = images.object(forKey: path as NSString) { return cached }
+        #if MAC_PERF
+        PerfProbe.shared.record("pointer_image")
+        #endif
         let parts = path.split(separator: "/").map(String.init)
         let file = (parts.last ?? path).replacingOccurrences(of: ".md", with: "")
         let cat = parts.count > 1 ? Theme.category(parts[parts.count - 2]) : nil
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: cat?.icon ?? "doc.text").font(.system(size: 9.5, weight: .semibold))
-                Text(cat.map { "\($0.name) · \(file)" } ?? file).font(.system(size: 11.5, weight: .medium))
-            }
-            .foregroundStyle(cat?.color ?? Theme.accent)
-            .padding(.horizontal, 9)
-            .frame(height: 22)
-            .background(Capsule().fill((cat?.color ?? Theme.accent).opacity(0.09)))
-            .overlay(Capsule().strokeBorder((cat?.color ?? Theme.accent).opacity(0.18), lineWidth: 1))
-            .contentShape(Capsule())
+        let label = cat.map { "\($0.name) · \(file)" } ?? file
+        let color = NSColor(cat?.color ?? Theme.accent)
+        let font = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let textSize = (label as NSString).size(withAttributes: attributes)
+        let size = NSSize(width: ceil(textSize.width) + 32, height: 22)
+        let width = Int(size.width * 2), height = 44
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.scaleBy(x: 2, y: 2)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        let capsule = NSBezierPath(roundedRect: NSRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5), xRadius: 10.5, yRadius: 10.5)
+        color.withAlphaComponent(0.09).setFill(); capsule.fill()
+        color.withAlphaComponent(0.18).setStroke(); capsule.lineWidth = 1; capsule.stroke()
+        let symbol = NSImage(systemSymbolName: cat?.icon ?? "doc.text", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 9.5, weight: .semibold))?
+            .withSymbolConfiguration(.init(paletteColors: [color]))
+        symbol?.draw(in: NSRect(x: 9, y: 6, width: 10, height: 10))
+        (label as NSString).draw(at: NSPoint(x: 23, y: floor((22 - textSize.height) / 2)), withAttributes: attributes)
+        NSGraphicsContext.restoreGraphicsState()
+        guard let cgImage = context.makeImage() else { return nil }
+        let image = NSImage(cgImage: cgImage, size: size)
+        images.setObject(image, forKey: path as NSString, cost: width * height * 4)
+        return image
+    }
+}
+
+/// Size queries use a separate TextKit graph; only native layout updates the displayed container.
+final class MemoryPointerTextView: NSTextView {
+    private let displayStorage = NSTextStorage()
+    private let displayLayout = NSLayoutManager()
+    private let measureStorage = NSTextStorage()
+    private let measureLayout = NSLayoutManager()
+    private let measureContainer = NSTextContainer(size: .zero)
+    private var heights: [CGFloat: CGFloat] = [:]
+    private var displayWidth: CGFloat = -1
+    private(set) var measurementCount = 0
+
+    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        let displayContainer = container ?? NSTextContainer(size: .zero)
+        if container == nil {
+            displayStorage.addLayoutManager(displayLayout)
+            displayLayout.addTextContainer(displayContainer)
         }
-        .buttonStyle(.plain)
+        super.init(frame: frameRect, textContainer: displayContainer)
+        measureStorage.addLayoutManager(measureLayout); measureLayout.addTextContainer(measureContainer)
+        measureContainer.lineFragmentPadding = 0
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setContent(_ content: NSAttributedString) {
+        textStorage?.setAttributedString(content)
+        measureStorage.setAttributedString(content)
+        heights.removeAll(keepingCapacity: true)
+        needsLayout = true; invalidateIntrinsicContentSize()
+    }
+    func measuredHeight(width: CGFloat) -> CGFloat {
+        let width = floor(width * 2) / 2
+        guard width >= 2 else { return 22 }
+        if let height = heights[width] { return height }
+        measurementCount += 1
+        #if MAC_PERF
+        PerfProbe.shared.record("pointer_measure")
+        #endif
+        measureContainer.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        measureLayout.ensureLayout(for: measureContainer)
+        let height = max(1, ceil(measureLayout.usedRect(for: measureContainer).height))
+        if heights.count >= 32 { heights.removeAll(keepingCapacity: true) }
+        heights[width] = height
+        return height
+    }
+    override func layout() {
+        let width = max(1, floor(bounds.width * 2) / 2)
+        if displayWidth != width {
+            displayWidth = width
+            textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        }
+        super.layout()
     }
 }
 
@@ -346,34 +432,48 @@ struct MemoryPointerText: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(onPointer: onPointer) }
 
-    func makeNSView(context: Context) -> NSTextView {
-        let view = NSTextView(frame: .zero)
+    func makeNSView(context: Context) -> MemoryPointerTextView {
+        let view = MemoryPointerTextView(frame: .zero, textContainer: nil)
         view.isEditable = false
         view.isSelectable = true
         view.drawsBackground = false
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
         view.textContainer?.widthTracksTextView = false
+        view.isVerticallyResizable = false
+        view.isHorizontallyResizable = false
         view.delegate = context.coordinator
         view.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
         return view
     }
 
-    func updateNSView(_ view: NSTextView, context: Context) {
+    func updateNSView(_ view: MemoryPointerTextView, context: Context) {
+        #if MAC_PERF
+        PerfProbe.shared.record("pointer_update")
+        #endif
         context.coordinator.onPointer = onPointer
-        view.textStorage?.setAttributedString(Self.rendered(text: text, refs: refs, size: size, lineHeight: lineHeight))
+        context.coordinator.apply(NativeMarkdownContent(text: text, refs: refs, size: size, lineHeight: lineHeight), to: view)
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
-        guard let width = proposal.width, width.isFinite, width > 0,
-              let container = nsView.textContainer, let layout = nsView.layoutManager else { return nil }
-        container.containerSize = CGSize(width: width, height: .greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        return CGSize(width: width, height: ceil(layout.usedRect(for: container).height))
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: MemoryPointerTextView, context: Context) -> CGSize? {
+        #if MAC_PERF
+        PerfProbe.shared.record("pointer_size")
+        #endif
+        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
+        return CGSize(width: width, height: nsView.measuredHeight(width: width))
     }
+
+    private static let renderedCache: NSCache<NativeMarkdownCacheKey, NSAttributedString> = {
+        let cache = NSCache<NativeMarkdownCacheKey, NSAttributedString>(); cache.countLimit = 256; cache.totalCostLimit = 8 << 20; return cache
+    }()
 
     @MainActor
     static func rendered(text: String, refs: [String], size: CGFloat, lineHeight: CGFloat? = nil) -> NSAttributedString {
+        let key = NativeMarkdownCacheKey(NativeMarkdownContent(text: text, refs: refs, size: size, lineHeight: lineHeight))
+        if let cached = renderedCache.object(forKey: key) { return cached }
+        #if MAC_PERF
+        PerfProbe.shared.record("richtext_render")
+        #endif
         let result = NSMutableAttributedString()
         let base = NSFont.systemFont(ofSize: size)
         let markdown = Markdown.inline(text)
@@ -396,9 +496,7 @@ struct MemoryPointerText: NSViewRepresentable {
         }
         for ref in refs {
             result.append(NSAttributedString(string: " ", attributes: [.font: base]))
-            let renderer = ImageRenderer(content: PointerTag(path: ref, action: {}).preferredColorScheme(.light))
-            renderer.scale = 2
-            guard let image = renderer.nsImage else { continue }
+            guard let image = PointerCapsule.image(path: ref) else { continue }
             let attachment = NSTextAttachment()
             attachment.image = image
             attachment.bounds = CGRect(x: 0, y: base.descender - (22 - (base.ascender - base.descender)) / 2,
@@ -417,12 +515,22 @@ struct MemoryPointerText: NSViewRepresentable {
         if let lineHeight { paragraph.lineSpacing = 0; paragraph.minimumLineHeight = lineHeight; paragraph.maximumLineHeight = lineHeight }
         paragraph.lineBreakMode = .byWordWrapping
         result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
-        return result
+        let rendered = NSAttributedString(attributedString: result)
+        renderedCache.setObject(rendered, forKey: key, cost: (text.utf8.count + refs.reduce(0) { $0 + $1.utf8.count }) * 8 + refs.count * 256)
+        return rendered
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
+        var content: NativeMarkdownContent?
         var onPointer: (String) -> Void
         init(onPointer: @escaping (String) -> Void) { self.onPointer = onPointer }
+
+        @MainActor @discardableResult func apply(_ content: NativeMarkdownContent, to view: MemoryPointerTextView) -> Bool {
+            guard self.content != content else { return false }
+            self.content = content
+            view.setContent(MemoryPointerText.rendered(text: content.text, refs: content.refs, size: content.size, lineHeight: content.lineHeight))
+            return true
+        }
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
             guard let url = link as? URL, url.scheme == "doudou-memory", url.host == "file" else { return false }

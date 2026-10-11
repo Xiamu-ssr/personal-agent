@@ -27,8 +27,10 @@ struct GrowingInput: NSViewRepresentable {
     func updateNSView(_ view: GrowingInputContainer, context: Context) {
         let coordinator = context.coordinator
         coordinator.owner = self
-        view.editor.placeholder = placeholder
-        view.editor.setAccessibilityLabel(placeholder)
+        if view.editor.placeholder != placeholder {
+            view.editor.placeholder = placeholder
+            view.editor.setAccessibilityLabel(placeholder)
+        }
         if view.editor.isEditable != enabled { view.editor.isEditable = enabled }
         if !view.editor.hasMarkedText(), view.editor.string != text {
             coordinator.updating = true
@@ -147,6 +149,7 @@ final class GrowingInputContainer: NSScrollView {
         let document = max(minimumHeight, ceil(measureLayout.usedRect(for: measureContainer).height) + verticalPadding * 2)
         let height = maximumLines.map { min(document, lineHeight * CGFloat($0) + verticalPadding * 2) } ?? document
         let result = Measurement(height: height, document: document)
+        if sizes.count >= 32 { sizes.removeAll(keepingCapacity: true) }
         sizes[width] = result
         return result
     }
