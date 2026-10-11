@@ -1,20 +1,23 @@
-# 云端连接器（v0.3）
+# 云端连接器（v0.4）
 
-一句话：**连接器的代码由我们随版本发布，豆豆和 App 只负责填配置。** 豆豆不碰基础设施。
+一句话：**连接器的代码由我们随版本发布，豆豆和 App 只负责填配置。** 豆豆不写连接器代码，只引导用户提供必要的参数（地址、授权码、API Key），替用户填进去；用户也可以自己在 App 里填。
 
 ## 一、原则
 
 1. **代码和配置分开。**
    - 代码在仓库的 `cloud/connectors/<name>/` 里，部署到 `/opt/personal-agent/`。这个目录归 root 所有，`agent` 用户只能读。
    - 配置在 `<AGENT_ROOT>/system/connectors/<name>/accounts.json`。
-2. **一个连接器可以有多个账号。** 例如「邮箱」是一个连接器，QQ 和 163 是它下面的两个账号。工具调用时用 `account` 参数指定账号，不填就是所有账号。
-3. **密钥只走表单或配置工具，不走聊天，也不进模型上下文。**
+2. **一个服务一个连接器**，和 Today AI 一样。QQ 邮箱、163 邮箱、Gmail 是三个连接器，各自有官方图标。
+   - 同一个服务可以连多个账号，比如两个 QQ 邮箱。工具调用时用 `account` 参数指定账号，不填就是所有账号。
+   - 几个连接器底层用同一套代码时（比如都是 IMAP），共享代码放在 `cloud/connectors/_shared/`，但对外仍然是各自独立的连接器。
+3. **密钥只走表单或配置工具，不进模型上下文。**
    - 能接触到明文密钥的只有三处：App 表单 → 云端接口 → 连接器代码。
    - 任何返回给 App 或模型的数据，密钥字段都换成 `"••••"`。
 4. **豆豆能改配置，改不了代码。**
-   - 豆豆可以用 `connectors` 工具加账号、改备注、删账号。
-   - `system/connectors/` 下的文件不允许 Read/Write/Edit 直接读写，也不允许 Bash 访问。PreToolUse 钩子负责拦截，理由写清楚，让豆豆改用工具。
-5. **自建连接器单独放。** 目录里没有的服务，豆豆可以自己写，放在 `system/custom-connectors/<name>/`，按标准插件格式（`.claude-plugin/plugin.json` + `.mcp.json`）。这类在 App 里显示为「自建」。好用的再由我们收编成预置连接器。
+   - 豆豆用 `connectors` 工具加账号、改备注、删账号。
+   - `system/connectors/` 下的文件不允许 Read / Write / Edit 直接读写，也不允许 Bash 访问。PreToolUse 钩子负责拦截，理由写清楚，让豆豆改用工具。
+5. **不做自建连接器。** 目录里没有的服务，豆豆如实告诉用户「暂时还接不了」，不自己写代码。`system/custom-connectors/` 和相关代码删掉。
+6. **云端内置能力不展示。** 网页搜索、网页读取、命令行、文件、定时、语音转写都是 SDK 或本体自带的，App 里不列出来。
 
 ## 二、连接器的形状
 
@@ -22,19 +25,15 @@
 
 ```js
 export default {
-  name: "email",                 // 稳定 id，也是 MCP server 名：mcp__email__*
-  title: "邮箱",
-  description: "QQ、163、Gmail、Outlook、企业邮箱（IMAP，只读）",
-  icon: "envelope",              // App 用来映射图标的语义名
+  name: "qq-mail",               // 稳定 id，也是 MCP server 名：mcp__qq-mail__*
+  title: "QQ 邮箱",
+  description: "读取 QQ 邮箱里的邮件（只读）",
+  icon: "icon.png",              // 同目录下的官方图标文件，App 通过接口取
   multiAccount: true,
   fields: [                      // App 根据这里生成表单
-    { key: "preset", label: "邮箱类型", type: "select",
-      options: [{ value: "qq", label: "QQ 邮箱" }, { value: "163", label: "163 邮箱" }, …, { value: "custom", label: "其他（手动填服务器）" }] },
     { key: "address", label: "邮箱地址", type: "text", placeholder: "name@qq.com" },
     { key: "password", label: "授权码", type: "secret",
-      help: { qq: "QQ 邮箱网页版 → 设置 → 账号 → 开启 IMAP/SMTP → 生成授权码", "163": "…" } },
-    { key: "host", label: "IMAP 服务器", type: "text", showIf: { preset: "custom" } },
-    { key: "port", label: "端口", type: "number", default: 993, showIf: { preset: "custom" } },
+      help: "QQ 邮箱网页版 → 设置 → 账号 → 开启 IMAP/SMTP → 生成授权码" },
   ],
   label: (a) => a.address,       // 账号在列表里显示的名字
   async test(account) {},        // 真实登录一次；失败就 throw，并给出中文原因（例如「授权码不对」「没开 IMAP」）
@@ -42,14 +41,15 @@ export default {
 };
 ```
 
-- 字段类型只有四种：`text`、`secret`、`number`、`select`。`showIf` 只支持「某个字段等于某个值」。`help` 可以是一个字符串，也可以是「按 preset 取值」的映射。
+- 字段类型只有四种：`text`、`secret`、`number`、`select`。`showIf` 只支持「某个字段等于某个值」。
+- **图标**：用服务的官方图标（从官网取 apple-touch-icon 或 favicon 的高清版），放在连接器目录里随代码发布。不要自己画。
 - 注册表 `cloud/connectors/index.mjs` 列出全部连接器。启动时，harness 为**至少有一个账号**的连接器各建一个 `createSdkMcpServer`，和 `devices` 一样挂进 `mcpServers`。
-- 账号变化后（不管是来自 App 还是工具），重建 MCP server，并在下一轮让主会话 reload。
+- 账号变化后（不管来自 App 还是工具），重建 MCP server，并在下一轮让主会话 reload。
 
 ### accounts.json
 
 ```json
-{ "accounts": [ { "id": "a1b2c3", "label": "name@qq.com", "values": { "preset": "qq", "address": "…", "password": "…" },
+{ "accounts": [ { "id": "a1b2c3", "label": "name@qq.com", "values": { "address": "…", "password": "…" },
                   "status": "ok", "checkedAt": 1791…, "error": null } ] }
 ```
 
@@ -60,7 +60,8 @@ export default {
 
 | 接口 | 说明 |
 |---|---|
-| `GET /api/connectors` | 和现在一样，但 `cloud.catalog` 里的每一项都带上 `fields` 和 `multiAccount`。已配置账号的连接器移到 `cloud.installed`，并带上 `accounts:[{id,label,status,error,checkedAt,values}]`；values 里的 secret 一律是 `"••••"`，用于编辑页预填。自建连接器放进 `cloud.custom`。 |
+| `GET /api/connectors` | `cloud.catalog`：还没配置的连接器，每项带 `fields`、`multiAccount`、`icon`。`cloud.installed`：已配置的，并带上 `accounts:[{id,label,status,error,checkedAt,values}]`，values 里的 secret 一律是 `"••••"`。没有 `builtin`，也没有 `custom`。 |
+| `GET /api/connectors/<name>/icon` | 官方图标文件，带长缓存头 |
 | `POST /api/connectors/<name>/accounts {values}` | 校验必填项 → `test()` → 成功就保存并返回 `{id,label,status:"ok"}`；失败返回 400 `{error}`，不保存。 |
 | `PUT /api/connectors/<name>/accounts/<id> {values}` | 修改账号；secret 字段传 `"••••"` 或不传，表示保持原值。同样要先 test。 |
 | `DELETE /api/connectors/<name>/accounts/<id>` | 删除账号；删到 0 个账号就卸掉这个 MCP server。 |
@@ -74,37 +75,37 @@ export default {
   - `add_account(name, values)`
   - `update_account(name, id, values)`
   - `remove_account(name, id)`
-- 用户在聊天里直接把授权码发给豆豆的话，豆豆可以代填（调用 `add_account`），但要提醒一句：「下次在 App 里点「连接」填表单更安全，聊天记录里会留下授权码」。
-- 提示词的工作目录表改为：
-  - `system/connectors/`：连接器配置。只能用 connectors 工具改，不能直接读写。
-  - `system/custom-connectors/<名>/`：自建连接器（插件格式）。目录里有的服务不要自建。
-- 「帮我接入「邮箱」连接器」这类消息的处理顺序：
-  1. 先 `list()`，确认是预置连接器。
-  2. 告诉用户去 App 的连接应用 → 邮箱 → 填表单，或者让用户把字段发过来由它代填。
-  3. 不写代码。
+- 用户要接入某个服务时：
+  1. 先 `list()`，看目录里有没有。没有就如实说暂时接不了。
+  2. 有的话，按 `fields` 告诉用户要准备什么、去哪里拿（照 `help` 说）。
+  3. 用户在 App 里自己填，或者把参数发过来由豆豆用 `add_account` 代填。代填时提醒一句：「在 App 里填表单更安全，聊天记录里会留下授权码」。
+  4. 不写代码、不读配置文件。
+- 提示词的工作目录表只保留 `system/connectors/`（只能用 connectors 工具改），删掉 `custom-connectors` 一行。
 
 ## 五、App
 
-- 云端目录里点「连接」，或点已连接的连接器，打开**连接器详情页**：
+- 云端标签页：已连接的在上面，可以接入的在下面，每项都是官方彩色图标 + 名字 + 一行说明。
+- 点进去是**连接器详情页**，所有连接器用同一个页面，没有特殊页：
   - 上方是图标、名字和说明，下面是账号列表，每个账号显示 label、状态点和错误原因，右侧有「重新测试」和「删除」。
   - 底部是「添加账号」，点开是按 `fields` 生成的表单：select 用分段控件或下拉；secret 是密码框，可以切换显示；`help` 写在字段下方的小字里；`showIf` 控制字段显隐。
   - 提交时按钮显示「正在验证…」。失败时把原因显示在表单上，已填的内容保留；成功后回到账号列表。
-- 自建连接器只读展示：名字、说明，标注「豆豆自建」。
 - 设备页里离线的设备可以「移除」，要二次确认。
-- 不再有「点连接 = 发一句聊天」。
 
-## 六、第一个连接器：邮箱（只读 IMAP）
+## 六、目录（0.4）
 
-- 预置（服务器、端口 993、SSL）：
-  - QQ：`imap.qq.com`
-  - 163：`imap.163.com`
-  - 126：`imap.126.com`
-  - Gmail：`imap.gmail.com`
-  - Outlook：`outlook.office365.com`
-  - 腾讯企业邮：`imap.exmail.qq.com`
-  - 阿里企业邮：`imap.qiye.aliyun.com`
-  - 其他：手动填。
-- 163、126 登录后要发 IMAP `ID` 命令，否则会报 Unsafe Login。
+### 邮箱（只读 IMAP，每家一个连接器）
+
+| name | 名字 | 服务器（端口 993、SSL） | 备注 |
+|---|---|---|---|
+| `qq-mail` | QQ 邮箱 | `imap.qq.com` | 授权码 |
+| `netease-163` | 163 邮箱 | `imap.163.com` | 登录后发 IMAP `ID` 命令，否则报 Unsafe Login |
+| `netease-126` | 126 邮箱 | `imap.126.com` | 同上 |
+| `gmail` | Gmail | `imap.gmail.com` | 应用专用密码；云主机要走代理 |
+| `exmail` | 腾讯企业邮 | `imap.exmail.qq.com` | |
+| `aliyun-mail` | 阿里企业邮 | `imap.qiye.aliyun.com` | |
+| `imap` | 其他邮箱 | 手动填服务器和端口 | |
+
+- Outlook 已经不支持密码登录 IMAP，不做。
 - 工具（account 可选，不填就查全部账号，结果里带上 account）：
   - `list_folders(account)`
   - `search({account?, folder?="INBOX", query?, from?, since?, until?, unread?, limit≤50, before?})`
@@ -116,4 +117,16 @@ export default {
   - `read_since({account?, limit≤100})` 和 `sync_commit({cursor})`
     - 和设备的补读协议一样：按每个账号 INBOX 的 UID 游标增量读取，commit 之后才推进游标。
 - 只读：不发信，不删信，不标记已读（BODY.PEEK）。
-- 依赖：`imapflow`，HTML 转文本用 `html-to-text`，或者自己写一个简单的剥标签。
+- 迁移：现有 `system/connectors/email/` 里的账号按 preset 搬到对应的新连接器（QQ → `qq-mail`，163 → `netease-163`），游标一起搬，然后删掉 `email` 目录。迁移脚本要能重复跑，不打印密钥。
+
+### Tavily
+
+- 字段：API Key（secret）。
+- 工具：`search({query, depth?, max_results?, time_range?})`、`extract({urls})`。
+- 什么时候用：日常搜索用内置的网页搜索；要做深入调研、或者要把网页正文整篇提取出来时用 Tavily。写进提示词。
+
+### 微信读书
+
+- 用微信读书 2026-05-17 发布的官方 Agent Gateway，个人 API Key 是 `wrk-` 开头，`Authorization: Bearer <key>`。
+- 字段：API Key（secret），`help` 写清在哪里生成。
+- 工具按官方接口封装：书架、阅读统计、划线、想法、书籍搜索。接口细节以官方 Skill 文档为准。
