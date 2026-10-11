@@ -11,6 +11,7 @@ export class BackgroundTasks {
     this.records = new Map();
     this.live = new Map();
     this.levelSeen = false;
+    this.shells = new Set(); // background shell commands are tool internals, not tasks
   }
 
   list() {
@@ -18,7 +19,7 @@ export class BackgroundTasks {
   }
 
   reset() {
-    this.records.clear(); this.live.clear(); this.levelSeen = false;
+    this.records.clear(); this.live.clear(); this.shells.clear(); this.levelSeen = false;
     this.bus.emit({ t: "task", phase: "snapshot", tasks: [] });
   }
 
@@ -31,7 +32,8 @@ export class BackgroundTasks {
       this.records.set(id, record);
     }
     if (m.run_id) record.runId = m.run_id;
-    if (m.description) record.description = this.redact(m.description);
+    // Progress edges carry the current step ("Running …"); the task keeps the name it started with.
+    if (m.description && (m.subtype === "task_started" || !record.description)) record.description = this.redact(m.description);
     record.description ||= "后台任务";
     return record;
   }
@@ -41,7 +43,7 @@ export class BackgroundTasks {
       this.levelSeen = true;
       const live = new Map();
       for (const item of m.tasks) {
-        if (item.ambient) continue;
+        if (item.ambient || this.isShell(item)) continue;
         const record = this.record(item);
         if (record) { record.background = true; live.set(record.id, record); }
       }
@@ -50,7 +52,7 @@ export class BackgroundTasks {
       return true;
     }
     if (!m.subtype?.startsWith("task_")) return false;
-    if (m.ambient) return true;
+    if (m.ambient || this.isShell(m)) return true;
     const record = this.record(m);
     if (!record) return true;
     if (m.subtype === "task_started") {
@@ -83,6 +85,11 @@ export class BackgroundTasks {
       startedAt: record.startedAt, status: m.status, patch: m.patch && this.redact({ ...m.patch, error: m.patch.error && humanError(m.patch.error) }),
       summary: taskError ? humanError(m.summary) : this.redact(m.summary), background: true });
     return true;
+  }
+
+  isShell(m) {
+    if (m.task_type && m.task_type !== "local_agent") this.shells.add(m.task_id);
+    return this.shells.has(m.task_id);
   }
 
   running(id) {

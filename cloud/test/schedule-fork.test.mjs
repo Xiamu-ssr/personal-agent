@@ -157,7 +157,6 @@ test("guard validates exact fork/background values, excludes child and isolated 
     { tool_name: "Agent", tool_input: { subagent_type: "general-purpose", run_in_background: true } },
     { tool_name: "Agent", tool_input: { subagent_type: "fork" } },
     { tool_name: "Agent", tool_input: { subagent_type: "fork", run_in_background: false } },
-    { tool_name: "Agent", tool_input: { subagent_type: "fork", run_in_background: "true" } },
     { tool_name: "Task", tool_input: { subagent_type: "fork", run_in_background: true } },
     { tool_name: "TaskCreate", tool_input: { subagent_type: "fork", run_in_background: true } }]) {
     h.beginMainTurn(main, null, "schedule");
@@ -171,6 +170,9 @@ test("guard validates exact fork/background values, excludes child and isolated 
     assert.equal(main.scheduleFork.dispatched, true);
     assert.deepEqual(h.checkScheduleFork(bash), {});
   }
+  // MiMo sends the boolean as a string; the CLI still runs it in the background.
+  h.beginMainTurn(main, null, "schedule");
+  assert.deepEqual(h.checkScheduleFork({ tool_name: "Agent", tool_input: { subagent_type: "fork", run_in_background: "true" } }), {});
   h.beginMainTurn(main, null, "schedule");
   h.onMainMessage({ type: "assistant", message: { content: [{ type: "tool_use", id: "original-background-fork", name: "Agent",
     input: { subagent_type: "fork", run_in_background: true } }] } });

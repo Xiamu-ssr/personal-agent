@@ -335,10 +335,14 @@ test("background level replaces activity, stop targets one task, and process end
   const { harness, calls, events } = setup(t), q = calls[0];
   const a = { task_id: "task-a", description: "A", task_type: "local_agent", run_id: "001" };
   const b = { task_id: "task-b", description: "B", task_type: "local_agent" };
-  q.emit({ type: "system", subtype: "background_tasks_changed", tasks: [a, b, { task_id: "ambient", ambient: true }] });
+  const shell = { task_id: "shell-1", description: "echo", task_type: "local_bash" };
+  q.emit({ type: "system", subtype: "background_tasks_changed", tasks: [a, b, shell, { task_id: "ambient", ambient: true }] });
   q.emit({ type: "system", subtype: "task_started", ...a, is_backgrounded: true });
+  q.emit({ type: "system", subtype: "task_progress", task_id: "task-a", description: "Running step" });
+  q.emit({ type: "system", subtype: "task_notification", task_id: "shell-1", status: "completed", summary: "done" });
   await flush(harness);
-  assert.deepEqual(harness.backgroundTasks().map((x) => x.id), ["task-a", "task-b"]);
+  assert.deepEqual(harness.backgroundTasks().map((x) => [x.id, x.description]), [["task-a", "A"], ["task-b", "B"]]);
+  assert.ok(!events.some((e) => e.t === "task" && e.id === "shell-1"), "background shell commands are not tasks");
   const startedAt = harness.backgroundTasks()[0].startedAt;
   await harness.stopTask("task-a");
   await flush(harness);

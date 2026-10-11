@@ -18,6 +18,8 @@ import { isBriefPath, isOutputPath, readBrief } from "./briefs.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const SCHEDULE_FORK_REASON = '定时简报请先用 Agent（subagent_type: "fork"，run_in_background: true）派到后台，再简短回复用户';
+// Some models send tool booleans as strings; the CLI accepts both.
+const isTrue = (v) => v === true || v === "true";
 const IMAGE_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
 const KIND_LABEL = { image: "图片", file: "文件", voice: "语音笔记" };
 
@@ -241,7 +243,7 @@ export class Harness {
     if (input.agent_id || !main?.turnOpen || main.reason !== "schedule" || !guard || guard.dispatched) return {};
     // The CLI strips run_in_background from its parsed Agent schema with the fork gate on.
     // Match its normalized hook input to the original assistant tool_use by id, never infer intent.
-    const background = input.tool_input?.run_in_background === true ||
+    const background = isTrue(input.tool_input?.run_in_background) ||
       (input.tool_input?.run_in_background === undefined && guard.requestedForks.has(input.tool_use_id));
     if (input.tool_name === "Agent" && input.tool_input?.subagent_type === "fork" && background) {
       guard.dispatched = true; // Once this call passes the guard, the rest of the main turn is unrestricted.
@@ -559,7 +561,7 @@ export class Harness {
       for (const b of m.message?.content || []) {
         if (b.type === "text") main.reply += (main.reply ? "\n\n" : "") + b.text;
         if (b.type === "tool_use") {
-          if (main.reason === "schedule" && b.name === "Agent" && b.input?.subagent_type === "fork" && b.input?.run_in_background === true) {
+          if (main.reason === "schedule" && b.name === "Agent" && b.input?.subagent_type === "fork" && isTrue(b.input?.run_in_background)) {
             main.scheduleFork.requestedForks.add(b.id);
           }
           main.toolsUsed = true;
