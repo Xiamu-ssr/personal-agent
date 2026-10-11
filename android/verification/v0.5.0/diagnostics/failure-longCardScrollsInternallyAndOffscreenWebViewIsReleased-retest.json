@@ -1,0 +1,72 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 27656
+    },
+    {
+      "method": "GET",
+      "path": "\/ws",
+      "body": "",
+      "at": 27670
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/briefs",
+      "body": "",
+      "at": 27671
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tree",
+      "body": "",
+      "at": 27673
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/history",
+      "body": "",
+      "at": 27683
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 27686
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 27686
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/profile",
+      "body": "",
+      "at": 27687
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tree",
+      "body": "",
+      "at": 28007
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 28009
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/briefs",
+      "body": "",
+      "at": 28013
+    }
+  ],
+  "navigationTab": 1,
+  "navigationStack": ""
+}

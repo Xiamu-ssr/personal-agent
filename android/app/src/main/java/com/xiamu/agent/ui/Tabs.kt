@@ -72,15 +72,16 @@ fun TasksScreen(bottom: Dp) {
         item { PageHeader("任务") { SettingsButton() } }
         item { SegTabs(listOf("任务", "定时"), seg, Modifier.padding(bottom=12.dp)) { seg = it } }
         if (seg == 0) {
-            val running = Chat.running.toList() + Chat.tasks.map { Running("task:${it.id}", it.description, it.startedAt) }
+            val running = (Chat.running.toList() + Chat.tasks.map { Running(it.id, it.description, it.startedAt) }).distinctBy { it.id }
             if (running.isNotEmpty()) item {
                 CardList {
                     running.forEachIndexed { i, r ->
                         if (i > 0) Hairline()
-                        val task = Chat.tasks.firstOrNull { "task:${it.id}" == r.id }
+                        val task = Chat.tasks.firstOrNull { it.id == r.id }
                         ListRow(r.label, "已运行 ${elapsed(r.started, now)}", leading = {
                             CircularProgressIndicator(Modifier.size(28.dp), color=Pal.Gold, strokeWidth=2.dp)
-                        }, trailing = { if (task != null) TaskStopButton(task) else Tag("进行中") })
+                        }, trailing = { if (task != null) TaskStopButton(task) else Tag("进行中") },
+                            onClick = { Nav.open(Route.TaskDetail(r.id, r.label)) })
                         if (task?.error?.isNotBlank() == true) ErrorNote(task.error)
                     }
                 }
@@ -96,14 +97,13 @@ fun TasksScreen(bottom: Dp) {
                         item { SectionTitle(group) }
                         item {
                             CardList {
-                                list.forEachIndexed { i, job ->
+                                list.filter { it.optString("id").isNotBlank() && it.optString("id") !in running.map { task -> task.id } }.distinctBy { it.optString("id") }.forEachIndexed { i, job ->
                                     if (i > 0) Hairline()
                                     val ok = job.optBoolean("ok")
                                     val path = job.optString("path").ifBlank { job.optJSONArray("outputs").strings().firstOrNull().orEmpty() }
                                     ListRow(job.optString("title").ifBlank { job.optString("label") }, "${whenLabel(job.optLong("ts"))} · ${if(ok) "成功" else "出错"}",
                                         if (ok) Icons.Outlined.CheckCircleOutline else Icons.Outlined.ErrorOutline, if(ok) Color(0xFF527C80) else Pal.Danger,
-                                        onClick = if(path.isBlank()) null else ({ if(path.startsWith("data/briefs/") && path.endsWith(".json")) Nav.brief(path)
-                                            else Nav.open(Route.Web(job.optString("title").ifBlank { path.substringAfterLast('/') }, path)) }))
+                                        onClick = { Nav.open(Route.TaskDetail(job.getString("id"), job.optString("title").ifBlank { job.optString("label") }, path.takeIf(::isBriefPath))) })
                                 }
                             }
                         }

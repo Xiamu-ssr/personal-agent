@@ -1,0 +1,14 @@
+      Window #1: WindowStateAnimator{17e2af9 com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity}
+  mCurrentFocus=Window{27f5faa u0 NotificationShade}
+  mFocusedApp=ActivityRecord{f4f585f u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t572}
+  mObscuringWindow=Window{bfe7b1d u0 com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity}
+      mPreferredTopFocusableRootTask=Task{968a7ab #1 type=home}
+      mLastFocusedRootTask=Task{968a7ab #1 type=home}
+        * ActivityRecord{6e919ef u0 com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity t590 f}}
+    mFocusedWindow=Window{27f5faa u0 NotificationShade}
+  ActivityRecord{6e919ef u0 com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity t590 f}}
+  Window #10 Window{bfe7b1d u0 com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity}:
+    WindowStateAnimator{17e2af9 com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity}:
+  mTopFocusedDisplayId=0
+     topApp=ActivityRecord{6e919ef u0 com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity t590 f}}
+     snapshot=TaskSnapshot{ mId=1791735043334 mCaptureTime=44874992395 mTopActivityComponent=com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity mSnapshot=android.hardware.HardwareBuffer@74ee77b (864x1920) mColorSpace=sRGB IEC61966-2.1 (id=0, model=RGB) mOrientation=1 mRotation=0 mTaskSize=Point(1080, 2400) mContentInsets=[0,136][0,63] mLetterboxInsets=[0,0][0,0] mIsLowResolution=false mIsRealSnapshot=true mWindowingMode=1 mAppearance=24 mIsTranslucent=false mHasImeSurface=false mInternalReferences=2

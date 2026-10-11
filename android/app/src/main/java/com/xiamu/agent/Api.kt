@@ -114,6 +114,24 @@ object Api {
     suspend fun briefs(): List<BriefDocument> = getJson("/api/briefs?days=7").optJSONArray("items").objects()
         .mapNotNull(BriefDocument::from).sortedByDescending { it.time }
 
+    suspend fun settings(): AgentSettings = AgentSettings.from(getJson("/api/settings"))
+    suspend fun saveSettings(model: String? = null, permissionMode: String? = null): AgentSettings {
+        require(model != null || permissionMode != null)
+        val body = JSONObject()
+        model?.let { body.put("model", it) }
+        permissionMode?.let { body.put("permissionMode", it) }
+        return AgentSettings.from(putJson("/api/settings", body))
+    }
+
+    suspend fun taskHistory(id: String): TaskHistory = TaskHistory.from(getJson("/api/tasks/${enc(id)}/history")).also {
+        require(it.id == id) { "返回的任务不匹配，请重试" }
+    }
+    suspend fun sendToTask(id: String, text: String) {
+        require(text.isNotBlank())
+        val result = postJson("/api/tasks/${enc(id)}/send", JSONObject().put("text", text))
+        check(result.getBoolean("ok") && result.getString("id") == id) { "任务续聊发送失败，请重试" }
+    }
+
     suspend fun profile(): AvatarChoice = AvatarChoice.from(getJson("/api/profile").optJSONObject("avatar"))
     suspend fun saveProfile(choice: AvatarChoice) {
         putJson("/api/profile", JSONObject().put("avatar", JSONObject().put("shape", choice.shape).put("palette", choice.palette)))

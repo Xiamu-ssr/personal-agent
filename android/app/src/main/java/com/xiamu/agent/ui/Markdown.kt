@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
+import com.xiamu.agent.briefPathInText
 
 private sealed class Block {
     class Heading(val level: Int, val text: String) : Block()
@@ -222,6 +223,7 @@ private fun MdTable(rows: List<List<String>>, fontSize: Int) {
 }
 
 private val linkStyle = TextLinkStyles(SpanStyle(color = Pal.Link, textDecoration = TextDecoration.Underline))
+private val markdownLink = Regex("""^\[([^\]]+)]\((https?://[^)\s]+|data/briefs/[^)\r\n]+\.html)\)""")
 
 fun inline(s: String): AnnotatedString = buildAnnotatedString {
     var i = 0
@@ -240,9 +242,15 @@ fun inline(s: String): AnnotatedString = buildAnnotatedString {
                 }
                 i = end + 1
             }
-            c == '[' && Regex("""^\[([^\]]+)]\((https?://[^)\s]+)\)""").find(s.substring(i)) != null -> {
-                val m = Regex("""^\[([^\]]+)]\((https?://[^)\s]+)\)""").find(s.substring(i))!!
-                withLink(LinkAnnotation.Url(m.groupValues[2], linkStyle)) { append(m.groupValues[1]) }
+            c == '[' && markdownLink.find(s.substring(i)) != null -> {
+                val m = markdownLink.find(s.substring(i))!!
+                val target = m.groupValues[2]
+                if (target.startsWith("http")) withLink(LinkAnnotation.Url(target, linkStyle)) { append(m.groupValues[1]) }
+                else {
+                    val brief = briefPathInText(m.value)
+                    if (brief == null) append(m.value)
+                    else withLink(LinkAnnotation.Clickable(brief, linkStyle) { Nav.brief(brief) }) { append(m.groupValues[1]) }
+                }
                 i += m.value.length
             }
             c == '*' && i + 1 < s.length && s[i + 1] != ' ' && s.indexOf('*', i + 1) > i + 1 -> {

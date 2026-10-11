@@ -1,0 +1,56 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V5Checks:
+INSTRUMENTATION_STATUS: test=longCardScrollsInternallyAndOffscreenWebViewIsReleased
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.waitWeb(V5Checks.kt:90)
+	at com.xiamu.agent.V5Checks.longCardScrollsInternallyAndOffscreenWebViewIsReleased$lambda$27(V5Checks.kt:135)
+	at com.xiamu.agent.V5Checks.$r8$lambda$4u_UrKXVykCIUdGuSFOm6XmoQb8(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda15.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:52)
+	at com.xiamu.agent.V5Checks.longCardScrollsInternallyAndOffscreenWebViewIsReleased(V5Checks.kt:134)
+
+INSTRUMENTATION_STATUS: stream=
+Error in longCardScrollsInternallyAndOffscreenWebViewIsReleased(com.xiamu.agent.V5Checks):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.waitWeb(V5Checks.kt:90)
+	at com.xiamu.agent.V5Checks.longCardScrollsInternallyAndOffscreenWebViewIsReleased$lambda$27(V5Checks.kt:135)
+	at com.xiamu.agent.V5Checks.$r8$lambda$4u_UrKXVykCIUdGuSFOm6XmoQb8(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda15.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:52)
+	at com.xiamu.agent.V5Checks.longCardScrollsInternallyAndOffscreenWebViewIsReleased(V5Checks.kt:134)
+
+INSTRUMENTATION_STATUS: test=longCardScrollsInternallyAndOffscreenWebViewIsReleased
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 21.359
+There was 1 failure:
+1) longCardScrollsInternallyAndOffscreenWebViewIsReleased(com.xiamu.agent.V5Checks)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.waitWeb(V5Checks.kt:90)
+	at com.xiamu.agent.V5Checks.longCardScrollsInternallyAndOffscreenWebViewIsReleased$lambda$27(V5Checks.kt:135)
+	at com.xiamu.agent.V5Checks.$r8$lambda$4u_UrKXVykCIUdGuSFOm6XmoQb8(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda15.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:52)
+	at com.xiamu.agent.V5Checks.longCardScrollsInternallyAndOffscreenWebViewIsReleased(V5Checks.kt:134)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

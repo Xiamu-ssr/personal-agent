@@ -1,0 +1,6 @@
+  mCurrentFocus=Window{70d9055 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}
+  mFocusedApp=ActivityRecord{7f63e47 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t593}
+      mPreferredTopFocusableRootTask=Task{1e6e9f8 #1 type=home}
+      mLastFocusedRootTask=Task{1e6e9f8 #1 type=home}
+    mFocusedWindow=Window{70d9055 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}
+  mTopFocusedDisplayId=0

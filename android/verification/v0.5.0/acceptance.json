@@ -1,0 +1,16 @@
+{
+  "fixture": "loopback only",
+  "avd": "pa35",
+  "serial": "emulator-5554",
+  "tests": 13,
+  "classes": "com.xiamu.agent.V5Checks,com.xiamu.agent.ContentChecks",
+  "passed": true,
+  "emulatorClosed": true,
+  "unitTests": 37,
+  "normalActivityPollingPassed": true,
+  "historyIntervalsMs": [
+    3108,
+    3006
+  ],
+  "report": "REVIEW-v0.5.0.txt"
+}

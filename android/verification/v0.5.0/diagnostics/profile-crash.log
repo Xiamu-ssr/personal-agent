@@ -1,0 +1,15 @@
+--------- beginning of crash
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: FATAL EXCEPTION: main
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: Process: com.xiamu.agent.checks, PID: 1922
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: android.app.RemoteServiceException$ForegroundServiceDidNotStartInTimeException: Context.startForegroundService() did not then call Service.startForeground(): ServiceRecord{343aba4 u0 com.xiamu.agent.checks/com.xiamu.agent.device.DeviceService c:com.xiamu.agent.checks}
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.app.ActivityThread.generateForegroundServiceDidNotStartInTimeException(ActivityThread.java:2271)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.app.ActivityThread.throwRemoteServiceException(ActivityThread.java:2239)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.app.ActivityThread.-$$Nest$mthrowRemoteServiceException(Unknown Source:0)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2557)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:107)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:232)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:317)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:8705)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)
+10-12 00:14:13.488  1922  1922 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)

@@ -1,0 +1,42 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "\/ws",
+      "body": "",
+      "at": 57194
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tasks\/running-purchase\/history",
+      "body": "",
+      "at": 58770
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 61505
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 61516
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/history",
+      "body": "",
+      "at": 61521
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/profile",
+      "body": "",
+      "at": 61537
+    }
+  ],
+  "navigationTab": 2,
+  "navigationStack": "TaskDetail(id=running-purchase, title=整理采购资料, briefPath=null)"
+}

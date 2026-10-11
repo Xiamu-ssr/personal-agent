@@ -39,21 +39,6 @@ class V4Checks {
     }
     private fun longPress(text: String) { compose.onNodeWithText(text).performTouchInput { longClick() } }
 
-    @Test fun todayUsesNativeMulticardBriefsAndActionSendsToChat()=review("today") { activity ->
-        waitText("今天先收尾，再留出下午")
-        compose.onNodeWithText("今天").assertExists()
-        compose.onNodeWithText("收尾周报").assertExists()
-        compose.onNodeWithText("带伞").assertExists()
-        shot("today-brief-overview")
-        compose.onNodeWithText("日历暂不可读：另一台手机离线").performScrollTo().assertIsDisplayed()
-        shot("today-brief-topic")
-        compose.onNodeWithText("排一下今天的顺序").performScrollTo().performClick()
-        compose.waitUntil(5000) { Chat.items.filterIsInstance<ChatItem.User>().any { it.text=="帮我把今天的事排个顺序" } }
-        var fixture: V4Fixture?=null
-        activity.onActivity { fixture=it.fixture }
-        compose.waitUntil(5000) { fixture!!.messages.any { it.optString("t")=="send" } }
-        activity.onActivity { assertEquals(0,Nav.tab.intValue); assertEquals("send",it.fixture.messages.last().optString("t")) }
-    }
     @Test fun todayEmptyGetsTimeFromSchedule()=review("today-empty") {
         waitText("今天还没有简报 · 晨报 7:30")
         shot("today-empty")
@@ -130,7 +115,9 @@ class V4Checks {
         assertEquals(1,Chat.tasks.size)
         shot("task-stopping")
         compose.onNodeWithText("晨报已生成").performClick()
-        waitText("今天先收尾，再留出下午")
+        waitText("任务说明")
+        compose.onNodeWithText("看简报").performScrollTo().performClick()
+        waitText("简报")
         activity.onActivity { assertEquals(1,Nav.tab.intValue) }
     }
     @Test fun tasksScheduleHasTwoSegmentsAndRunsBriefAlarm()=review("tasks") { activity ->

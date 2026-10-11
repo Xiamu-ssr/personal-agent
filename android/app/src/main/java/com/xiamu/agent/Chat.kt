@@ -149,8 +149,10 @@ object Chat {
         io.launch {
             runCatching { Api.getJson("/api/jobs") }.onSuccess { j ->
                 if (session != generation || revision != jobsRevision) return@onSuccess
-                val jobs = j.optJSONArray("running").objects().map { Running("job:" + it.optString("label"), it.optString("label"), it.optLong("started")) }
-                running.removeAll { it.id.startsWith("job:") }
+                val jobs = j.optJSONArray("running").objects().mapNotNull {
+                    it.optString("id").takeIf(String::isNotBlank)?.let { id -> Running(id, it.optString("label"), it.optLong("started")) }
+                }
+                running.clear()
                 running.addAll(0, jobs)
                 jobsError.value = ""
             }.onFailure {
@@ -254,14 +256,15 @@ object Chat {
             "job" -> {
                 jobsRevision++
                 val label = m.optString("label")
-                running.removeAll { it.id == "job:$label" }
+                val id = m.optString("id")
+                running.removeAll { it.id == id }
                 if (m.optString("phase") == "done") {
                     val out = listOf(m.optString("path")).filter { it.isNotBlank() } + m.optJSONArray("outputs").strings()
-                    if (out.isNotEmpty()) items.add(ChatItem.Card(m.optString("title"), label, out.first(), System.currentTimeMillis()))
+                    if (out.isNotEmpty()) items.add(ChatItem.Card(m.optString("title"), label, out.first(), m.optLong("ts", System.currentTimeMillis())))
                     filesVersion.intValue++
                     historyRevision++
-                } else {
-                    running.add(0, Running("job:$label", label, System.currentTimeMillis()))
+                } else if (id.isNotBlank()) {
+                    running.add(0, Running(id, label, m.optLong("started", System.currentTimeMillis())))
                 }
             }
         }

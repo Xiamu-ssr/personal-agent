@@ -1,0 +1,14 @@
+{
+  "source": "普通 debug Activity，未运行 Compose 测试时钟",
+  "swipes": 8,
+  "emulatorCores": 2,
+  "configuredRamMb": 2048,
+  "gpu": "host",
+  "frames": 243,
+  "jankyFrames": 22,
+  "jankyPercent": 9.05,
+  "p50Ms": 22,
+  "p90Ms": 48,
+  "p95Ms": 85,
+  "p99Ms": 200
+}

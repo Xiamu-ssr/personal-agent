@@ -313,11 +313,14 @@ private fun ChatRow(item: ChatItem, highlight: Boolean) {
         is ChatItem.Card -> {
             val c = ctx()
             val scope = rememberCoroutineScope()
-            if(item.path?.startsWith("data/briefs/") == true && item.path.endsWith(".json")) {
+            if(item.path != null && com.xiamu.agent.isBriefPath(item.path)) {
                 val (brief, _) = load("chat-brief:${item.path}") { com.xiamu.agent.Api.briefs().firstOrNull { it.path == item.path } }
-                Column(Modifier.fillMaxWidth().tap { Nav.brief(item.path) }) {
-                    val card = brief?.cards?.firstOrNull() ?: com.xiamu.agent.BriefCard(item.label,item.title,"",emptyList(),null)
-                    BriefCardView(card,compact=true)
+                Row(Modifier.fillMaxWidth().card(radius = 20.dp).tap { Nav.brief(item.path) }.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconTile(Icons.AutoMirrored.Outlined.Article, Pal.Link, 42.dp)
+                    Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                        Text(brief?.name ?: item.label.ifBlank { item.title }, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Pal.Ink)
+                        Text(whenLabel(brief?.time ?: item.ts), fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(top = 4.dp))
+                    }
                 }
                 return
             }

@@ -1,0 +1,8 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V5Checks:
+INSTRUMENTATION_STATUS: test=longCardScrollsInternallyAndOffscreenWebViewIsReleased
+INSTRUMENTATION_STATUS_CODE: 1

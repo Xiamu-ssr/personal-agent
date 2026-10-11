@@ -1,0 +1,7 @@
+Starting: Intent { cmp=com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity (has extras) }
+Status: ok
+LaunchState: COLD
+Activity: com.xiamu.agent.checks/com.xiamu.agent.V5ReviewActivity
+TotalTime: 705
+WaitTime: 707
+Complete

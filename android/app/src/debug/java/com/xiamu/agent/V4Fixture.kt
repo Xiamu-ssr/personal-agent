@@ -10,7 +10,7 @@ import java.time.*
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
-/** v0.4 exact contract. No forwarding, live accounts, external chat, upload or task execution. */
+/** Local regression fixture using the current brief/settings/history contract. No forwarding, live accounts, external chat, upload or task execution. */
 class V4Fixture(private val context: Context,val scenario: String) {
     private val server=MockWebServer()
     private var socket: WebSocket?=null
@@ -27,8 +27,8 @@ class V4Fixture(private val context: Context,val scenario: String) {
     var tooLate=false
     var failSave=false
     var verifying=false
-    val briefPath="data/briefs/$day/晨报.json"
-    val secondPath="data/briefs/$day/采购.json"
+    val briefPath="data/briefs/$day/晨报.html"
+    val secondPath="data/briefs/$day/采购.html"
     val url get()="http://127.0.0.1:${server.port}"
 
     init {
@@ -50,6 +50,13 @@ class V4Fixture(private val context: Context,val scenario: String) {
                     path=="/api/profile" && request.method=="PUT" -> { profile=JSONObject(request.body.readUtf8()); json(profile) }
                     path=="/api/briefs" -> json(JSONObject().put("items",if(scenario=="today-empty") JSONArray() else briefs()))
                     path=="/api/jobs" -> json(JSONObject().put("running",JSONArray()).put("recent",JSONArray().put(job("晨报已生成",briefPath,now,true)).put(job("采购资料已整理","data/sites/purchase/index.html",now-86400000,true)).put(job("上周核对未完成","",now-10*86400000,false))))
+                    path=="/api/settings" -> json(V5Fixture.settingsDocument())
+                    path.startsWith("/api/tasks/") && path.endsWith("/history") -> {
+                        val id=request.requestUrl!!.pathSegments[2]
+                        json(JSONObject().put("id",id).put("title",id).put("status",if(id=="purchase") "running" else "done")
+                            .put("items",JSONArray().put(JSONObject().put("kind","prompt").put("text","整理今天的安排").put("time",now))
+                                .put(JSONObject().put("kind","result").put("text","已整理完成。 [晨报]($briefPath)").put("time",now))))
+                    }
                     path=="/api/tree" -> tree(request.requestUrl?.queryParameter("dir").orEmpty())
                     path=="/api/connectors" -> json(connectors)
                     path.matches(Regex("/api/connectors/[^/]+/icon")) -> {
@@ -75,16 +82,9 @@ class V4Fixture(private val context: Context,val scenario: String) {
     }
     private fun json(j: JSONObject,status: Int=200)=MockResponse().setResponseCode(status).setHeader("Content-Type","application/json").setBody(j.toString())
     private fun tasks()=if(scenario=="today-empty") JSONArray() else JSONArray().put(JSONObject().put("id","purchase").put("description","整理采购资料").put("startedAt",now-180000))
-    private fun job(title: String,path: String,time: Long,ok: Boolean)=JSONObject().put("title",title).put("label",title).put("path",path).put("ts",time).put("ok",ok)
+    private fun job(title: String,path: String,time: Long,ok: Boolean)=JSONObject().put("id",title).put("title",title).put("label",title).put("path",path).put("ts",time).put("ok",ok)
 
-    fun briefs(): JSONArray {
-        val main=JSONObject("""{"v":1,"name":"晨报","cards":[{"chip":"今日总览","title":"今天先收尾，再留出下午","summary":"周报已经到最后一轮，上午适合集中完成。","blocks":[{"type":"timeline","items":[{"when":"10:30","label":"收尾周报","text":"核对本周进展"},{"when":"15:00","label":"采购回访","text":"确认交期"}]},{"type":"tiles","items":[{"title":"天气","text":"多云转小雨 18–24°","tag":"带伞","tone":"warn"},{"title":"出行","text":"下午去仓库","tag":"已安排","tone":"ok"}]},{"type":"metrics","items":[{"label":"睡眠","value":"7.2","unit":"小时","delta":"+0.5"},{"label":"步数","value":"6840","unit":"步"}]},{"type":"list","items":[{"text":"样品已送到前台","meta":"午休前取回"}]}],"action":{"label":"排一下今天的顺序","prompt":"帮我把今天的事排个顺序"}},{"chip":"采购 · 收口","title":"先确认交期，再补齐样品","summary":"两家供应商已回复，仍有一项待核对。","blocks":[{"type":"note","text":"日历暂不可读：另一台手机离线"}]}]}""")
-        val time=day.atTime(7,36).atZone(ZoneId.systemDefault()).toOffsetDateTime().toString()
-        main.put("time",time)
-        val yesterday=JSONObject(main.toString()).put("name","晚报").put("time",day.minusDays(1).atTime(21,0).atZone(ZoneId.systemDefault()).toOffsetDateTime().toString())
-        return JSONArray().put(JSONObject().put("date",day.toString()).put("name","晨报").put("time",time).put("path",briefPath).put("brief",main))
-            .put(JSONObject().put("date",day.minusDays(1).toString()).put("name","晚报").put("time",yesterday.getString("time")).put("path","data/briefs/${day.minusDays(1)}/晚报.json").put("brief",yesterday))
-    }
+    fun briefs(): JSONArray = ReviewBriefs.items(day)
     private fun entry(name: String,dir: Boolean)=JSONObject().put("name",name).put("dir",dir).put("mtime",now).put("size",100)
     private fun tree(dir: String): MockResponse {
         val entries=when(dir) {

@@ -1,0 +1,54 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "\/ws",
+      "body": "",
+      "at": 32152
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/settings",
+      "body": "",
+      "at": 32171
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 32195
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 32198
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/history",
+      "body": "",
+      "at": 32203
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/profile",
+      "body": "",
+      "at": 32204
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/settings",
+      "body": "",
+      "at": 32485
+    },
+    {
+      "method": "PUT",
+      "path": "\/api\/settings",
+      "body": "{\"permissionMode\":\"bypassPermissions\"}",
+      "at": 32512
+    }
+  ],
+  "navigationTab": 0,
+  "navigationStack": "RuntimeSettings(permissions=true)"
+}

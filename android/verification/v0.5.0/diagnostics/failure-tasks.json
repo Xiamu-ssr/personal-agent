@@ -1,0 +1,144 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "\/ws",
+      "body": "",
+      "at": 214453
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 215097
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 215155
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 216072
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 216318
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/history",
+      "body": "",
+      "at": 216929
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 216977
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 217010
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/profile",
+      "body": "",
+      "at": 217188
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 217527
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 217802
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tasks\/done-morning\/history",
+      "body": "",
+      "at": 218256
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 220075
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tree",
+      "body": "",
+      "at": 220076
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/briefs",
+      "body": "",
+      "at": 220083
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 221720
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 221721
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 221771
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 221812
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tasks\/done-morning\/history",
+      "body": "",
+      "at": 222403
+    },
+    {
+      "method": "POST",
+      "path": "\/api\/tasks\/done-morning\/send",
+      "body": "{\"text\":\"把采购交期放在最前面，再补一版。\"}",
+      "at": 223646
+    },
+    {
+      "method": "POST",
+      "path": "\/api\/tasks\/done-morning\/send",
+      "body": "{\"text\":\"把采购交期放在最前面，再补一版。\"}",
+      "at": 224626
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tasks\/done-morning\/history",
+      "body": "",
+      "at": 225020
+    }
+  ],
+  "navigationTab": 2,
+  "navigationStack": "TaskDetail(id=done-morning, title=晨报已生成, briefPath=data\/briefs\/2026-10-11\/晨报.html)"
+}

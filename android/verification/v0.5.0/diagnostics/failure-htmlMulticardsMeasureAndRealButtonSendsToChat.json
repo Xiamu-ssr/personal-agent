@@ -1,0 +1,78 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "\/ws",
+      "body": "",
+      "at": 26103
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 26118
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tree",
+      "body": "",
+      "at": 26119
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/briefs",
+      "body": "",
+      "at": 26133
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/history",
+      "body": "",
+      "at": 26153
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 26154
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs",
+      "body": "",
+      "at": 26155
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/profile",
+      "body": "",
+      "at": 26157
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state",
+      "body": "",
+      "at": 26466
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/briefs",
+      "body": "",
+      "at": 26466
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/tree",
+      "body": "",
+      "at": 26469
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/briefs",
+      "body": "",
+      "at": 27243
+    }
+  ],
+  "navigationTab": 0,
+  "navigationStack": ""
+}

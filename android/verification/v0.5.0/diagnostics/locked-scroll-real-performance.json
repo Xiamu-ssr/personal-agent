@@ -1,0 +1,7 @@
+{
+  "source": "普通 debug Activity，未运行 Compose 测试时钟",
+  "swipes": 8,
+  "emulatorCores": 2,
+  "configuredRamMb": 2048,
+  "gpu": "host"
+}

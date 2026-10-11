@@ -1,0 +1,289 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V5Checks:
+INSTRUMENTATION_STATUS: test=scrollKeepsWebViewsBounded
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=scrollKeepsWebViewsBounded
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=htmlMulticardsMeasureAndRealButtonSendsToChat
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat$lambda$25(V5Checks.kt:128)
+	at com.xiamu.agent.V5Checks.$r8$lambda$kuitsydczzS3PnNiunoQ9iMN-F0(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda5.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:47)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat(V5Checks.kt:113)
+
+INSTRUMENTATION_STATUS: stream=
+Error in htmlMulticardsMeasureAndRealButtonSendsToChat(com.xiamu.agent.V5Checks):
+java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat$lambda$25(V5Checks.kt:128)
+	at com.xiamu.agent.V5Checks.$r8$lambda$kuitsydczzS3PnNiunoQ9iMN-F0(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda5.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:47)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat(V5Checks.kt:113)
+
+INSTRUMENTATION_STATUS: test=htmlMulticardsMeasureAndRealButtonSendsToChat
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=longCardScrollsInternallyAndOffscreenWebViewIsReleased
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=longCardScrollsInternallyAndOffscreenWebViewIsReleased
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=offlineCardBlocksRequestsPopupsNavigationAndAllowsInlineImages
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=offlineCardBlocksRequestsPopupsNavigationAndAllowsInlineImages
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=modelChoiceUsesGetPutAndRetainsSelectionOnFailure
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=modelChoiceUsesGetPutAndRetainsSelectionOnFailure
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: Failed to assert the following: (Selected = 'true')
+Semantics of the node:
+Node #671 at (l=100.0, t=680.0, r=980.0, b=913.0)px, Tag: 'setting:bypassPermissions'
+Role = 'RadioButton'
+Selected = 'false'
+Text = '[完全放行, 什么都不拦]'
+[Disabled]
+Actions = [OnClick, SetTextSubstitution, ShowTextSubstitution, ClearTextSubstitution, GetTextLayoutResult]
+MergeDescendants = 'true'
+Has 1 sibling
+Selector used: (TestTag = 'setting:bypassPermissions')
+
+	at androidx.compose.ui.test.AssertionsKt.assert(Assertions.kt:265)
+	at androidx.compose.ui.test.AssertionsKt.assert$default(Assertions.kt:255)
+	at androidx.compose.ui.test.AssertionsKt.assertIsSelected(Assertions.kt:84)
+	at com.xiamu.agent.V5Checks.permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode$lambda$42(V5Checks.kt:206)
+	at com.xiamu.agent.V5Checks.$r8$lambda$jv1xKCZvJ-YKqQla4oIW0-VHjjg(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda10.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:47)
+	at com.xiamu.agent.V5Checks.permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode(V5Checks.kt:201)
+
+INSTRUMENTATION_STATUS: stream=
+Error in permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode(com.xiamu.agent.V5Checks):
+java.lang.AssertionError: Failed to assert the following: (Selected = 'true')
+Semantics of the node:
+Node #671 at (l=100.0, t=680.0, r=980.0, b=913.0)px, Tag: 'setting:bypassPermissions'
+Role = 'RadioButton'
+Selected = 'false'
+Text = '[完全放行, 什么都不拦]'
+[Disabled]
+Actions = [OnClick, SetTextSubstitution, ShowTextSubstitution, ClearTextSubstitution, GetTextLayoutResult]
+MergeDescendants = 'true'
+Has 1 sibling
+Selector used: (TestTag = 'setting:bypassPermissions')
+
+	at androidx.compose.ui.test.AssertionsKt.assert(Assertions.kt:265)
+	at androidx.compose.ui.test.AssertionsKt.assert$default(Assertions.kt:255)
+	at androidx.compose.ui.test.AssertionsKt.assertIsSelected(Assertions.kt:84)
+	at com.xiamu.agent.V5Checks.permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode$lambda$42(V5Checks.kt:206)
+	at com.xiamu.agent.V5Checks.$r8$lambda$jv1xKCZvJ-YKqQla4oIW0-VHjjg(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda10.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:47)
+	at com.xiamu.agent.V5Checks.permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode(V5Checks.kt:201)
+
+INSTRUMENTATION_STATUS: test=permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=completedTaskOpensFromListShowsBriefAndContinuesSameTask
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=completedTaskOpensFromListShowsBriefAndContinuesSameTask
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.ContentChecks:
+INSTRUMENTATION_STATUS: test=siteMetadataHandlesAttributeOrderAndEntities
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=siteMetadataHandlesAttributeOrderAndEntities
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=10
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=connectorParserOnlyListsInstalledAndCatalogAndSecretsStayMasked
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=10
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=connectorParserOnlyListsInstalledAndCatalogAndSecretsStayMasked
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=11
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=avatarIdsMatchV4ProfileContract
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=11
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=avatarIdsMatchV4ProfileContract
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=12
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=briefInputRejectsRemovedJsonFormat
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=12
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=briefInputRejectsRemovedJsonFormat
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=13
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=briefsLoadCompleteHtmlDocumentsOnly
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=13
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=13
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=briefsLoadCompleteHtmlDocumentsOnly
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 20.594
+There were 2 failures:
+1) htmlMulticardsMeasureAndRealButtonSendsToChat(com.xiamu.agent.V5Checks)
+java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat$lambda$25(V5Checks.kt:128)
+	at com.xiamu.agent.V5Checks.$r8$lambda$kuitsydczzS3PnNiunoQ9iMN-F0(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda5.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:47)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat(V5Checks.kt:113)
+2) permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode(com.xiamu.agent.V5Checks)
+java.lang.AssertionError: Failed to assert the following: (Selected = 'true')
+Semantics of the node:
+Node #671 at (l=100.0, t=680.0, r=980.0, b=913.0)px, Tag: 'setting:bypassPermissions'
+Role = 'RadioButton'
+Selected = 'false'
+Text = '[完全放行, 什么都不拦]'
+[Disabled]
+Actions = [OnClick, SetTextSubstitution, ShowTextSubstitution, ClearTextSubstitution, GetTextLayoutResult]
+MergeDescendants = 'true'
+Has 1 sibling
+Selector used: (TestTag = 'setting:bypassPermissions')
+
+	at androidx.compose.ui.test.AssertionsKt.assert(Assertions.kt:265)
+	at androidx.compose.ui.test.AssertionsKt.assert$default(Assertions.kt:255)
+	at androidx.compose.ui.test.AssertionsKt.assertIsSelected(Assertions.kt:84)
+	at com.xiamu.agent.V5Checks.permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode$lambda$42(V5Checks.kt:206)
+	at com.xiamu.agent.V5Checks.$r8$lambda$jv1xKCZvJ-YKqQla4oIW0-VHjjg(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda10.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:47)
+	at com.xiamu.agent.V5Checks.permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode(V5Checks.kt:201)
+
+FAILURES!!!
+Tests run: 13,  Failures: 2
+
+
+INSTRUMENTATION_CODE: -1

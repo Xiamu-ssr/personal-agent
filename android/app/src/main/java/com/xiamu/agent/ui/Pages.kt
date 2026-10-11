@@ -73,6 +73,8 @@ import java.util.Locale
 /** Pages pushed on top of the tabs. */
 sealed interface Route {
     data object Settings : Route
+    data class RuntimeSettings(val permissions: Boolean = false) : Route
+    data class TaskDetail(val id: String, val title: String, val briefPath: String? = null) : Route
     data class Connectors(val tab: Int = 0, val device: String? = null) : Route
     data class ConnectorDetail(val connector: ConnectorInfo) : Route
     data class ConnectorForm(val connector: ConnectorInfo, val account: ConnectorAccount? = null) : Route
@@ -125,6 +127,8 @@ fun RoutePage(r: Route) {
         is Route.Doc -> DocPage(r)
         is Route.Image -> ImagePage(r.path)
         Route.Settings -> SettingsScreen()
+        is Route.RuntimeSettings -> RuntimeSettingsScreen(r.permissions)
+        is Route.TaskDetail -> TaskDetailScreen(r)
         is Route.Connectors -> ConnectorsScreen(r)
         is Route.ConnectorDetail -> ConnectorDetailScreen(r)
         is Route.ConnectorForm -> ConnectorFormScreen(r)

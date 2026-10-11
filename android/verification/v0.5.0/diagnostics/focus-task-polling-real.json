@@ -1,0 +1,13 @@
+{
+  "historyRequests": 3,
+  "processId": 1870,
+  "clock": "SystemClock.uptimeMillis",
+  "intervalsMs": [
+    1261,
+    12
+  ],
+  "nanoIntervalsMs": [
+    1261,
+    12
+  ]
+}

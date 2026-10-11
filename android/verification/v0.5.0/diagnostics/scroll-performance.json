@@ -1,0 +1,9 @@
+{
+  "swipes": 8,
+  "maxAttachedWebViews": 3,
+  "frames": 91,
+  "meanMs": 643.0694526153845,
+  "p95Ms": 1359.629159,
+  "over32ms": 91,
+  "maxMs": 1914.607174
+}

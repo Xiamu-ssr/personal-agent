@@ -1,0 +1,122 @@
+Android 0.5.0 本地实现与验收报告
+2026-10-12，versionName 0.5.0，versionCode 7。
+
+HTML 简报、模型/权限单选、任务记录与同一任务续聊已完成，准备交给 Claude 集成 review。
+最终 JVM 测试 37/37、模拟器检查 13/13、普通页面真实时间刷新及 release 签名校验通过。
+只修改 personal-agent/android/**。没有 commit、push、发布、部署、ssh 或真实云端聊天、上传、连接与任务执行。
+没有操作系统授权弹窗。所有功能请求均来自只监听 127.0.0.1 的假服务，pa35 已执行 emu kill 并关闭。
+
+实现方式：
+
+1. 简报
+   - 删除 0.4 的 BriefCard/BriefBlock/BriefPart 等 JSON 原生模型与卡片组件，只读顶层 cards[].html。
+   - 每个 HTML 文档原样从内存返回给独立离线 origin 的 WebView；通过响应头添加 CSP，没有拼接文档或详情页。
+   - 加载后读取 document.documentElement.scrollHeight，按 CSS/native 宽度换算高度，上限为屏幕高度的 75%。
+   - 长卡片自行滚动；卡片边界保留 v3 圆角、阴影与间距。
+   - 只接受主框架的 doudou://prompt?text=，解码一次后发用户消息并切到聊天。其他导航全部消费。
+   - 网络、文件、content、弹窗、iframe、下载和权限请求均拦截；允许内嵌 data 图片。没有 JavaScript 原生接口。
+   - LazyColumn 按卡片拆成独立 item，只为可见项加载 WebView；缓存高度供占位使用。
+     AndroidView onReset 暂停、清回调并供复用，onRelease 销毁；重新绑定会更新 HTML、origin 与按钮回调。
+   - 聊天中的简报卡只显示名称和时间，点击跳今日并定位该简报。
+
+2. 模型与权限
+   - 设置页增加两项入口，采用大标题、圆角单选列表、每项一行 note 的布局。
+   - 选项、当前选择与说明全部来自 GET /api/settings，没有生产模型/权限目录硬编码。
+   - PUT 只发送正在更改的字段，以返回结构更新选择；保存失败保留原选择并提示重试。
+   - 页面显示“从下一轮开始生效”。假服务中的消耗倍数只是测试数据。
+
+3. 任务详情与续聊
+   - 进行中和已完成任务都用服务端 id 打开详情，删除按 label 构造 job id 的做法。
+   - 显示任务说明、默认折叠的步骤摘要、Markdown 结果；步骤展开后每项一行。
+   - 有简报的结果提供“看简报”，Markdown 中的简报链接也会跳今日，不显示裸路径标记。
+   - 底部 POST /api/tasks/<id>/send，校验响应仍是同一 id；失败保留输入，成功后刷新该任务。
+   - 运行中的记录由独立 lifecycle.coroutineScope 每 3 秒刷新，不依赖 Compose 渲染时钟。
+     页面停止或离开时取消，任务进入终态后停止轮询。加载失败保留已有记录并提供重试。
+
+改动文件（以下均相对 android/）：
+
+- app/build.gradle.kts：版本与 JVM JSON 测试依赖；保留现有 release 签名配置。
+- app/src/main/java/com/xiamu/agent/Api.kt：settings/history/send 接口。
+- app/src/main/java/com/xiamu/agent/Briefs.kt：HTML DTO、路径与 prompt URL 规则。
+- app/src/main/java/com/xiamu/agent/AgentSettings.kt：设置合同解析。
+- app/src/main/java/com/xiamu/agent/TaskHistory.kt：记录、状态、步骤与结果解析。
+- app/src/main/java/com/xiamu/agent/Chat.kt：真实任务 id 和简报完成时间。
+- app/src/main/java/com/xiamu/agent/ui/Today.kt：多卡列表、可见项加载、简报定位。
+- app/src/main/java/com/xiamu/agent/ui/HtmlBrief.kt：离线 WebView、测量、内部滚动、复用与拦截。
+- app/src/main/java/com/xiamu/agent/ui/RuntimeSettings.kt：模型和权限单选页。
+- app/src/main/java/com/xiamu/agent/ui/TaskDetail.kt：说明、步骤、结果、续聊及生命周期刷新。
+- app/src/main/java/com/xiamu/agent/ui/Account.kt：设置入口与当前选择摘要。
+- app/src/main/java/com/xiamu/agent/ui/Pages.kt：新页面路由。
+- app/src/main/java/com/xiamu/agent/ui/Tabs.kt：所有任务可打开详情，按 id 去重。
+- app/src/main/java/com/xiamu/agent/ui/ChatScreen.kt：简报名/时间与今日跳转。
+- app/src/main/java/com/xiamu/agent/ui/Markdown.kt：简报 Markdown 链接渲染和跳转。
+- app/src/debug/AndroidManifest.xml：验收 Activity；关闭 debug 包的开机设备服务自动启动。
+- app/src/debug/java/com/xiamu/agent/V5Fixture.kt：完整合同假服务、多卡 HTML、失败与完成模拟。
+- app/src/debug/java/com/xiamu/agent/V5ReviewActivity.kt：隔离入口和真实时间记录。
+- app/src/debug/java/com/xiamu/agent/V4Fixture.kt：旧验收样例迁移到 HTML 与带 id 的任务。
+- app/src/debug/assets/chat-tasks.json：简报路径迁移为 .html。
+- app/src/test/java/com/xiamu/agent/AgentProtocolTest.kt：settings/history/HTML/prompt 解析测试。
+- app/src/androidTest/java/com/xiamu/agent/V5Checks.kt：新功能、失败恢复、实际按钮、滚动、轮询与截图。
+- app/src/androidTest/java/com/xiamu/agent/ContentChecks.kt：HTML 内容合同检查。
+- app/src/androidTest/java/com/xiamu/agent/TaskChecks.kt：路径和异步完成断言更新。
+- app/src/androidTest/java/com/xiamu/agent/V4Checks.kt：删除原生简报检查，任务结果走详情页。
+- tools/review_v05.py、tools/README-v05.md：构建、短时模拟器、假服务验收、导出和关闭流程。
+- verification/v0.5.0/：最终截图、日志与 JSON 证据；diagnostics/ 保留早期失败和无效采样。
+- REVIEW-v0.5.0.txt：本报告。
+
+实际验证：
+
+- ./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease --max-workers=2 通过。
+  最新构建日志为 verification/v0.5.0/final-build.log；其后仅重建了测试 APK。
+- JVM 37 项通过：AgentProtocolTest 13、ChatStateTest 15、QueueTest 6、StepLedgerTest 3。
+  覆盖设置说明/选择、四种任务状态、各记录类型、Markdown 保留、时间、id、HTML 与旧 JSON 拒绝、
+  prompt 中文/标点解码及其他导航/子框架拒绝。
+- pa35 / emulator-5554，隔离包 com.xiamu.agent.checks，V5Checks 8 + ContentChecks 5 全部通过。
+  最新日志 instrumentation-acceptance-final.log 为 OK (13 tests)，耗时 33.065 秒。
+  包括 GET/PUT 字段检查、保存失败保留选择、默认折叠、真实时间轮询与终态停止、
+  实际 HTML 按钮触摸、同一任务续聊、失败输入保留、完成结果刷新与简报定位。
+- 短卡实测：scrollHeight 209 CSS px，视图 547 px；长卡视图 1799 px，屏幕 2400 px。
+  长卡实际内部滚动超过 100 CSS px，外层列表位移为 0。
+- 拦截测试：外部链接、fetch、WebSocket、弹窗与 iframe prompt 没有产生请求或用户消息；内嵌 SVG 正常加载。
+- 8 次列表滑动，活动 WebView 最多 3 个；原长卡滑出后已停用或重新绑定，见 brief-recycled.json。
+- 普通 debug Activity（没有运行 Compose 测试时钟）静止显示运行中任务，读到 3 次 history。
+  请求间隔为 3108ms、3006ms，见 task-polling-real.json 与 task-polling-real.png。
+- 滑动可以连续完成，仍有加载/回收时短暂卡顿，不能称为全程流畅。
+  普通 debug Activity 的 8 次滑动记录了 243 帧，22 帧超过当前 deadline（9.05%），
+  帧耗时中位 22ms、P95 85ms。旧口径 jank 179 帧（73.66%）也保留在原始日志中。
+  数据来自无窗口 host GPU、2 核、2GB 配置的模拟器；不是实体手机或 release 性能结论。
+  证据：scroll-real-performance.json、scroll-gfxinfo.log、brief-scroll-real.png。
+- git diff --check -- android 通过；验收脚本语法检查通过。
+
+最终截图在 verification/v0.5.0/：
+
+- brief-multicard.png：今日多卡。
+- brief-long-before.png、brief-long-scrolled.png：长卡及内部滚动。
+- brief-button-chat.png：点卡片按钮后的聊天页与用户消息。
+- settings-models.png、settings-permissions.png：单选与 note。
+- task-running.png、task-running-steps.png：进行中及展开步骤。
+- task-completed.png：已完成、说明、Markdown 结果与看简报。
+- task-continuation-sent.png、task-continuation-result.png：同 id 续聊发送后与完成后。
+- task-polling-real.png、brief-scroll-real.png：普通页面补充记录。
+
+Release APK：app/build/outputs/apk/release/app-release.apk，3,286,238 bytes。
+SHA-256：655239445ce0fb7466d37e4424b9dcf203bc1be72c8a9c5c6a21b7b48991aaa0。
+使用现有签名配置；apksigner verify --verbose 校验通过，v2=true，v1/v3/v3.1/v4=false。
+aapt2 确认 com.xiamu.agent / 0.5.0 / 7；Manifest、R8 映射和 assets 检查确认验收 Activity、
+MockWebServer、假服务与样例不进入 release；没有 debug 健康写入权限。
+详见 signature.log 和 release.json。
+
+失败与修复：
+
+- 初期发现轮询读取 Compose 状态/渲染时钟导致静止页面只读一次，已改为用本次响应决定是否继续，
+  并使用独立生命周期协程；普通页面实际间隔验证已通过。
+- 续聊成功后的原生键盘/焦点操作曾在错误线程触发异常，改由 View 线程执行后通过。
+- 冷启动 debug 包的自动设备服务触发过前台服务超时；只在 debug 禁用 BootReceiver，
+  工具安装后清理 .checks 测试配置。Release 的设备服务没有改动。
+- 模拟器发生过图形驱动中断；切换无窗口运行后最终通过。软件渲染/锁屏或非前台采样不作为性能证据。
+- 测试曾在服务端收包后过早断言 UI，或使用被屏幕裁剪的卡片边界判断是否已测量，
+  现等待实际 UI 选择/回显、未裁剪尺寸及真正滑出屏幕。早期失败、超时和不完整截图保留在 diagnostics/。
+
+未验证：真实云端合同联调、模型路由/计费与权限在下一轮真正生效、真实任务上下文续接和完成通知、
+跨设备同步、实体手机与 release 滑动表现、完整 V4Checks 回归、真实设备能力和开机后台服务。
+本轮不需要用户补本地授权或安装。下一步由 Claude 集成新云端后安排真实服务与实体手机验收。

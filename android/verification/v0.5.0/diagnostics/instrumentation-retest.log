@@ -1,0 +1,256 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V5Checks:
+INSTRUMENTATION_STATUS: test=runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stack=androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed$lambda$53(V5Checks.kt:221)
+	at com.xiamu.agent.V5Checks.$r8$lambda$YiY0jAEkRkI0z7kiVvmAeVfNClA(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda26.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed(V5Checks.kt:214)
+
+INSTRUMENTATION_STATUS: stream=
+Error in runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed(com.xiamu.agent.V5Checks):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed$lambda$53(V5Checks.kt:221)
+	at com.xiamu.agent.V5Checks.$r8$lambda$YiY0jAEkRkI0z7kiVvmAeVfNClA(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda26.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed(V5Checks.kt:214)
+
+INSTRUMENTATION_STATUS: test=runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=htmlMulticardsMeasureAndRealButtonSendsToChat
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat$lambda$23(V5Checks.kt:115)
+	at com.xiamu.agent.V5Checks.$r8$lambda$w4v70puCBxxpFAB59OczYoLAiKI(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat(V5Checks.kt:107)
+
+INSTRUMENTATION_STATUS: stream=
+Error in htmlMulticardsMeasureAndRealButtonSendsToChat(com.xiamu.agent.V5Checks):
+java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat$lambda$23(V5Checks.kt:115)
+	at com.xiamu.agent.V5Checks.$r8$lambda$w4v70puCBxxpFAB59OczYoLAiKI(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat(V5Checks.kt:107)
+
+INSTRUMENTATION_STATUS: test=htmlMulticardsMeasureAndRealButtonSendsToChat
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=longCardScrollsInternallyAndOffscreenWebViewIsReleased
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=longCardScrollsInternallyAndOffscreenWebViewIsReleased
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=offlineCardBlocksRequestsPopupsNavigationAndAllowsInlineImages
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=offlineCardBlocksRequestsPopupsNavigationAndAllowsInlineImages
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=modelChoiceUsesGetPutAndRetainsSelectionOnFailure
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=modelChoiceUsesGetPutAndRetainsSelectionOnFailure
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=permissionChoiceIsSingleSelectAndSavesOnlyPermissionMode
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=scrollKeepsWebViewsBoundedAndRecordsFrameTimes
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: 离屏 WebView 没有回收
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xiamu.agent.V5Checks.scrollKeepsWebViewsBoundedAndRecordsFrameTimes$lambda$37(V5Checks.kt:175)
+	at com.xiamu.agent.V5Checks.$r8$lambda$yj8zDp19aNAPwFyzoNSItyCxsSk(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda18.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.scrollKeepsWebViewsBoundedAndRecordsFrameTimes(V5Checks.kt:162)
+
+INSTRUMENTATION_STATUS: stream=
+Error in scrollKeepsWebViewsBoundedAndRecordsFrameTimes(com.xiamu.agent.V5Checks):
+java.lang.AssertionError: 离屏 WebView 没有回收
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xiamu.agent.V5Checks.scrollKeepsWebViewsBoundedAndRecordsFrameTimes$lambda$37(V5Checks.kt:175)
+	at com.xiamu.agent.V5Checks.$r8$lambda$yj8zDp19aNAPwFyzoNSItyCxsSk(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda18.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.scrollKeepsWebViewsBoundedAndRecordsFrameTimes(V5Checks.kt:162)
+
+INSTRUMENTATION_STATUS: test=scrollKeepsWebViewsBoundedAndRecordsFrameTimes
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=completedTaskOpensFromListShowsBriefAndContinuesSameTask
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V5Checks
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stack=androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.waitText(V5Checks.kt:55)
+	at com.xiamu.agent.V5Checks.completedTaskOpensFromListShowsBriefAndContinuesSameTask$lambda$57(V5Checks.kt:257)
+	at com.xiamu.agent.V5Checks.$r8$lambda$WkZYMZqTDkIEmVPiesHmD2fPKpU(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda13.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.completedTaskOpensFromListShowsBriefAndContinuesSameTask(V5Checks.kt:234)
+
+INSTRUMENTATION_STATUS: stream=
+Error in completedTaskOpensFromListShowsBriefAndContinuesSameTask(com.xiamu.agent.V5Checks):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.waitText(V5Checks.kt:55)
+	at com.xiamu.agent.V5Checks.completedTaskOpensFromListShowsBriefAndContinuesSameTask$lambda$57(V5Checks.kt:257)
+	at com.xiamu.agent.V5Checks.$r8$lambda$WkZYMZqTDkIEmVPiesHmD2fPKpU(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda13.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.completedTaskOpensFromListShowsBriefAndContinuesSameTask(V5Checks.kt:234)
+
+INSTRUMENTATION_STATUS: test=completedTaskOpensFromListShowsBriefAndContinuesSameTask
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.TaskChecks:
+INSTRUMENTATION_STATUS: test=spontaneousResultRendersWithoutUserAndBusyWaitsForStatus
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=spontaneousResultRendersWithoutUserAndBusyWaitsForStatus
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 80.093
+There were 4 failures:
+1) runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed(com.xiamu.agent.V5Checks)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed$lambda$53(V5Checks.kt:221)
+	at com.xiamu.agent.V5Checks.$r8$lambda$YiY0jAEkRkI0z7kiVvmAeVfNClA(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda26.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.runningHistoryPollsAtThreeSecondsAndStepsStartCollapsed(V5Checks.kt:214)
+2) htmlMulticardsMeasureAndRealButtonSendsToChat(com.xiamu.agent.V5Checks)
+java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat$lambda$23(V5Checks.kt:115)
+	at com.xiamu.agent.V5Checks.$r8$lambda$w4v70puCBxxpFAB59OczYoLAiKI(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.htmlMulticardsMeasureAndRealButtonSendsToChat(V5Checks.kt:107)
+3) scrollKeepsWebViewsBoundedAndRecordsFrameTimes(com.xiamu.agent.V5Checks)
+java.lang.AssertionError: 离屏 WebView 没有回收
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xiamu.agent.V5Checks.scrollKeepsWebViewsBoundedAndRecordsFrameTimes$lambda$37(V5Checks.kt:175)
+	at com.xiamu.agent.V5Checks.$r8$lambda$yj8zDp19aNAPwFyzoNSItyCxsSk(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda18.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.scrollKeepsWebViewsBoundedAndRecordsFrameTimes(V5Checks.kt:162)
+4) completedTaskOpensFromListShowsBriefAndContinuesSameTask(com.xiamu.agent.V5Checks)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V5Checks.waitText(V5Checks.kt:55)
+	at com.xiamu.agent.V5Checks.completedTaskOpensFromListShowsBriefAndContinuesSameTask$lambda$57(V5Checks.kt:257)
+	at com.xiamu.agent.V5Checks.$r8$lambda$WkZYMZqTDkIEmVPiesHmD2fPKpU(Unknown Source:0)
+	at com.xiamu.agent.V5Checks$$ExternalSyntheticLambda13.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V5Checks.review(V5Checks.kt:44)
+	at com.xiamu.agent.V5Checks.completedTaskOpensFromListShowsBriefAndContinuesSameTask(V5Checks.kt:234)
+
+FAILURES!!!
+Tests run: 9,  Failures: 4
+
+
+INSTRUMENTATION_CODE: -1

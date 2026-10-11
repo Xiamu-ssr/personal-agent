@@ -1,5 +1,8 @@
 package com.xiamu.agent.ui
 
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Shield
+
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -334,6 +337,7 @@ fun PairCode() {
 fun SettingsScreen() {
     val c = ctx()
     val (state, _) = load("state") { Api.getJson("/api/state") }
+    val (runtime, runtimeError) = load("settings") { Api.settings() }
     var notify by remember { mutableStateOf(Prefs.notifyMessages && NotificationManagerCompat.from(c).areNotificationsEnabled()) }
     var notifyDenied by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -355,6 +359,15 @@ fun SettingsScreen() {
     }
     SubPage("设置") {
         item { MembershipCard(state) }
+        item { SectionTitle("模型与权限") }
+        item {
+            CardList {
+                ListRow("模型", runtime?.modelLabel ?: "正在读取", Icons.Outlined.AutoAwesome, Pal.Link) { Nav.open(Route.RuntimeSettings()) }
+                Hairline()
+                ListRow("权限", runtime?.permissionLabel ?: "正在读取", Icons.Outlined.Shield, Pal.Gold) { Nav.open(Route.RuntimeSettings(permissions = true)) }
+            }
+        }
+        if (runtimeError.isNotBlank()) item { ErrorNote(runtimeError) }
         item { SectionTitle("能力与连接") }
         item {
             CardList {

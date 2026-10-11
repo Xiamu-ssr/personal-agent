@@ -1,0 +1,39 @@
+{
+  "package": "com.xiamu.agent",
+  "versionName": "0.5.0",
+  "versionCode": 7,
+  "apk": "app/build/outputs/apk/release/app-release.apk",
+  "bytes": 3286238,
+  "sha256": "655239445ce0fb7466d37e4424b9dcf203bc1be72c8a9c5c6a21b7b48991aaa0",
+  "signatureVerified": true,
+  "signatureSchemes": {
+    "v1": false,
+    "v2": true,
+    "v3": false,
+    "v3.1": false,
+    "v4": false
+  },
+  "reviewActivitiesAbsent": true,
+  "mockServiceAbsent": true,
+  "fixtureAssetsAbsent": true,
+  "healthWritePermissionsAbsent": true,
+  "unitTests": 37,
+  "unitSuites": [
+    {
+      "suite": "com.xiamu.agent.AgentProtocolTest",
+      "tests": 13
+    },
+    {
+      "suite": "com.xiamu.agent.ChatStateTest",
+      "tests": 15
+    },
+    {
+      "suite": "com.xiamu.agent.QueueTest",
+      "tests": 6
+    },
+    {
+      "suite": "com.xiamu.agent.device.StepLedgerTest",
+      "tests": 3
+    }
+  ]
+}

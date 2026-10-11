@@ -63,12 +63,12 @@ class TaskChecks {
         compose.onNodeWithText("豆豆正在处理子任务结果…").assertExists()
         assertTrue(Chat.items.none { it is ChatItem.User })
         emit(activity, """{"t":"turn_end","text":"简报已完成，请查看今日。"}""")
-        compose.waitUntil(5000) { Chat.items.filterIsInstance<ChatItem.Assistant>().any { it.text == "简报已完成，请查看今日。" } }
+        compose.waitUntil(5000) { Chat.streaming.value.isEmpty() && Chat.items.filterIsInstance<ChatItem.Assistant>().any { it.text == "简报已完成，请查看今日。" } }
         assertTrue(Chat.busy.value)
         assertEquals("", Chat.streaming.value)
-        emit(activity, """{"t":"job","phase":"done","label":"报价简报","title":"报价简报 · 今日","outputs":["data/briefs/2026-10-11/报价简报.json"],"ok":true,"taskId":"quote"}""")
+        emit(activity, """{"t":"job","phase":"done","label":"报价简报","title":"报价简报 · 今日","outputs":["data/briefs/2026-10-11/报价简报.html"],"ok":true,"taskId":"quote"}""")
         compose.waitUntil(5000) { Chat.items.filterIsInstance<ChatItem.Card>().any { it.title == "报价简报 · 今日" } }
-        compose.onNodeWithText("报价简报 · 今日").assertExists()
+        compose.onNodeWithText("报价简报").assertExists()
         emit(activity, """{"t":"status","busy":false}""")
         compose.waitUntil(5000) { !Chat.busy.value }
         compose.onNodeWithTag("interrupt").assertDoesNotExist()
@@ -126,7 +126,7 @@ class TaskChecks {
         compose.onAllNodesWithTag("schedule-message").assertCountEquals(2)
         compose.onNodeWithText("晨报时间到了").assertExists()
         compose.onNodeWithText("报价简报时间到了").assertExists()
-        compose.onNodeWithText("晨报 · 今日资讯").assertExists()
+        compose.onNodeWithText("晨报").assertExists()
         compose.onAllNodesWithTag("user-message").assertCountEquals(0)
         assertTrue(Chat.items.none { it is ChatItem.User })
     }
