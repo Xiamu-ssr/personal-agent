@@ -123,7 +123,7 @@ struct Sidebar: View {
     }
 
     private func item(_ t: Tab) -> some View {
-        SidebarItem(tab: t, selected: nav.tab == t, badge: t == .tasks ? chat.live.count : 0) { nav.go(t) }
+        SidebarItem(tab: t, selected: nav.tab == t, badge: t == .tasks ? chat.live.count + chat.backgroundTasks.count : 0) { nav.go(t) }
     }
 }
 

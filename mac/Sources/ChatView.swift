@@ -5,7 +5,7 @@ import SwiftUI
 func statusLine(_ chat: ChatClient, _ device: DeviceClient) -> String {
     if !chat.configured { return "未登录" }
     if !chat.connected { return chat.error.isEmpty ? "连接中…" : chat.error }
-    if chat.busy { return chat.toolHint.isEmpty ? "在想…" : chat.toolHint }
+    if chat.busy { return chat.busyReason == "user" || chat.busyReason.isEmpty ? (chat.toolHint.isEmpty ? "在想…" : chat.toolHint) : chat.replyStatus }
     return device.online ? "在线 · 本机已接入" : "在线"
 }
 
@@ -149,7 +149,7 @@ struct ChatPage: View {
                         }
                     }
                     if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, messageID: chat.streamID).id("streaming") }
-                    if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.toolHint) }
+                    if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.replyStatus) }
                     Color.clear.frame(height: 1).id("end")
                 }
                 .frame(maxWidth: 820)
@@ -259,6 +259,10 @@ struct MessageRow: View, Equatable {
     var body: some View {
         switch item.kind {
         case .user: UserBubble(item: item, compact: compact)
+        case .schedule:
+            Label(item.scheduleTitle, systemImage: "alarm")
+                .font(.system(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
+                .padding(.vertical, 3)
         case .assistant: AssistantBubble(text: item.text, compact: compact, messageID: item.id)
         case .note:
             Text(item.text).font(.system(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
@@ -287,8 +291,11 @@ struct UserBubble: View {
                         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.userBubble))
                         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.7), lineWidth: 1))
                 }
+                if item.queued {
+                    Text("排队中").font(.system(size: 10.5)).foregroundStyle(Theme.sub).padding(.trailing, 10)
+                }
             }
-            .opacity(item.pending ? 0.7 : 1)
+            .opacity(item.queued ? 0.55 : item.pending ? 0.7 : 1)
         }
     }
 }

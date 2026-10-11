@@ -71,7 +71,7 @@ struct MenuView: View {
                         ForEach(chat.items.suffix(60)) { MessageRow(item: $0, compact: true).equatable() }
                     }
                     if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, compact: true, messageID: chat.streamID).id("streaming") }
-                    if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.toolHint) }
+                    if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.replyStatus) }
                     Color.clear.frame(height: 1).id("end")
                 }
                 .padding(12)
@@ -96,15 +96,13 @@ struct MenuView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            GrowingInput(text: $input, focused: $focused, placeholder: "跟豆豆说…（⌥↩ 换行）",
-                         enabled: !Composer.shared.sending, fontSize: 13, verticalPadding: 8,
-                         onSubmit: send, onAttachmentPaste: { pasteAttachment($0) })
-                .frame(maxWidth: .infinity)
-            if chat.busy {
-                Button { chat.interrupt() } label: { Image(systemName: "stop.fill").frame(width: 30, height: 30) }
-                    .buttonStyle(.plain).help("让豆豆停下")
-            } else {
+        VStack(alignment: .leading, spacing: 8) {
+            TaskControls(compact: true)
+            HStack(alignment: .bottom, spacing: 8) {
+                GrowingInput(text: $input, focused: $focused, placeholder: "跟豆豆说…（⌥↩ 换行）",
+                             enabled: !Composer.shared.sending, fontSize: 13, verticalPadding: 8,
+                             onSubmit: send, onAttachmentPaste: { pasteAttachment($0) })
+                    .frame(maxWidth: .infinity)
                 Button(action: send) {
                     ZStack {
                         GoldBase()
@@ -113,12 +111,12 @@ struct MenuView: View {
                     .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)
-                .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("发送（↩︎）· ⌥↩︎ 换行")
+                .disabled(Composer.shared.sending || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.85)))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.85)))
         .padding(10)
     }
 
@@ -132,7 +130,7 @@ struct MenuView: View {
 
     private func send() {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !chat.busy else { return }
+        guard !text.isEmpty, !Composer.shared.sending else { return }
         if chat.send(text) { input = "" }
     }
 }

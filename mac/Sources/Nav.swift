@@ -59,6 +59,8 @@ enum Route: Hashable {
     case memoryCategory(String)
     case diaries
     case connectors(tab: Int, focus: String? = nil)
+    case connector(String)
+    case connectorForm(name: String, accountID: String?)
     case devices
     case skills
 }
@@ -83,6 +85,15 @@ final class Nav {
         let t = t ?? tab
         tab = t
         stacks[t, default: []].append(r)
+    }
+
+    /// Keep the selected host tab when returning from a connector detail.
+    func openConnector(_ name: String, from hostTab: Int, focus: String? = nil) {
+        if var stack = stacks[tab], case .connectors? = stack.last {
+            stack[stack.count - 1] = .connectors(tab: hostTab, focus: focus)
+            stacks[tab] = stack
+        }
+        push(.connector(name))
     }
 
     func pop() {
@@ -118,7 +129,6 @@ final class Nav {
 
     /// Say something in the chat on the user's behalf (推荐任务, 连接 a catalog connector) and jump there.
     func ask(_ text: String) {
-        guard !ChatClient.shared.busy else { return show("豆豆正在忙，等它完成再试") }
         if ChatClient.shared.send(text) {
             go(.chat)
             stacks[.chat] = []

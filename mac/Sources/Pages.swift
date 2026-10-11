@@ -106,6 +106,8 @@ struct RouteView: View {
         case .memoryCategory(let dir): MemoryCategoryPage(dir: dir)
         case .diaries: DiaryListPage()
         case .connectors(let tab, let focus): ConnectorsPage(initialTab: tab, focus: focus)
+        case .connector(let name): ConnectorDetailPage(name: name)
+        case .connectorForm(let name, let accountID): ConnectorFormPage(name: name, accountID: accountID)
         case .devices: DevicesPage()
         case .skills: SkillsPage()
         }
@@ -437,7 +439,7 @@ struct TasksPage: View {
 
     /// Server list plus live sub-agent tasks from the socket (which the server's job list doesn't track).
     private var allRunning: [LiveTask] {
-        chat.live
+        chat.live + chat.backgroundTasks.map { LiveTask(id: "task:" + $0.id, label: $0.description, started: $0.startedAt, detail: $0.summary.isEmpty ? "后台任务" : $0.summary) }
     }
 
     private var runningCard: some View {

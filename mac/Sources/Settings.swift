@@ -3,13 +3,6 @@ import SwiftUI
 
 // MARK: - Shared data for 连接应用 / 设备
 
-struct CloudConnector: Identifiable, Hashable {
-    let name: String
-    let title: String
-    let description: String
-    var id: String { name }
-}
-
 struct RemoteCap: Identifiable, Hashable {
     let name: String
     let title: String
@@ -42,6 +35,7 @@ final class ConnectorStore {
     var builtin: [CloudConnector] = []
     var installed: [CloudConnector] = []
     var catalog: [CloudConnector] = []
+    var custom: [CloudConnector] = []
     var devices: [RemoteDevice] = []
     var loaded = false
     var error = ""
@@ -50,15 +44,18 @@ final class ConnectorStore {
     private var generation = 0
 
     var others: [RemoteDevice] { devices.filter { $0.id != Prefs.deviceId } }
-    var connected: [CloudConnector] { builtin + installed }
+    var connected: [CloudConnector] { builtin + installed + custom }
+
+    func connector(_ name: String) -> CloudConnector? { (connected + catalog).first { $0.name == name } }
 
     func reset() {
         generation += 1
-        builtin = []; installed = []; catalog = []; devices = []
+        builtin = []; installed = []; catalog = []; custom = []; devices = []
         loaded = false; error = ""; cloudOnline = false
     }
 
     func load() async {
+        generation += 1
         let version = generation
         do {
             let r = try await Api.json("/api/connectors")
@@ -66,13 +63,10 @@ final class ConnectorStore {
             let cloud = r["cloud"] as? [String: Any] ?? [:]
             cloudOnline = cloud["online"] as? Bool ?? false
             cloudName = cloud["name"] as? String ?? "云电脑"
-            let conns = { (k: String) in (cloud[k] as? [[String: Any]] ?? []).map {
-                CloudConnector(name: $0["name"] as? String ?? "", title: $0["title"] as? String ?? ($0["name"] as? String ?? ""),
-                               description: $0["description"] as? String ?? "")
-            } }
-            builtin = conns("builtin")
-            installed = conns("installed")
-            catalog = conns("catalog")
+            builtin = (cloud["builtin"] as? [[String: Any]] ?? []).map { CloudConnector($0, builtin: true) }
+            installed = (cloud["installed"] as? [[String: Any]] ?? []).map { CloudConnector($0) }
+            catalog = (cloud["catalog"] as? [[String: Any]] ?? []).map { CloudConnector($0) }
+            custom = (cloud["custom"] as? [[String: Any]] ?? []).map { CloudConnector($0, custom: true) }
             devices = (r["devices"] as? [[String: Any]] ?? []).map { d in
                 RemoteDevice(
                     id: d["id"] as? String ?? "", name: d["name"] as? String ?? "", kind: d["kind"] as? String ?? "",
@@ -405,7 +399,8 @@ struct ConnectorsPage: View {
                 Group {
                     if on.isEmpty { Note(text: store.loaded ? "没有匹配的" : "加载中…") } else {
                         Rows(items: on) { c in
-                            ListRow(icon: cloudIcon(c.name), tint: Color(hex: 0x487FA6), title: c.title, subtitle: c.description) { GoldTag(text: "已连接") }
+                            ListRow(icon: c.icon, tint: Color(hex: 0x487FA6), title: c.title, subtitle: c.description,
+                                    action: { Nav.shared.openConnector(c.name, from: tab, focus: focus) }) { GoldTag(text: c.custom ? "豆豆自建" : "已连接") }
                         }
                     }
                 }
@@ -413,36 +408,18 @@ struct ConnectorsPage: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 SectionTitle(text: "可以接入")
-                Text("点「连接」后豆豆会在聊天里帮你接入，需要账号时会问你。").font(.system(size: 12)).foregroundStyle(Theme.sub).padding(.horizontal, 4)
+                Text("点「连接」填写账号，验证成功后豆豆就能使用这个服务。").font(.system(size: 12)).foregroundStyle(Theme.sub).padding(.horizontal, 4)
                 Group {
                     if off.isEmpty { Note(text: store.loaded ? "没有更多可接入的了" : "加载中…") } else {
                         Rows(items: off) { c in
-                            ListRow(icon: cloudIcon(c.name), tint: Theme.faint, title: c.title, subtitle: c.description) {
-                                Button("连接") { Nav.shared.ask("帮我接入「\(c.title)」连接器") }.buttonStyle(SoftButtonStyle())
+                            ListRow(icon: c.icon, tint: Theme.faint, title: c.title, subtitle: c.description) {
+                                Button(c.fields == nil ? "即将支持" : "连接") { Nav.shared.openConnector(c.name, from: tab, focus: focus) }.buttonStyle(SoftButtonStyle())
                             }
                         }
                     }
                 }
                 .card(radius: 22, padding: 10)
             }
-        }
-    }
-
-    private func cloudIcon(_ name: String) -> String {
-        switch name {
-        case "web_search", "tavily": "magnifyingglass"
-        case "web_fetch": "globe"
-        case "shell": "terminal"
-        case "files": "folder"
-        case "schedule": "clock"
-        case "transcribe": "waveform"
-        case "email": "envelope"
-        case "calendar": "calendar"
-        case "github": "chevron.left.forwardslash.chevron.right"
-        case "feishu": "paperplane"
-        case "notion": "note.text"
-        case "rss": "dot.radiowaves.up.forward"
-        default: "puzzlepiece.extension"
         }
     }
 
@@ -488,6 +465,8 @@ struct DevicesPage: View {
     private var chat: ChatClient { .shared }
     private var device: DeviceClient { .shared }
     @State private var expanded: String? = nil
+    @State private var removing: RemoteDevice? = nil
+    @State private var removingID: String? = nil
 
     var body: some View {
         SubPage(title: "设备", subtitle: "豆豆能用到的每一台设备") {
@@ -503,11 +482,17 @@ struct DevicesPage: View {
                 }
                 ForEach(store.others) { d in
                     RowDivider()
-                    deviceRow(icon: d.icon, name: d.name, tag: nil, online: d.online,
-                              detail: d.status + " · \(d.caps.filter(\.enabled).count) 项能力已开启") {
-                        Nav.shared.push(.connectors(tab: 2, focus: d.id))
+                    HStack(spacing: 10) {
+                        deviceRow(icon: d.icon, name: d.name, tag: nil, online: d.online,
+                                  detail: d.status + " · \(d.caps.filter(\.enabled).count) 项能力已开启") {
+                            Nav.shared.push(.connectors(tab: 2, focus: d.id))
+                        }
+                        .opacity(d.online ? 1 : 0.6)
+                        if !d.online {
+                            Button(removingID == d.id ? "移除中…" : "移除") { removing = d }
+                                .buttonStyle(SoftButtonStyle()).disabled(removingID != nil).padding(.trailing, 6)
+                        }
                     }
-                    .opacity(d.online ? 1 : 0.6)
                 }
             }
             .card(radius: 22, padding: 10)
@@ -523,6 +508,20 @@ struct DevicesPage: View {
             }
         }
         .task(id: chat.devicesVersion) { await store.load() }
+        .alert("移除设备？", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            Button("移除", role: .destructive) { if let device = removing { remove(device) } }
+            Button("取消", role: .cancel) { removing = nil }
+        } message: { Text("移除离线设备「\(removing?.name ?? "")」后，它将不再出现在设备列表里。") }
+    }
+
+    private func remove(_ device: RemoteDevice) {
+        guard !device.online, removingID == nil else { return }
+        removing = nil; removingID = device.id
+        Task { @MainActor in
+            defer { removingID = nil }
+            do { try await ConnectorAPI.removeDevice(device.id); await store.load() }
+            catch { Nav.shared.show("移除失败：\(error.localizedDescription)") }
+        }
     }
 
     private func deviceRow(icon: String, name: String, tag: String?, online: Bool, detail: String, action: @escaping () -> Void) -> some View {

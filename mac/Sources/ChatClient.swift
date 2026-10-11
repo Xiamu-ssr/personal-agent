@@ -27,7 +27,7 @@ struct Attachment: Hashable {
 }
 
 struct ChatItem: Identifiable, Equatable {
-    enum Kind: Equatable { case user, assistant, card, note }
+    enum Kind: Equatable { case user, assistant, card, note, schedule }
     var id = UUID()
     let kind: Kind
     var text: String
@@ -38,9 +38,18 @@ struct ChatItem: Identifiable, Equatable {
     var ts: Date? = nil
     /// Sent from here, waiting for the server's echo.
     var pending = false
+    var queued = false
+    var source = ""
+
+    var scheduleTitle: String {
+        guard let start = text.range(of: "该出「"), let end = text.range(of: "」了", range: start.upperBound..<text.endIndex) else {
+            return text.replacingOccurrences(of: "[定时]", with: "").components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces) ?? "定时提醒"
+        }
+        return String(text[start.upperBound..<end.lowerBound]) + "时间到了"
+    }
 }
 
-/// Something running in the background: an isolated job (晨报…) or a sub-agent task of the main thread.
+/// An isolated job (maintenance / legacy briefs); main-thread background tasks have their own ID list.
 struct LiveTask: Identifiable {
     let id: String
     var label: String
@@ -57,17 +66,35 @@ final class ChatClient {
     var streaming = ""
     var streamID = UUID()
     var busy = false
+    var busyReason = ""
     var connected = false
     var toolHint = ""
     var error = ""
     var configured = Prefs.configured
     var live: [LiveTask] = []
+    private(set) var backgroundTasks: [BackgroundTask] = []
+    private(set) var stoppingTasks: Set<String> = []
+    var taskError = ""
+
+    var replyStatus: String {
+        switch busyReason {
+        case "task_result": return "豆豆正在处理子任务结果…"
+        case "schedule": return "豆豆正在安排定时任务…"
+        default: return toolHint.isEmpty ? "豆豆正在回复…" : "豆豆正在回复 · " + toolHint
+        }
+    }
     /// Bumped when data/ changes (memory, briefs, sites) or a job finishes, so pages reload.
     var filesVersion = 0
     var jobsVersion = 0
     var devicesVersion = 0
 
     @ObservationIgnored private let socket = Socket(role: "app")
+    // Local verification supplies a recorder instead of opening a network socket.
+    @ObservationIgnored private var sender: (([String: Any]) -> Bool)?
+    @ObservationIgnored private var snapshotEchoes: [UUID: Date] = [:]
+    @ObservationIgnored private var waitingInputs: [(id: UUID, schedule: Bool)] = []
+    @ObservationIgnored private var endedTasks: Set<String> = []
+    @ObservationIgnored private var endedOrder: [String] = []
     @ObservationIgnored private var historyTask: Task<Void, Never>?
     private var connectionVersion = 0
     @ObservationIgnored private var pendingDelta = ""
@@ -109,7 +136,8 @@ final class ChatClient {
         }
     }
 
-    init() {
+    init(sender: (([String: Any]) -> Bool)? = nil) {
+        self.sender = sender
         socket.onOpen = { [weak self] in
             self?.connected = true
             self?.error = ""
@@ -117,6 +145,11 @@ final class ChatClient {
         socket.onMessage = { [weak self] in self?.handle($0) }
         socket.onClose = { [weak self] why in
             self?.connected = false
+            self?.busy = false
+            self?.busyReason = ""
+            self?.toolHint = ""
+            self?.backgroundTasks = []
+            self?.stoppingTasks = []
             if let why { self?.error = why }
         }
     }
@@ -129,6 +162,9 @@ final class ChatClient {
     func reconnect() {
         configured = Prefs.configured
         connected = false
+        busy = false; busyReason = ""; toolHint = ""
+        backgroundTasks = []; stoppingTasks = []
+        cancelDeltas()
         socket.stop()
         if configured { socket.start() }
     }
@@ -147,36 +183,106 @@ final class ChatClient {
         live = []
         streaming = ""
         busy = false
+        busyReason = ""
+        backgroundTasks = []
+        stoppingTasks = []
+        endedTasks = []; endedOrder = []; waitingInputs = []; snapshotEchoes = [:]
+        taskError = ""
+    }
+
+    private func transmit(_ message: [String: Any]) -> Bool {
+        if let sender { return sender(message) }
+        return socket.send(message)
     }
 
     @discardableResult
     func send(_ text: String, attachments: [Attachment] = []) -> Bool {
-        guard !busy else { error = "豆豆正在忙，等它完成再发"; return false }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty else { return false }
         var msg: [String: Any] = ["t": "send", "text": text]
         if !attachments.isEmpty { msg["attachments"] = attachments.map(\.json) }
-        guard socket.send(msg) else {
+        guard transmit(msg) else {
             error = "还没连上，稍等再发"
             return false
         }
-        add(ChatItem(kind: .user, text: text, attachments: attachments, ts: Date(), pending: true))
+        let item = ChatItem(kind: .user, text: text, attachments: attachments, ts: Date(), pending: true,
+                            queued: busy || !waitingInputs.isEmpty)
+        add(item)
+        waitingInputs.append((item.id, false))
+        error = ""
         return true
     }
 
     func interrupt() {
-        socket.send(["t": "interrupt"])
+        if !transmit(["t": "interrupt"]) { error = "还没连上，无法停止当前回复" }
+    }
+
+    func stopTask(_ id: String) {
+        guard backgroundTasks.contains(where: { $0.id == id }), !stoppingTasks.contains(id) else { return }
+        taskError = ""
+        stoppingTasks.insert(id)
+        if !transmit(["t": "stop_task", "id": id]) {
+            stoppingTasks.remove(id)
+            taskError = "还没连上，无法停止任务"
+        }
+    }
+
+    private func endTask(_ id: String) {
+        backgroundTasks.removeAll { $0.id == id }
+        stoppingTasks.remove(id)
+        if endedTasks.insert(id).inserted { endedOrder.append(id) }
+        if endedOrder.count > 256 {
+            endedTasks.remove(endedOrder.removeFirst())
+        }
+    }
+
+    /// A level snapshot replaces the complete list, including an empty list.
+    func applyTasks(_ rows: [[String: Any]]) {
+        var byID: [String: BackgroundTask] = [:]
+        for row in rows {
+            let id = Self.str(row["id"])
+            guard !id.isEmpty else { continue }
+            byID[id] = BackgroundTask(id: id, description: Self.str(row["description"]),
+                                      startedAt: Self.date(row["startedAt"]) ?? Date())
+        }
+        for old in backgroundTasks where byID[old.id] == nil { endTask(old.id) }
+        for id in byID.keys { endedTasks.remove(id) }
+        endedOrder.removeAll { !endedTasks.contains($0) }
+        backgroundTasks = byID.values.sorted { $0.startedAt == $1.startedAt ? $0.id < $1.id : $0.startedAt < $1.startedAt }
+        stoppingTasks.formIntersection(Set(byID.keys))
+    }
+
+    private func handleTask(_ message: [String: Any]) {
+        let phase = Self.str(message["phase"])
+        if phase == "snapshot" { applyTasks(message["tasks"] as? [[String: Any]] ?? []); return }
+        let id = Self.str(message["id"])
+        guard !id.isEmpty else { return }
+        let patch = message["patch"] as? [String: Any] ?? [:]
+        let status = Self.str(patch["status"] ?? message["status"])
+        if phase == "notification" || ["done", "completed", "failed", "stopped", "killed", "error"].contains(phase) ||
+            ["completed", "failed", "stopped", "killed", "error"].contains(status) { endTask(id); return }
+        guard message["background"] as? Bool != false, !endedTasks.contains(id) else { return }
+        if let index = backgroundTasks.firstIndex(where: { $0.id == id }) {
+            let description = Self.str(patch["description"] ?? message["description"])
+            if !description.isEmpty { backgroundTasks[index].description = description }
+            if let started = Self.date(message["startedAt"]) { backgroundTasks[index].startedAt = started }
+            if let summary = message["summary"] as? String { backgroundTasks[index].summary = summary }
+        } else if phase == "started" {
+            backgroundTasks.append(BackgroundTask(id: id, description: Self.str(message["description"]),
+                                                  startedAt: Self.date(message["startedAt"]) ?? Date()))
+        }
     }
 
     private static func str(_ v: Any?) -> String { v as? String ?? "" }
 
     private static func date(_ v: Any?) -> Date? {
-        (v as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
+        (v as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) }
     }
 
     static func item(_ h: [String: Any]) -> ChatItem? {
         let atts = (h["attachments"] as? [[String: Any]] ?? []).map(Attachment.init)
         switch str(h["role"]) {
-        case "user": return ChatItem(kind: .user, text: str(h["text"]), attachments: atts, ts: date(h["ts"]))
+        case "user": return ChatItem(kind: str(h["source"]) == "schedule" ? .schedule : .user,
+                                     text: str(h["text"]), attachments: atts, ts: date(h["ts"]), source: str(h["source"]))
         case "assistant": return ChatItem(kind: .assistant, text: str(h["text"]), ts: date(h["ts"]))
         case "card":
             return ChatItem(kind: .card, text: str(h["title"]), outputs: h["outputs"] as? [String] ?? [], label: str(h["label"]), ts: date(h["ts"]))
@@ -220,18 +326,32 @@ final class ChatClient {
                 var item = item
                 if let same = old.first(where: { !used.contains($0.id) && Self.same($0, item) }) {
                     item.id = same.id
+                    item.queued = same.queued
+                    item.pending = same.pending
                     used.insert(same.id)
                 }
                 return item
             }
             history += old.filter { !used.contains($0.id) }
             items = history
+            // HTTP may already contain an event still in flight on the socket. Match that echo once.
+            rememberSnapshotEchoes(history.filter { !used.contains($0.id) })
+        }
+    }
+
+    func rememberSnapshotEchoes(_ snapshot: [ChatItem]) {
+        let ids = Set(items.map(\.id)), now = Date()
+        snapshotEchoes = snapshotEchoes.filter { ids.contains($0.key) && $0.value > now }
+        let cutoff = now.addingTimeInterval(-10)
+        for item in snapshot where (item.kind == .user || item.kind == .schedule) && (item.ts ?? .distantPast) >= cutoff {
+            snapshotEchoes[item.id] = now.addingTimeInterval(10)
         }
     }
 
     private static func same(_ a: ChatItem, _ b: ChatItem) -> Bool {
         guard a.kind == b.kind, a.text == b.text, a.outputs == b.outputs,
               a.attachments.map(\.path) == b.attachments.map(\.path) else { return false }
+        if a.pending { return true }
         if let x = a.ts, let y = b.ts { return abs(x.timeIntervalSince(y)) < 2 }
         return a.ts == b.ts
     }
@@ -244,6 +364,11 @@ final class ChatClient {
             jobsVersion += 1
             items = (m["history"] as? [[String: Any]] ?? []).compactMap(Self.item)
             busy = m["busy"] as? Bool ?? false
+            busyReason = busy ? Self.str(m["reason"]) : ""
+            waitingInputs = []; snapshotEchoes = [:]
+            stoppingTasks = []; endedTasks = []; endedOrder = []
+            taskError = ""; error = ""
+            applyTasks(m["tasks"] as? [[String: Any]] ?? [])
             streaming = ""
             toolHint = ""
             // Tasks from before the reconnect may have ended while we were away.
@@ -255,14 +380,37 @@ final class ChatClient {
             let text = Self.str(m["text"])
             let atts = (m["attachments"] as? [[String: Any]] ?? []).map(Attachment.init)
             // Our own message echoes back (now with voice transcripts); others' messages are new.
-            if let i = items.lastIndex(where: { $0.pending && $0.text == text && (atts.isEmpty || $0.attachments.map(\.path) == atts.map(\.path)) }) {
+            let scheduled = Self.str(m["source"]) == "schedule"
+            let receivedAt = Date()
+            if !scheduled, let i = items.firstIndex(where: { $0.pending && $0.text == text && $0.attachments.map(\.path) == atts.map(\.path) }) {
                 items[i].pending = false
                 if !atts.isEmpty { items[i].attachments = atts }
+            } else if let i = items.firstIndex(where: { (snapshotEchoes[$0.id] ?? .distantPast) > receivedAt && $0.kind == (scheduled ? .schedule : .user) &&
+                $0.text == text && $0.attachments.map(\.path) == atts.map(\.path) }) {
+                snapshotEchoes.removeValue(forKey: items[i].id)
+                items[i].queued = !scheduled && (busy || !waitingInputs.isEmpty)
+                waitingInputs.append((items[i].id, scheduled))
+                if !atts.isEmpty { items[i].attachments = atts }
             } else {
-                add(ChatItem(kind: .user, text: text, attachments: atts, ts: Date()))
+                let item = ChatItem(kind: scheduled ? .schedule : .user, text: text, attachments: atts, ts: Date(),
+                                    queued: !scheduled && (busy || !waitingInputs.isEmpty), source: Self.str(m["source"]))
+                add(item)
+                waitingInputs.append((item.id, scheduled))
             }
         case "status":
             busy = m["busy"] as? Bool ?? false
+            if !busy { busyReason = ""; toolHint = "" }
+            else if let reason = m["reason"] as? String {
+                // Each reason-bearing status starts a new turn, including native task-result turns without a user event.
+                cancelDeltas()
+                streaming = ""; streamID = UUID(); toolHint = ""
+                busyReason = reason
+                if reason == "user" || reason == "schedule",
+                   let index = waitingInputs.firstIndex(where: { $0.schedule == (reason == "schedule") }) {
+                    let id = waitingInputs.remove(at: index).id
+                    if let item = items.firstIndex(where: { $0.id == id }) { items[item].queued = false }
+                }
+            }
         case "delta":
             queueDelta(Self.str(m["text"]))
             toolHint = ""
@@ -278,7 +426,6 @@ final class ChatClient {
             if let err = m["error"] as? String { add(ChatItem(kind: .note, text: "这一轮出错了：\(err)")) }
             streaming = ""
             toolHint = ""
-            busy = false
         case "memory_updated":
             filesVersion += 1
             if !(items.last?.kind == .note && items.last?.text == "记忆已更新") { add(ChatItem(kind: .note, text: "记忆已更新")) }
@@ -300,22 +447,27 @@ final class ChatClient {
                 filesVersion += 1
             }
         case "task":
-            jobsVersion += 1
-            let id = "task:" + Self.str(m["id"])
-            let phase = Self.str(m["phase"])
-            let status = Self.str(m["status"])
-            let desc = Self.str(m["description"])
-            if ["notification", "done", "completed", "failed", "stopped", "killed", "error"].contains(phase) || ["completed", "failed", "stopped", "killed", "error"].contains(status) {
-                live.removeAll { $0.id == id }
-                jobsVersion += 1
-            } else if let i = live.firstIndex(where: { $0.id == id }) {
-                let s = Self.str(m["summary"])
-                if !s.isEmpty { live[i].detail = s }
-            } else {
-                live.append(LiveTask(id: id, label: desc.isEmpty ? "子任务" : desc, started: Date(), detail: "子任务"))
+            handleTask(m)
+        case "task_stop":
+            let id = Self.str(m["id"])
+            guard backgroundTasks.contains(where: { $0.id == id }) else { return }
+            if m["ok"] as? Bool == false {
+                stoppingTasks.remove(id)
+                taskError = Self.stopError(Self.str(m["code"]))
             }
         default:
             break
+        }
+    }
+
+    private static func stopError(_ code: String) -> String {
+        switch code {
+        case "invalid_task_id": return "任务编号不对，请刷新后重试"
+        case "task_ended": return "任务已经结束，等待列表更新"
+        case "task_not_found": return "没有这个运行中的后台任务，等待列表更新"
+        case "task_stopping": return "任务正在停止，请稍等"
+        case "session_unavailable": return "主会话暂时不可用，请稍后再试"
+        default: return "停止任务失败，请稍后再试"
         }
     }
 

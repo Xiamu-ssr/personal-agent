@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mode="${1:-after}"
-out="$PWD/verification/performance"
+out="${PERF_OUT:-$PWD/verification/performance}"
 mkdir -p "$out"
 sdk_path=$(xcrun --show-sdk-path)
 sources=Sources

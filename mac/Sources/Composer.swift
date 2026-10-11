@@ -150,7 +150,6 @@ final class Composer {
 
     func send() {
         guard !sending, !transcribing, recording == nil, !preparing, hasContent else { return }
-        guard !ChatClient.shared.busy else { return fail("豆豆正在忙，等它完成再发") }
         let text = self.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let drafts = self.drafts
         guard ChatClient.shared.connected else { return fail("还没连上，稍等再发") }
@@ -186,7 +185,6 @@ final class Composer {
 
     private func startRecording(_ mode: Recording) {
         guard !preparing, !sending, !transcribing, recording == nil else { return }
-        guard !ChatClient.shared.busy else { holding = false; return fail("豆豆正在忙，等它完成再说") }
         let request = UUID()
         recordRequest = request
         preparing = true
@@ -234,7 +232,7 @@ final class Composer {
 
     func retryTranscribe() {
         guard let data = retryAudio, !transcribing, !sending else { return }
-        guard ChatClient.shared.connected, !ChatClient.shared.busy else { return fail("豆豆还没准备好，录音已保留，稍后再试") }
+        guard ChatClient.shared.connected else { return fail("豆豆还没准备好，录音已保留，稍后再试") }
         transcribing = true
         operation = Task { @MainActor in
             do {
@@ -315,6 +313,7 @@ struct ComposerBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            TaskControls()
             if c.recording != nil || c.transcribing { RecordingPanel() }
             if !c.drafts.isEmpty { drafts }
             if !c.error.isEmpty {
@@ -326,7 +325,7 @@ struct ComposerBar: View {
                     Text("录音已保留，可稍后重新转写").font(.system(size: 12)).foregroundStyle(Theme.sub)
                     Spacer()
                     Button("清除") { c.retryAudio = nil }.buttonStyle(SoftButtonStyle())
-                    Button("重新转写") { c.retryTranscribe() }.buttonStyle(SoftButtonStyle()).disabled(chat.busy || !chat.connected)
+                    Button("重新转写") { c.retryTranscribe() }.buttonStyle(SoftButtonStyle()).disabled(!chat.connected)
                 }
                 .padding(.horizontal, 8)
             }
@@ -387,9 +386,7 @@ struct ComposerBar: View {
 
     @ViewBuilder
     private var trailing: some View {
-        if chat.busy {
-            roundButton("stop.fill", help: "让豆豆停下") { chat.interrupt() }
-        } else if c.voiceMode {
+        if c.voiceMode {
             roundButton("keyboard", help: "切回打字") {
                 c.cancelRecording()
                 c.voiceMode = false

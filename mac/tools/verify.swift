@@ -46,7 +46,9 @@ struct Verify {
         app.setActivationPolicy(.regular)
         Task { @MainActor in
             do {
-                if CommandLine.arguments.contains("--input-review") {
+                if CommandLine.arguments.contains("--local-menu") {
+                    try await LocalMenuReview.run()
+                } else if CommandLine.arguments.contains("--input-review") {
                     try await inputFixtures()
                 } else if CommandLine.arguments.contains("--memory-review") {
                     try await memoryFixtures()
@@ -404,7 +406,7 @@ struct Verify {
         try check(chat.live.isEmpty, "late job snapshot must not resurrect a finished task")
         chat.handle(["t": "task", "phase": "started", "id": "one", "description": "子任务"])
         chat.handle(["t": "task", "phase": "done", "id": "one"])
-        try check(chat.live.isEmpty, "terminal task phase without status")
+        try check(chat.backgroundTasks.isEmpty, "terminal task phase without status")
         chat.handle(["t": "job", "phase": "started", "label": "旧任务"])
         chat.applyJobs([], version: chat.jobsVersion)
         try check(chat.live.isEmpty, "server truth clears jobs absent from its running list")
@@ -427,6 +429,10 @@ struct Verify {
         try check(!composer.transcribing && composer.retryAudio == raw, "failed hold-to-talk transcription must retain local audio")
         composer.reset(); shared.connected = false
         print("PASS: failed transcription retains audio without uploading or sending")
+        try await TaskProtocolFixtures.run()
+        try await ConnectorFixtures.run()
+        try await memoryFixtures()
+        try await inputFixtures()
     }
 
     @MainActor

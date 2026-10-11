@@ -8,9 +8,11 @@ FIX=()
 if [[ -f build/overlay.yaml ]]; then
   FIX=(-vfsoverlay "$PWD/build/overlay.yaml" -Xcc -ivfsoverlay -Xcc "$PWD/build/overlay.yaml")
 fi
-swiftc -swift-version 5 -D MAC_VERIFY -parse-as-library -sdk "$SDK" "${FIX[@]}" Sources/*.swift tools/verify.swift -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "build/豆豆.app/Contents/Info.plist" -o verification/verify
+swiftc -swift-version 5 -D MAC_VERIFY -parse-as-library -sdk "$SDK" "${FIX[@]}" Sources/*.swift tools/verify.swift tools/task-fixtures.swift tools/connector-fixtures.swift tools/local-menu.swift -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "build/豆豆.app/Contents/Info.plist" -o verification/verify
 if [[ "${1:-}" == "--live" ]]; then
   verification/verify --live "$PWD/verification/screenshots"
+elif [[ "${1:-}" == "--local-menu" ]]; then
+  verification/verify --local-menu -server "${LOCAL_SERVICE_URL:-http://127.0.0.1:18765/agent}" -onboarded YES -notifyMessages NO
 elif [[ "${1:-}" == "--input-review" ]]; then
   verification/verify --input-review
 elif [[ "${1:-}" == "--memory-review" ]]; then
