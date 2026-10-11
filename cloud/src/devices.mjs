@@ -137,14 +137,18 @@ export class DeviceHub {
       return Promise.reject(new Error(`这台设备没有开启「${capability}」。要用的话，请用户在那台设备的豆豆里打开`));
     }
     const id = crypto.randomUUID();
+    const started = Date.now();
+    // Log only the capability, outcome and device error text, never args or results (they can hold personal data).
+    const done = (outcome) => console.log(new Date().toISOString(), `device call: ${deviceId} ${capability} ${outcome} ${Date.now() - started}ms`);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         d.pending.delete(id);
+        done("timeout");
         reject(new Error("设备超时"));
       }, callTimeout(args));
       d.pending.set(id, {
-        resolve: (v) => (clearTimeout(timer), resolve(v)),
-        reject: (e) => (clearTimeout(timer), reject(e)),
+        resolve: (v) => (clearTimeout(timer), done(v?.image ? "ok image" : "ok"), resolve(v)),
+        reject: (e) => (clearTimeout(timer), done(`error: ${String(e?.message || e).slice(0, 80)}`), reject(e)),
       });
       d.ws.send(JSON.stringify({ t: "call", id, capability, args: args || {} }));
     });
