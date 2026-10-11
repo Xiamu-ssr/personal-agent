@@ -13,6 +13,7 @@ import { contextFailure, humanError, recoveryContext, withRecovery, RECOVERY_NOT
 import { BackgroundTasks, TaskError } from "./background-tasks.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
+const SCHEDULE_FORK_REASON = '定时简报请先用 Agent（subagent_type: "fork"，run_in_background: true）派到后台，再简短回复用户';
 const IMAGE_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
 const KIND_LABEL = { image: "图片", file: "文件", voice: "语音笔记" };
 const shellQuote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -197,6 +198,7 @@ export class Harness {
         PreToolUse: [
           { matcher: CONNECTOR_GUARD_TOOLS, hooks: [async (input) => checkConnectorAccess(input)] },
           { matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] },
+          ...(!isolated ? [{ hooks: [async (input) => this.checkScheduleFork(input)] }] : []),
         ],
         PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => (onWrite(rel(input.tool_input?.file_path || input.tool_input?.notebook_path), input), {})] }],
       },
@@ -224,6 +226,28 @@ export class Harness {
     return {
       hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: err },
     };
+  }
+
+  checkScheduleFork(input) {
+    const main = this.main, guard = main?.scheduleFork;
+    if (input.agent_id || !main?.turnOpen || main.reason !== "schedule" || !guard || guard.dispatched) return {};
+    // The CLI strips run_in_background from its parsed Agent schema with the fork gate on.
+    // Match its normalized hook input to the original assistant tool_use by id, never infer intent.
+    const background = input.tool_input?.run_in_background === true ||
+      (input.tool_input?.run_in_background === undefined && guard.requestedForks.has(input.tool_use_id));
+    if (["Agent", "Task"].includes(input.tool_name) && input.tool_input?.subagent_type === "fork" && background) {
+      guard.dispatched = true; // Once this call passes the guard, the rest of the main turn is unrestricted.
+      guard.toolUseId = input.tool_use_id;
+      return {};
+    }
+    if (guard.failOpen) return {};
+    guard.denials++;
+    this.log(`[schedule] fork guard denied count=${guard.denials} tool=${this.connectors.redact(input.tool_name)}`);
+    if (guard.denials === 3) {
+      guard.failOpen = true; // The third call is still denied; subsequent calls use the normal path.
+      this.log("[schedule] fork guard fail-open");
+    }
+    return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: SCHEDULE_FORK_REASON } };
   }
 
   // Shared side effects of any write the agent makes.
@@ -334,6 +358,8 @@ export class Harness {
 
   beginMainTurn(main, active = null, reason = "task_result") {
     main.active = active; // Native turns have no user envelope and can never be auto-replayed.
+    main.reason = reason;
+    main.scheduleFork = { dispatched: false, denials: 0, failOpen: false, logged: false, requestedForks: new Set() };
     main.toolsUsed = false;
     main.failure = null;
     main.reply = "";
@@ -404,6 +430,13 @@ export class Harness {
       this.log("[api retry]", m.error, m.error_status, `attempt=${m.attempt}`);
       return;
     }
+    if (m.type === "system" && m.subtype === "task_started" && m.subagent_type === "fork" && !m.parent_task_id) {
+      const guard = main.scheduleFork;
+      if (main.reason === "schedule" && guard?.dispatched && !guard.logged && (!guard.toolUseId || guard.toolUseId === m.tool_use_id)) {
+        guard.logged = true;
+        this.log(`[schedule] fork dispatched task_id=${m.task_id} tool_use_id=${m.tool_use_id || guard.toolUseId || "unknown"}`);
+      }
+    }
     if (m.type === "system" && main.tasks.handle(m)) return;
     if (m.parent_tool_use_id) return; // subagent internals stay out of the chat
     if (m.type === "stream_event") {
@@ -427,6 +460,9 @@ export class Harness {
       for (const b of m.message?.content || []) {
         if (b.type === "text") main.reply += (main.reply ? "\n\n" : "") + b.text;
         if (b.type === "tool_use") {
+          if (main.reason === "schedule" && ["Agent", "Task"].includes(b.name) && b.input?.subagent_type === "fork" && b.input?.run_in_background === true) {
+            main.scheduleFork.requestedForks.add(b.id);
+          }
           main.toolsUsed = true;
           this.bus.emit({ t: "tool", name: b.name, hint: this.connectors.redact(toolHint(b)) });
         }

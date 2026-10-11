@@ -79,3 +79,60 @@
 4. 通知回合正在输出时连发两条短消息，确认不混入该回合，结果顺序正确且 App 显示忙闲。
 5. 同时运行两个小任务，通过 WS 和 HTTP 分别停其中一个，确认只收到该 id 的 stopped、另一个继续；重复停止检查 409，不存在检查 404。
 6. 重启服务/断线重连，确认初始 tasks 为空/当前原生活动快照，不从旧卡片恢复计数；检查补读/夜间整理仍发隔离 job。压缩预算继承上一轮策略；若遇到自发回合压缩失败，确认中文恢复提示、data/记忆/待办保留且不自动重放通知。
+
+# 第 4 轮：定时简报的运行层 fork 守卫（2026-10-11）
+
+基于已提交的第 3 轮 `67023dd`。线上闹钟和 fork 能力已经生效，但提示词没有阻止模型直接在主线程做简报；本轮增加工具调用前的约束。本地没有提交、推送、部署、SSH 或真实模型调用，付费模型调用 **0 次、0 tokens**。
+
+## 实现方式
+
+- cron 和手动 `/api/run` 共用 `runScheduledTask`。闹钟保留 App 解析名称所需的 `[定时] 该出「<名称>」了` 前缀，紧接着明确要求 Agent（`subagent_type: "fork"`、`run_in_background: true`）后台派发，主会话只回一句简短确认，再附任务说明。系统提示词同步精简。
+- `beginMainTurn` 保存本轮 reason，并重置派发标记、拒绝次数、fail-open 标记、日志标记及原始 fork 请求 id 集合。只在非隔离查询挂上新的 PreToolUse hook；只有仍开放的 schedule 主回合且 `agent_id` 为空时守卫才生效。
+- 派发前仅允许参数严格正确的 Agent fork（兼容同一工具的旧名 Task），其他工具、普通 Agent、缺失/false/字符串形式的 background 值都返回中文 `permissionDecisionReason`。fork 放行后标记已派发，本轮后续工具不再受此守卫限制。子任务、user/task_result 回合、隔离补读和夜间整理照常运行；原有连接器和记忆路径守卫仍然执行。
+- 第三次调用仍被拒绝，同时设置 fail-open；第四次及之后按原路径执行，避免模型反复选错工具造成死锁。fail-open 只解除本轮的 fork 守卫，下轮重新计数。它是明确的兜底：这一轮可能重新由主线程做简报。
+- 在对应原生 `task_started` 到达后才记录成功派发日志，关联 task id 和 tool-use id。单纯放行、工具参数校验失败或模型口头说“已派出”都不算成功日志。原有后台 Write → outputs → task notification → `job.done`/chat card 路径不变，无 App 协议新增。
+
+## SDK 0.3.295 的参数处理依据
+
+一个容易误拦的细节：开启 fork 后，CLI 的 Agent 输入 schema 会移除 `run_in_background`。即使模型原始请求明确写了 true，PreToolUse 收到的已解析输入也没有该字段。守卫因此同时核对原生 assistant `tool_use`：仅记录严格请求 fork + boolean true 的 id；hook 的 background 被省略时，必须命中同一 id 且仍是 fork。没有原始凭据的省略值照样被拒绝，显式 false 也不能借原始记录放行。原始工具参数不写日志，只在本回合内保存匹配 id。
+
+本机 native CLI **2.1.295** 的内嵌 JS 依据（byte offset 仅适用于本机 darwin-arm64 包；Linux 应按函数/字符串定位）：
+
+| 依据 | 核对结果 |
+| --- | --- |
+| `sdk.d.ts:171–183`，`BaseHookInput.agent_id` | 仅子 agent hook 带 agent_id，主线程不带；应使用这个字段区分调用来源 |
+| `sdk.d.ts:2741–2754` | PreToolUse 提供 tool_name、已解析 tool_input、tool_use_id；可返回 deny 及中文理由 |
+| `sdk.d.ts:6098–6115` | task_started 提供 task_id、tool_use_id、subagent_type 和后台状态 |
+| CLI `RFr`，byte **202452679** | `e=Bbr()||Nte()`，`y=e?n.omit({run_in_background:!0}):...`；fork gate 开启时移除该参数 |
+| CLI `Nte`，byte **196403036**；`Jt`/`uo`，byte **202462733**/**202445494** 附近 | fork env 开 gate；主线程启动子 agent 使用 forceAsync，后台判定包含该值。本地任务事件和完成通知验证了实际后台运行 |
+| CLI `yt="Agent"`、`em="Task"`，byte **190594125**/**190594427**；工具 definition `aliases:[em]`，byte **202484228** | Task 是同一个 Agent 工具的旧别名，不允许 TaskCreate/TaskUpdate 代替 fork |
+
+真实 SDK + fake-anthropic 测试已直接断言 hook 中字段被移除、正确的原始请求仍能启动 fork；因此没有为了适配 SDK 而把“没有明确后台参数”当成合法请求。
+
+## 改动文件
+
+- `cloud/src/agent.mjs`：schedule 回合状态、PreToolUse 守卫、原始参数 id 关联、拒绝/派发日志。
+- `cloud/src/scheduler.mjs`：闹钟中的明确后台 fork 指令。
+- `cloud/test/schedule-fork.test.mjs`：新运行层守卫和真实 SDK/fake-anthropic 验证。
+- `cloud/test/scheduler.test.mjs`、`cloud/test/http-tasks.test.mjs`：更新闹钟断言，覆盖原名称前缀、派发要求和任务正文。
+- `cloud/docs/task-runtime.md`：本轮报告与上线检查点。
+- `spec/prompts/system-prompt.md`：与闹钟要求一致的精炼说明。
+
+## 实际验证
+
+本地 **Node 20.19.4**：`npm run check` 通过，`npm test` **50/50** 通过。此前 46 项均保留通过，新增 4 项；全部模型流量来自 loopback fake-anthropic，测试数据、会话配置和假凭据只在 `/tmp`。
+
+- 定时主线程先调 Bash：中文拒绝，命令没有执行；随后严格 Agent fork 被放行，父回合先结束，子任务仍在后台。
+- fork 的 Bash 和 Write hook 带原生 agent_id，不消耗拒绝次数；实际 HTML 写入 `data/briefs/`，完成通知原生唤醒主会话，产生一次 `job.done` 和一张带 outputs 的 card。task_result 主回合的 Bash 也正常执行。
+- 连续三次主线程 Bash 都被拒绝，第四次实际执行；fail-open 日志只出现一次，下个 schedule 的状态和计数重置。
+- user 主回合 Bash 实际执行；严格参数、同 id 关联、子任务豁免、隔离 hook 不挂守卫及 user/task_result 的重置另有直接测试。
+- cron、手动运行的名称前缀不变；既有 queue、interrupt/stopTask、压缩阈值、卡死恢复、连接器和假 IMAP 测试没有回退。
+
+**未验证**：生产 Linux CLI/ZenMux/Haiku 对拒绝理由的实际响应，以及真实 App 打开卡片。守卫本身已经通过真实本地 CLI 验证；按要求没有真实模型调用，也没有部署。模型只输出文本、一直不调工具时，PreToolUse 无法强迫产生工具调用；被拒三次后的 fail-open 也允许原来的主线程路径。
+
+## 上线后看这些日志
+
+1. 重启服务载入新代码和提示词，手动触发一个只用 Write 生成短 HTML 的简报。闹钟前缀仍为 `[定时] 该出「<名称>」了`，主会话应简短确认，然后后台 task 出现。
+2. 如果模型先尝试自己做，会出现 `[schedule] fork guard denied count=1 tool=Bash`（工具名和次数随实际调用变化）。被拒工具不应执行。正确派发必须随后出现 **`[schedule] fork dispatched task_id=<id> tool_use_id=<id>`**，可按 task id 关联原生任务 started/完成事件和简报 card。
+3. **`[schedule] fork guard fail-open`** 表示本轮已经拒绝三次，后续放开，是兜底信号；正常派发不应出现这行。若频繁出现，保留该轮工具名称/次数及 task 事件供审查，不能把主会话口头确认当成成功派发。
+4. 确认 fork 内的文件/连接器工具正常，完成后主会话转述、卡片打开实际 HTML；继续发普通用户消息，确认没有 schedule 拒绝日志。下一次闹钟的拒绝次数应从 1 重新开始。

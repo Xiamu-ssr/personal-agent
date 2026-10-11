@@ -58,7 +58,11 @@ test("authenticated HTTP/WS task stop has clear errors and manual briefs use sch
   writeJson(config.scheduleFile, [{ id: "brief", kind: "brief", name: "报价简报", prompt: "总结报价" },
     { id: "night", prompt: "[夜间整理]" }, { id: "compact", kind: "compact" }]);
   assert.deepEqual((await curl("/api/run", "POST", { id: "brief" })).body, { ok: true, mode: "alarm" });
-  assert.deepEqual(sent, [["[定时] 该出「报价简报」了\n\n总结报价", "schedule"]]);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][1], "schedule");
+  assert.match(sent[0][0], /^\[定时\] 该出「报价简报」了/);
+  assert.match(sent[0][0], /subagent_type: "fork"，run_in_background: true/);
+  assert.ok(sent[0][0].endsWith("\n\n任务说明：\n总结报价"));
   assert.equal((await curl("/api/run", "POST", { id: "night" })).body.mode, "isolated");
   assert.deepEqual(isolated, [["night", "[夜间整理]"]]);
   assert.equal((await curl("/api/run", "POST", { id: "compact" })).status, 404);
