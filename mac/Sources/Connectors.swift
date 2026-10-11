@@ -1,5 +1,6 @@
 import Observation
 import SwiftUI
+import WebKit
 
 struct ConnectorOption: Identifiable {
     let value: String
@@ -17,7 +18,6 @@ struct ConnectorField: Identifiable {
     let options: [ConnectorOption]
     let showIf: [String: String]
     let helpText: String
-    let presetHelp: [String: String]
     var id: String { key }
 
     init(_ json: [String: Any]) {
@@ -32,7 +32,6 @@ struct ConnectorField: Identifiable {
         }
         showIf = (json["showIf"] as? [String: Any] ?? [:]).mapValues(Self.string)
         helpText = json["help"] as? String ?? ""
-        presetHelp = json["help"] as? [String: String] ?? [:]
     }
 
     static func string(_ value: Any?) -> String {
@@ -41,7 +40,7 @@ struct ConnectorField: Identifiable {
         return ""
     }
     func visible(_ values: [String: String]) -> Bool { showIf.allSatisfy { values[$0.key] == $0.value } }
-    func help(_ values: [String: String]) -> String { presetHelp[values["preset"] ?? ""] ?? helpText }
+    func help(_ values: [String: String]) -> String { helpText }
 }
 
 struct ConnectorAccount: Identifiable {
@@ -61,20 +60,16 @@ struct CloudConnector: Identifiable {
     let fields: [ConnectorField]?
     let multiAccount: Bool
     let accounts: [ConnectorAccount]
-    let builtin: Bool
-    let custom: Bool
     var id: String { name }
-    var canAdd: Bool { !builtin && !custom && fields != nil && (multiAccount || accounts.isEmpty) }
+    var canAdd: Bool { fields != nil && (multiAccount || accounts.isEmpty) }
 
-    init(_ json: [String: Any], builtin: Bool = false, custom: Bool = false) {
+    init(_ json: [String: Any]) {
         name = json["name"] as? String ?? ""
         title = json["title"] as? String ?? name
         description = json["description"] as? String ?? ""
-        icon = connectorIcon(json["icon"] as? String ?? name)
+        icon = json["icon"] as? String ?? ""
         fields = (json["fields"] as? [[String: Any]])?.map(ConnectorField.init)
         multiAccount = json["multiAccount"] as? Bool ?? true
-        self.builtin = builtin
-        self.custom = custom || json["custom"] as? Bool == true
         let secrets = Set((fields ?? []).filter { $0.type == "secret" }.map(\.key))
         accounts = (json["accounts"] as? [[String: Any]] ?? []).map { row in
             // A misconfigured server cannot prefill a secret into a visible text field.
@@ -87,35 +82,15 @@ struct CloudConnector: Identifiable {
     }
 }
 
-func connectorIcon(_ name: String) -> String {
-    switch name {
-    case "web_search", "tavily": return "magnifyingglass"
-    case "web_fetch": return "globe"
-    case "shell": return "terminal"
-    case "files": return "folder"
-    case "schedule": return "clock"
-    case "transcribe": return "waveform"
-    case "email", "envelope": return "envelope"
-    case "calendar": return "calendar"
-    case "github": return "chevron.left.forwardslash.chevron.right"
-    case "feishu": return "paperplane"
-    case "notion": return "note.text"
-    case "rss": return "dot.radiowaves.up.forward"
-    default: return "puzzlepiece.extension"
-    }
-}
-
 /// The draft stays in memory. A blank/masked secret is omitted from PUT so the server keeps it.
 struct ConnectorDraft {
     let connector: CloudConnector
     let editing: Bool
-    let partialEdit: Bool
     let initial: [String: String]
 
     init(connector: CloudConnector, account: ConnectorAccount? = nil) {
         self.connector = connector
         editing = account != nil
-        partialEdit = account != nil && account?.values == nil
         initial = Dictionary(uniqueKeysWithValues: (connector.fields ?? []).map { field in
             (field.key, account == nil ? field.defaultValue : field.type == "secret" ? "" : account?.values?[field.key] ?? "")
         })
@@ -130,7 +105,6 @@ struct ConnectorDraft {
                 if !editing && field.required { throw ApiError(code: 0, message: "请填写\(field.label)") }
                 continue
             }
-            if partialEdit && trimmed.isEmpty { continue }
             if field.required && trimmed.isEmpty { throw ApiError(code: 0, message: "请填写\(field.label)") }
             if field.type == "number", !trimmed.isEmpty {
                 guard let number = Double(trimmed), number.isFinite else { throw ApiError(code: 0, message: "\(field.label)请填写数字") }
@@ -185,31 +159,20 @@ struct ConnectorDetailPage: View {
         SubPage(title: connector?.title ?? "连接器", subtitle: connector?.description ?? "") {
             if let connector {
                 HStack(spacing: 16) {
-                    IconTile(icon: connector.icon, tint: Theme.accent, size: 56)
-                    Text(connector.custom ? "豆豆自建" : connector.builtin ? "内置能力" : "账号 · \(connector.accounts.count) 个")
+                    ConnectorImage(name: connector.name, size: 56)
+                    Text("账号 · \(connector.accounts.count) 个")
                         .font(.system(size: 13)).foregroundStyle(Theme.sub)
                     Spacer()
-                    if connector.custom || connector.builtin { GoldTag(text: connector.custom ? "豆豆自建" : "已连接") }
                 }
                 .card(radius: 22, padding: 20)
                 if !error.isEmpty { Note(text: error, icon: "exclamationmark.circle") }
                 if !store.error.isEmpty { Note(text: store.error, icon: "wifi.exclamationmark") }
-                if connector.custom {
-                    Note(text: "这是豆豆自建的连接器，配置由豆豆维护。这里只展示已接入的服务。")
-                        .card(radius: 22, padding: 12)
-                } else if connector.builtin {
-                    Note(text: "这是豆豆的内置能力，无需另外配置账号。")
-                        .card(radius: 22, padding: 12)
-                } else {
-                    accounts(connector)
-                    if connector.canAdd {
-                        Button("添加账号") { Nav.shared.push(.connectorForm(name: name, accountID: nil)) }
-                            .buttonStyle(GoldButtonStyle(height: 40)).disabled(working != nil)
-                    } else {
-                        Text(connector.fields == nil ? "账号表单即将支持" : "这个连接器支持一个账号，可以编辑或删除后重新添加")
-                            .font(.system(size: 12)).foregroundStyle(Theme.sub)
-                    }
+                accounts(connector)
+                if connector.canAdd {
+                    Button("添加账号") { Nav.shared.push(.connectorForm(name: name, accountID: nil)) }
+                        .buttonStyle(GoldButtonStyle(height: 40)).disabled(working != nil)
                 }
+
             } else { Note(text: store.loaded ? "这个连接器已不在目录中，返回后刷新试试" : "加载中…") }
         }
         .task(id: chat.devicesVersion) { await store.load() }
@@ -289,12 +252,12 @@ struct ConnectorFormPage: View {
         SubPage(title: accountID == nil ? "添加账号" : "编辑账号", subtitle: draft?.connector.title ?? "") {
             if let draft {
                 if draft.editing {
-                    Text(draft.partialEdit ? "只填写要修改的项，未填写的配置会保留。授权码不修改请留空。" : "授权码不修改请留空，保存时会重新验证。")
+                    Text("授权码不修改请留空，保存时会重新验证。")
                         .font(.system(size: 12.5)).foregroundStyle(Theme.sub)
                 }
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach((draft.connector.fields ?? []).filter { $0.visible(values) }) { field in
-                        ConnectorFieldView(field: field, values: $values, editing: draft.editing, partialEdit: draft.partialEdit)
+                        ConnectorFieldView(field: field, values: $values, editing: draft.editing)
                     }
                 }
                 .disabled(verifying)
@@ -306,7 +269,7 @@ struct ConnectorFormPage: View {
             } else { Note(text: "找不到这个账号的表单，返回后刷新试试") }
         }
         .task {
-            guard draft == nil, let connector = store.connector(name), connector.fields != nil, !connector.custom, !connector.builtin else { return }
+            guard draft == nil, let connector = store.connector(name), connector.fields != nil else { return }
             let account = connector.accounts.first { $0.id == accountID }
             guard accountID == nil || account != nil else { return }
             let seeded = ConnectorDraft(connector: connector, account: account)
@@ -338,20 +301,19 @@ private struct ConnectorFieldView: View {
     let field: ConnectorField
     @Binding var values: [String: String]
     let editing: Bool
-    let partialEdit: Bool
     @State private var shown = false
 
     private var value: Binding<String> {
         Binding(get: { values[field.key] ?? "" }, set: { values[field.key] = $0 })
     }
-    private var placeholder: String { editing && field.type == "secret" ? "不修改请留空" : partialEdit ? "留空保持原值" : field.placeholder }
+    private var placeholder: String { editing && field.type == "secret" ? "不修改请留空" : field.placeholder }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(field.label + (field.required ? " *" : "")).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink)
             if field.type == "select" {
                 Picker(field.label, selection: value) {
-                    Text(partialEdit ? "保持原设置" : "请选择").tag("")
+                    Text("请选择").tag("")
                     ForEach(field.options) { option in Text(option.label).tag(option.value) }
                 }
                 .labelsHidden().pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading)
@@ -379,5 +341,63 @@ private struct ConnectorFieldView: View {
             let help = field.help(values)
             if !help.isEmpty { Text(help).font(.system(size: 11.5)).foregroundStyle(Theme.sub).fixedSize(horizontal: false, vertical: true) }
         }
+    }
+}
+
+/// Official icons come from the server; the neutral placeholder is only used while unavailable.
+struct ConnectorImage: View {
+    let name: String
+    var size: CGFloat = 38
+    @State private var image: NSImage?
+    @State private var svg: String?
+    var body: some View {
+        Group {
+            if let image { Image(nsImage: image).resizable().scaledToFit() }
+            else if let svg { ConnectorSVG(text: svg) }
+            else { RoundedRectangle(cornerRadius: 10).fill(Theme.field).overlay(Image(systemName: "app.dashed").foregroundStyle(Theme.faint)) }
+        }.frame(width: size, height: size)
+        .task(id: Prefs.server + name) {
+            image = nil
+            svg = nil
+            let path = "/api/connectors/" + ConnectorAPI.component(name) + "/icon"
+            if let bytes = try? await Api.data(path) {
+                image = NSImage(data: bytes)
+                if image == nil, let text = String(data: bytes, encoding: .utf8), text.contains("<svg") { svg = text }
+            }
+        }
+    }
+}
+
+private struct ConnectorSVG: NSViewRepresentable {
+    let text: String
+    func makeNSView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        let view = WKWebView(frame: .zero, configuration: config)
+        view.setValue(false, forKey: "drawsBackground")
+        view.loadHTMLString("<html><head><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{width:100%;height:100%}</style></head><body>" + text + "</body></html>", baseURL: nil)
+        return view
+    }
+    func updateNSView(_ view: WKWebView, context: Context) {}
+}
+
+struct ConnectorListRow: View {
+    let connector: CloudConnector
+    let connected: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ConnectorImage(name: connector.name)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(connector.title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
+                    Text(connector.description).font(.system(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
+                }
+                Spacer(minLength: 10)
+                if connected { GoldTag(text: "已连接") }
+                else { Text("连接").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.accent).padding(.horizontal, 14).frame(height: 28).background(Theme.field, in: Capsule()) }
+            }.padding(.vertical, 12).padding(.horizontal, 6).contentShape(Rectangle())
+        }.buttonStyle(.plain)
     }
 }

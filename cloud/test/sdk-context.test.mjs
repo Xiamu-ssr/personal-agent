@@ -84,19 +84,19 @@ test("bundled CLI reproduces the dotted gateway model's 32K fallback", { timeout
   assert.equal(api.requests[0].max_tokens, 32000);
 });
 
-test("actual SDK child inherits 128K; cached total below 95K stays; above 95K compacts at low effort", { timeout: 60_000 }, async (t) => {
+test("actual SDK child inherits 128K; cached total below 167K stays; above 167K compacts at low effort", { timeout: 60_000 }, async (t) => {
   let normal = 0;
   const api = await fakeAnthropic((body) => {
     if (compactRequest(body)) return {};
     normal++;
-    return { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: normal === 1 ? 90000 : 92001 } };
+    return { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: normal === 1 ? 162000 : 164001 } };
   });
   const f = await nativeFixture(t, api);
   assert.equal((await f.turn("First tiny request.")).subtype, "success");
   assert.equal((await f.turn("Second tiny request.")).subtype, "success");
   assert.equal(api.requests.filter(compactRequest).length, 0);
   assert.equal((await f.turn("Third tiny request.")).subtype, "success");
-  assert.deepEqual(f.childEnv(), { max: "128000", window: "128000", pct: "100" });
+  assert.deepEqual(f.childEnv(), { max: "128000", window: "200000", pct: "100" });
   assert.ok(api.requests.every((r) => r.max_tokens === 128000));
   const compact = api.requests.find(compactRequest);
   assert.ok(compact, "a 95001 cache-inclusive API input causes compaction before the next request");
@@ -115,7 +115,7 @@ test("isolated SDK query uses the same real wire cap and compaction controls", {
   assert.equal(api.requests.find(compactRequest)?.output_config?.effort, "low");
 });
 
-test("native subagent inherits 128K and compacts after cached input crosses 95K", { timeout: 45_000 }, async (t) => {
+test("native subagent inherits 128K and compacts after cached input crosses 167K", { timeout: 45_000 }, async (t) => {
   const file = path.join(config.data, "native-child-fixture.txt");
   fs.mkdirSync(config.data, { recursive: true });
   fs.writeFileSync(file, "fictional child tool output\n");
@@ -127,7 +127,7 @@ test("native subagent inherits 128K and compacts after cached input crosses 95K"
     const reads = (all.match(/toolu_fake_read_\d/g) || []).length / 2;
     if (!all.includes("Delegate this tiny") && all.includes("NATIVE_CHILD_ONLY") && reads < 3) {
       return { content: [{ type: "tool_use", id: "toolu_fake_read_" + reads, name: "Read", input: { file_path: file } }], stop_reason: "tool_use",
-        usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: reads === 2 ? 92001 : 1000 } };
+        usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: reads === 2 ? 164001 : 1000 } };
     }
     return {};
   });
@@ -162,7 +162,7 @@ test("CLI prompt-too-long compaction retry trims old history and can self-rescue
 test("actual resumed SDK session escapes failed compaction, keeps data, hides English, and isolated jobs complete", { timeout: 45_000 }, async (t) => {
   let failCompact = false;
   const api = await fakeAnthropic((body) => compactRequest(body) && failCompact ? { stop_reason: "max_tokens" } :
-    { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 92001 } });
+    { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 164001 } });
   const calls = [], events = [], harnesses = [];
   const dir = path.join(config.sessions, "real-recovery-fixture");
   writeJson(config.stateFile, { unrelated: "keep" });

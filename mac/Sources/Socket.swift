@@ -57,7 +57,7 @@ final class Socket: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func open() {
-        guard Prefs.configured, let req = Api.wsRequest(role) else { return }
+        guard LocalVerification.explicitLoopback || Prefs.configured, let req = Api.wsRequest(role) else { return }
         let t = session.webSocketTask(with: req)
         t.maximumMessageSize = 16 << 20
         task = t

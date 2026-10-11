@@ -16,6 +16,8 @@ struct TreeEntry: Identifiable, Hashable {
 }
 
 enum Api {
+    /// Explicit loopback verification never reads or forwards a saved credential.
+    static var authToken: String { LocalVerification.explicitLoopback ? "local-fixture" : Prefs.token }
     /// Shared transport; validation can replace it with an in-memory URLProtocol.
     static var session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
@@ -24,7 +26,7 @@ enum Api {
         return URLSession(configuration: config)
     }()
     static func request(_ path: String, method: String = "GET", body: [String: Any]? = nil,
-                        server: String = Prefs.server, token: String = Prefs.token) throws -> URLRequest {
+                        server: String = Prefs.server, token: String = Api.authToken) throws -> URLRequest {
         guard let u = URL(string: server + path) else { throw ApiError(code: 0, message: "云端地址不对") }
         var r = URLRequest(url: u, timeoutInterval: 20)
         r.httpMethod = method
@@ -37,7 +39,7 @@ enum Api {
     }
 
     static func data(_ path: String, method: String = "GET", body: [String: Any]? = nil,
-                     server: String = Prefs.server, token: String = Prefs.token) async throws -> Data {
+                     server: String = Prefs.server, token: String = Api.authToken) async throws -> Data {
         try await send(request(path, method: method, body: body, server: server, token: token))
     }
 
@@ -56,7 +58,7 @@ enum Api {
     }
 
     static func json(_ path: String, method: String = "GET", body: [String: Any]? = nil,
-                     server: String = Prefs.server, token: String = Prefs.token) async throws -> [String: Any] {
+                     server: String = Prefs.server, token: String = Api.authToken) async throws -> [String: Any] {
         let d = try await data(path, method: method, body: body, server: server, token: token)
         guard let object = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else {
             throw ApiError(code: 0, message: "云端返回的数据不是 JSON")
@@ -82,8 +84,8 @@ enum Api {
     }
 
     /// Ask the server to issue its WebView cookie. Never synthesize a cookie in the app.
-    static func webCookies() async throws -> [HTTPCookie] {
-        let req = try request("/api/login", method: "POST", body: ["token": Prefs.token])
+    static func webCookies(server: String = Prefs.server, token: String = Api.authToken) async throws -> [HTTPCookie] {
+        let req = try request("/api/login", method: "POST", body: ["token": token], server: server, token: token)
         let (d, resp) = try await session.data(for: req)
         try validate(d, resp)
         guard let http = resp as? HTTPURLResponse, let url = http.url else { return [] }
@@ -161,7 +163,7 @@ enum Api {
         if base.hasPrefix("https://") { base = "wss://" + base.dropFirst(8) } else if base.hasPrefix("http://") { base = "ws://" + base.dropFirst(7) }
         guard let u = URL(string: "\(base)/ws?role=\(role)") else { return nil }
         var r = URLRequest(url: u)
-        r.setValue("Bearer \(Prefs.token)", forHTTPHeaderField: "Authorization")
+        r.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         return r
     }
 

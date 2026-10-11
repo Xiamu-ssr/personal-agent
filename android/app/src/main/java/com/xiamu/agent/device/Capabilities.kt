@@ -51,6 +51,7 @@ class Capability(
     val run: suspend (Context, JSONObject) -> Any,
 ) {
     fun hasPermissions(ctx: Context): Boolean {
+        if(name == "health") return HealthAccess.hasPermissions(ctx)
         fun has(p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
         return if (name == "location") permissions.any(::has) else permissions.all(::has)
     }
@@ -86,10 +87,15 @@ object Capabilities {
                 .put("charging", status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
         },
         Capability(
-            "notify", "发通知", "在手机上弹一条通知提醒用户", """{"title":"标题","text":"正文"}""", notifyPerm,
+            "notify", "发通知", "在手机上弹一条通知提醒用户，可选 url 在点通知时打开", """{"title":"标题","text":"正文","url":"可选 http(s) 链接"}""", notifyPerm,
             hint = "豆豆可以在手机上弹通知提醒你",
         ) { ctx, a ->
-            notify(ctx, a.optString("title").ifBlank { "豆豆" }, a.optString("text"), openApp(ctx))
+            val url = a.optString("url").trim()
+            val tap = if(url.isBlank()) openApp(ctx) else {
+                require(Uri.parse(url).scheme in setOf("http", "https") && !Uri.parse(url).host.isNullOrBlank()) { "url 只支持 http(s) 网址" }
+                PendingIntent.getActivity(ctx,url.hashCode(),Intent(Intent.ACTION_VIEW,Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            }
+            notify(ctx, a.optString("title").ifBlank { "豆豆" }, a.optString("text"), tap)
             "已通知"
         },
         Capability(
@@ -120,20 +126,10 @@ object Capabilities {
             }
             "已复制到剪贴板"
         },
-        Capability(
-            "open_url", "打开网页",
-            "在手机上发一条通知，用户点开就用浏览器打开这个网址（手机后台不能直接拉起页面）", """{"url":"http(s) 网址","title":"可选，通知标题"}""",
-            notifyPerm, hint = "豆豆发来的链接会出现在通知里，点开就是浏览器",
-        ) { ctx, a ->
-            val url = a.optString("url").trim()
-            if (!url.startsWith("http://") && !url.startsWith("https://")) throw IllegalArgumentException("只支持 http(s) 网址")
-            val view = PendingIntent.getActivity(
-                ctx, url.hashCode(), Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            notify(ctx, a.optString("title").ifBlank { "豆豆发来一个链接" }, url, view)
-            "已发到通知栏，用户点开就会打开"
-        },
+        Capability("health", "运动健康", "读取步数、睡眠、心率和心率变异性；优先 Health Connect，不可用或无数据时返回计步传感器开启后的步数（partial）。",
+            """{"from":"YYYY-MM-DD，默认今天","days":"天数，1–31，默认1"}""",
+            if(Build.VERSION.SDK_INT >= 29) listOf(Manifest.permission.ACTIVITY_RECOGNITION) else emptyList(),
+            hint="Health Connect 的运动健康数据，没有时用手机计步") { ctx,a -> HealthAccess.read(ctx,a) },
     )
 
     private fun openApp(ctx: Context): PendingIntent = PendingIntent.getActivity(

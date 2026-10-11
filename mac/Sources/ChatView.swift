@@ -1,14 +1,6 @@
 import AVFoundation
 import SwiftUI
 
-/// 在线 · 本机已接入 / 在翻资料 / 连接中…
-func statusLine(_ chat: ChatClient, _ device: DeviceClient) -> String {
-    if !chat.configured { return "未登录" }
-    if !chat.connected { return chat.error.isEmpty ? "连接中…" : chat.error }
-    if chat.busy { return chat.busyReason == "user" || chat.busyReason.isEmpty ? (chat.toolHint.isEmpty ? "在想…" : chat.toolHint) : chat.replyStatus }
-    return device.online ? "在线 · 本机已接入" : "在线"
-}
-
 struct ChatPage: View {
     private var chat: ChatClient { .shared }
     private var device: DeviceClient { .shared }
@@ -40,14 +32,9 @@ struct ChatPage: View {
     private var header: some View {
         HStack(spacing: 12) {
             HStack(spacing: 10) {
-                Orb(size: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("豆豆").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
-                    HStack(spacing: 5) {
-                        Dot(on: chat.connected)
-                        Text(statusLine(chat, device)).font(.system(size: 11.5)).foregroundStyle(Theme.sub).lineLimit(1)
-                    }
-                }
+                AgentAvatar(size: 30)
+                Text(ProfileStore.shared.agentName).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+                AgentStatusDot()
             }
             .padding(.leading, 6)
             .padding(.trailing, 16)
@@ -138,7 +125,7 @@ struct ChatPage: View {
                 VStack(alignment: .leading, spacing: 14) {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         if chat.items.isEmpty && chat.streaming.isEmpty {
-                            Note(text: chat.connected ? "跟豆豆说点什么吧" : statusLine(chat, device), icon: "bubble.left.and.bubble.right")
+                            Note(text: chat.connected ? "跟豆豆说点什么吧" : (chat.error.isEmpty ? "连接中…" : chat.error), icon: "bubble.left.and.bubble.right")
                                 .padding(.top, 80)
                         }
                         ForEach(chat.items) { item in
@@ -274,6 +261,8 @@ struct MessageRow: View, Equatable {
 struct UserBubble: View {
     let item: ChatItem
     var compact = false
+    @State private var editing = false
+    @State private var draft = ""
 
     var body: some View {
         HStack {
@@ -296,6 +285,28 @@ struct UserBubble: View {
                 }
             }
             .opacity(item.queued ? 0.55 : item.pending ? 0.7 : 1)
+            .contextMenu {
+                if item.queued && !item.serverID.isEmpty {
+                    Button("撤回") { ChatClient.shared.updateQueue(item) }
+                    Button("修改") { draft = item.text; editing = true }
+                }
+            }
+            .disabled(ChatClient.shared.queueOperations.contains(item.serverID))
+            .sheet(isPresented: $editing) {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("修改排队消息").font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.ink)
+                    TextEditor(text: $draft).font(.system(size: 14)).frame(height: 130)
+                        .padding(10).background(.white, in: RoundedRectangle(cornerRadius: 12))
+                    HStack {
+                        Spacer()
+                        Button("取消") { editing = false }.buttonStyle(SoftButtonStyle())
+                        Button("保存修改") {
+                            if ChatClient.shared.updateQueue(item, text: draft) { editing = false }
+                            else if !item.queued { editing = false; Nav.shared.show("豆豆已经在看这条了") }
+                        }.buttonStyle(GoldButtonStyle(height: 34)).disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }.padding(24).frame(width: 430).background(Theme.canvas).preferredColorScheme(.light)
+            }
         }
     }
 }
@@ -315,10 +326,11 @@ struct AssistantBubble: View, Equatable {
     }
 }
 
-/// 简报等: white card with a document icon; opens in the web view.
+/// JSON brief preview; clicking navigates to its native cards on 今日.
 struct CardMessage: View {
     let item: ChatItem
     @State private var hover = false
+    @State private var brief: BriefCard?
 
     var body: some View {
         HStack {
@@ -328,10 +340,15 @@ struct CardMessage: View {
                 HStack(spacing: 12) {
                     IconTile(icon: "doc.richtext", tint: Color(hex: 0x527AAA), size: 40)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.text.isEmpty ? (item.label.isEmpty ? "简报" : item.label) : item.text)
+                        if let brief, !brief.chip.isEmpty { Text(brief.chip).font(.system(size: 11)).foregroundStyle(Theme.goldText) }
+                        Text(brief?.title ?? (item.text.isEmpty ? (item.label.isEmpty ? "简报" : item.label) : item.text))
                             .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(2).multilineTextAlignment(.leading)
-                        Text([item.label, item.ts.map(Fmt.when) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
-                            .font(.system(size: 11.5)).foregroundStyle(Theme.faint)
+                        if let brief, !brief.summary.isEmpty {
+                            Text(brief.summary).font(.system(size: 12)).foregroundStyle(Theme.sub).lineLimit(2).multilineTextAlignment(.leading)
+                        } else {
+                            Text([item.label, item.ts.map(Fmt.when) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.system(size: 11.5)).foregroundStyle(Theme.faint)
+                        }
                     }
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
@@ -345,6 +362,13 @@ struct CardMessage: View {
             .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hover = h } }
             .disabled(item.outputs.isEmpty)
             Spacer()
+        }
+        .task(id: "\(item.outputs.first ?? "")#\(ChatClient.shared.filesVersion)") {
+            brief = nil
+            if let path = item.outputs.first, path.hasPrefix("data/briefs/"), path.hasSuffix(".json"),
+               let data = try? await Api.data(Api.filePath(path)), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                brief = BriefItem.parse(["path": path, "brief": json])?.cards.first
+            }
         }
     }
 }

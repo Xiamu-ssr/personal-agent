@@ -7,16 +7,7 @@ import { convert } from "html-to-text";
 import { z } from "zod";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 
-export const PRESETS = {
-  qq: ["QQ 邮箱", "imap.qq.com"],
-  "163": ["163 邮箱", "imap.163.com"],
-  "126": ["126 邮箱", "imap.126.com"],
-  gmail: ["Gmail", "imap.gmail.com"],
-  outlook: ["Outlook", "outlook.office365.com"],
-  exmail: ["腾讯企业邮", "imap.exmail.qq.com"],
-  aliyun: ["阿里企业邮", "imap.qiye.aliyun.com"],
-};
-const CLIENT_INFO = { name: "Doudou Personal Agent", version: "0.3.0", vendor: "Personal Agent" };
+const CLIENT_INFO = { name: "Doudou Personal Agent", version: "0.4.0", vendor: "Personal Agent" };
 const BODY_LIMIT = 20_000;
 const MAX_TEXT_BYTES = 1024 * 1024;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
@@ -48,13 +39,12 @@ export function humanImapError(error) {
   return "邮箱操作失败，请确认 IMAP 已开启、文件夹存在，稍后重试";
 }
 
-function validate(values) {
+function validate(values, host) {
   const out = { ...values };
-  if (!PRESETS[out.preset] && out.preset !== "custom") throw emailError("请选择邮箱类型");
   if (typeof out.address !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(out.address.trim())) throw emailError("请填写有效的邮箱地址");
   out.address = out.address.trim();
   if (typeof out.password !== "string" || !out.password.trim() || out.password === "••••") throw emailError("请填写邮箱授权码");
-  if (out.preset === "custom") {
+  if (!host) {
     if (typeof out.host !== "string" || !out.host.trim() || /[\s/\\:@?#]/.test(out.host)) throw emailError("请填写 IMAP 服务器域名或 IP，不要带协议和路径");
     out.host = out.host.trim();
     out.port ??= 993;
@@ -153,12 +143,13 @@ function decode(value) {
 }
 
 // clientFactory is a local dependency-injection seam for TLS mock tests, never a user configuration field.
-export function createEmailConnector({ clientFactory = (options) => new ImapFlow(options) } = {}) {
+export function createImapConnector({ name = "imap", title = "其他邮箱", host, needsID = false,
+  help = "在邮箱服务商设置中开启 IMAP，使用授权码或客户端专用密码", icon = "icon.png",
+  clientFactory = (options) => new ImapFlow(options) } = {}) {
   async function withClient(values, operation) {
-    const clean = validate(values);
-    const host = clean.preset === "custom" ? clean.host : PRESETS[clean.preset][1];
+    const clean = validate(values, host);
     const client = clientFactory({
-      host, port: clean.preset === "custom" ? clean.port : 993, secure: true,
+      host: host || clean.host, port: host ? 993 : clean.port, secure: true,
       auth: { user: clean.address, pass: clean.password },
       clientInfo: CLIENT_INFO, logger: false, emitLogs: false, logRaw: false,
       disableAutoIdle: true, disableCompression: true, disableBinary: true,
@@ -168,7 +159,7 @@ export function createEmailConnector({ clientFactory = (options) => new ImapFlow
     client.on("error", () => {});
     try {
       await client.connect();
-      if (clean.preset === "163" || clean.preset === "126") {
+      if (needsID) {
         if (!client.capabilities.has("ID")) throw emailError("163/126 服务器不支持安全登录所需的 ID 命令，请检查服务器地址");
         // ImapFlow sends ID during connect; explicitly repeat it AFTER authentication for NetEase.
         // run('ID') is the library's command dispatcher (covered by the local wire-protocol tests).
@@ -188,28 +179,18 @@ export function createEmailConnector({ clientFactory = (options) => new ImapFlow
   }
 
   return {
-    name: "email", title: "邮箱", description: "QQ、163、126、Gmail、Outlook、企业邮箱（IMAP，只读）", icon: "envelope", multiAccount: true,
+    name, title, description: `读取${title}里的邮件（IMAP，只读）`, icon, multiAccount: true,
     fields: [
-      { key: "preset", label: "邮箱类型", type: "select", required: true,
-        options: [...Object.entries(PRESETS).map(([value, [label]]) => ({ value, label })), { value: "custom", label: "其他（手动填服务器）" }] },
-      { key: "address", label: "邮箱地址", type: "text", required: true, placeholder: "name@qq.com" },
-      { key: "password", label: "授权码", type: "secret", required: true,
-        help: {
-          qq: "QQ 邮箱网页版 → 设置 → 账号 → 开启 IMAP/SMTP → 生成授权码",
-          "163": "163 邮箱网页版 → 设置 → POP3/SMTP/IMAP → 开启 IMAP 并生成授权码；允许第三方客户端登录",
-          "126": "126 邮箱网页版 → 设置 → POP3/SMTP/IMAP → 开启 IMAP 并生成授权码；允许第三方客户端登录",
-          gmail: "在 Google 账号开启两步验证并生成应用专用密码；部分账号或管理员不允许密码方式 IMAP",
-          outlook: "请确认账号允许密码方式 IMAP；仅允许 OAuth 的账号暂不支持",
-          exmail: "腾讯企业邮 → 设置 → 客户端设置 → 开启 IMAP 并生成客户端专用密码",
-          aliyun: "阿里企业邮 → 设置 → 邮箱安全 → 三方客户端安全密码，并开启 IMAP",
-          custom: "在邮箱服务商设置中开启 IMAP，使用授权码或客户端专用密码",
-        } },
-      { key: "host", label: "IMAP 服务器", type: "text", required: true, showIf: { preset: "custom" } },
-      { key: "port", label: "端口", type: "number", default: 993, showIf: { preset: "custom" } },
+      { key: "address", label: "邮箱地址", type: "text", required: true, placeholder: "name@example.com" },
+      { key: "password", label: "授权码", type: "secret", required: true, help },
+      ...(!host ? [
+        { key: "host", label: "IMAP 服务器", type: "text", required: true },
+        { key: "port", label: "端口", type: "number", default: 993 },
+      ] : []),
       { key: "label", label: "备注（可选）", type: "text", placeholder: "例如：工作邮箱" },
     ],
     label: (values) => values.label?.trim() || values.address,
-    validate,
+    validate: (values) => validate(values, host),
     test: (values) => withClient(values, (client) => inFolder(client, "INBOX", async () => ({ ok: true }))),
 
     tools(accounts, ctx) {
@@ -390,4 +371,3 @@ export function createEmailConnector({ clientFactory = (options) => new ImapFlow
   };
 }
 
-export default createEmailConnector();

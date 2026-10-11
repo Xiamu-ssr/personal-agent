@@ -16,13 +16,12 @@ data class ConnectorField(
     val options: List<FieldOption>,
     val showIf: Map<String, String>,
     val help: String,
-    val presetHelp: Map<String, String>,
 ) {
     fun visible(values: Map<String, String>) = showIf.all { (key, value) -> values[key] == value }
-    fun help(values: Map<String, String>) = presetHelp[values["preset"]] ?: help
+    fun help(values: Map<String, String>) = help
 }
 
-data class ConnectorAccount(val id: String, val label: String, val status: String, val error: String?, val checkedAt: Long, val values: Map<String, String>? = null)
+data class ConnectorAccount(val id: String, val label: String, val status: String, val error: String?, val checkedAt: Long, val values: Map<String, String> = emptyMap())
 
 data class ConnectorInfo(
     val name: String,
@@ -33,7 +32,6 @@ data class ConnectorInfo(
     val fields: List<ConnectorField>?,
     val multiAccount: Boolean,
     val accounts: List<ConnectorAccount>,
-    val builtin: Boolean = false,
 )
 
 data class ConnectedDevice(val id: String, val name: String, val kind: String, val online: Boolean, val lastSeen: Long, val caps: List<ConnectorInfo>)
@@ -41,7 +39,6 @@ data class Connections(
     val cloud: ConnectedDevice,
     val connected: List<ConnectorInfo>,
     val catalog: List<ConnectorInfo>,
-    val custom: List<ConnectorInfo>,
     val others: List<ConnectedDevice>,
 ) {
     fun connector(name: String) = (connected + catalog).firstOrNull { it.name == name }
@@ -49,23 +46,23 @@ data class Connections(
 
 private fun JSONObject.stringMap() = keys().asSequence().associateWith { key -> opt(key)?.takeUnless { it == JSONObject.NULL }?.toString().orEmpty() }
 
-fun connectorInfo(j: JSONObject, device: Boolean = false, builtin: Boolean = false): ConnectorInfo {
+fun connectorInfo(j: JSONObject, device: Boolean = false): ConnectorInfo {
     val fields = j.optJSONArray("fields")?.objects()?.map { f ->
         val help = f.opt("help")
         ConnectorField(
             f.optString("key"), f.optString("label"), f.optString("type", "text"), f.optString("placeholder"),
             f.opt("default")?.takeUnless { it == JSONObject.NULL }?.toString(),
             f.optJSONArray("options").objects().map { FieldOption(it.optString("value"), it.optString("label")) },
-            f.optJSONObject("showIf")?.stringMap().orEmpty(), help as? String ?: "", (help as? JSONObject)?.stringMap().orEmpty(),
+            f.optJSONObject("showIf")?.stringMap().orEmpty(), help as? String ?: "",
         )
     }
     val accounts = j.optJSONArray("accounts").objects().map {
-        ConnectorAccount(it.optString("id"), it.optString("label"), it.optString("status"), it.opt("error") as? String, it.optLong("checkedAt"), it.optJSONObject("values")?.stringMap())
+        ConnectorAccount(it.optString("id"), it.optString("label"), it.optString("status"), it.opt("error") as? String, it.optLong("checkedAt"), it.optJSONObject("values")?.stringMap().orEmpty())
     }
     return ConnectorInfo(
         j.optString("name"), j.optString("title").ifBlank { j.optString("name") }, j.optString("description"), j.optString("icon"),
         if (device) j.optBoolean("enabled") else accounts.any { it.status == "ok" } || j.optString("status") == "on",
-        fields, j.optBoolean("multiAccount", true), accounts, builtin,
+        fields, j.optBoolean("multiAccount", true), accounts,
     )
 }
 
@@ -73,9 +70,8 @@ fun connectionsFromJson(j: JSONObject, localDeviceId: String = Prefs.deviceId): 
     val cloud = j.optJSONObject("cloud") ?: JSONObject()
     return Connections(
         ConnectedDevice(cloud.optString("id", "cloud"), cloud.optString("name", "云电脑"), "cloud", cloud.optBoolean("online"), 0, emptyList()),
-        cloud.optJSONArray("builtin").objects().map { connectorInfo(it, builtin = true) } + cloud.optJSONArray("installed").objects().map { connectorInfo(it) },
+        cloud.optJSONArray("installed").objects().map { connectorInfo(it) },
         cloud.optJSONArray("catalog").objects().map { connectorInfo(it) },
-        cloud.optJSONArray("custom").objects().map { connectorInfo(it) },
         j.optJSONArray("devices").objects().filter { it.optString("id") != localDeviceId }.map {
             ConnectedDevice(it.optString("id"), it.optString("name"), it.optString("kind"), it.optBoolean("online"), it.optLong("lastSeen"),
                 it.optJSONArray("capabilities").objects().map { c -> connectorInfo(c, device = true) })
@@ -102,7 +98,6 @@ object CloudConnectors : ConnectorGateway {
 }
 
 class AccountDraft(val connector: ConnectorInfo, val editing: Boolean, account: ConnectorAccount? = null) {
-    val partialEdit = editing && account?.values == null
     val initial = connector.fields.orEmpty().associate { field ->
         field.key to when {
             !editing -> field.defaultValue.orEmpty()
@@ -115,7 +110,6 @@ class AccountDraft(val connector: ConnectorInfo, val editing: Boolean, account: 
         connector.fields.orEmpty().filter { it.visible(values) }.forEach { field ->
             val value = values[field.key].orEmpty()
             if (field.type == "secret" && (value.isBlank() || value == "••••")) return@forEach
-            if (partialEdit && value.isBlank()) return@forEach
             if (field.type == "number" && value.isNotBlank()) {
                 val number = value.toBigDecimalOrNull() ?: throw IllegalArgumentException("${field.label}请填写数字")
                 put(field.key, number)

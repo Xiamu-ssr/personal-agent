@@ -1,7 +1,7 @@
 import SwiftUI
 import WebKit
 
-/// Briefs and sites share the server's /api/login cookie, including all relative resources.
+/// Sites share the server's /api/login cookie, including all relative resources.
 struct WebPage: NSViewRepresentable {
     let path: String
     @Binding var loading: Bool
@@ -58,7 +58,7 @@ struct WebPage: NSViewRepresentable {
                     try Task.checkCancellation()
                     guard let url = Api.fileURL(WebPage.resourcePath(path)) else { throw ApiError(code: 0, message: "文件地址不对") }
                     var req = URLRequest(url: url)
-                    req.setValue("Bearer \(Prefs.token)", forHTTPHeaderField: "Authorization")
+                    req.setValue("Bearer \(Api.authToken)", forHTTPHeaderField: "Authorization")
                     _ = web.load(req)
                 } catch is CancellationError {
                 } catch {

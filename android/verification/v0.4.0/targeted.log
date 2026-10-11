@@ -1,0 +1,82 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=3
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.HealthChecks:
+INSTRUMENTATION_STATUS: test=realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=3
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=3
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V4Checks:
+INSTRUMENTATION_STATUS: test=todayUsesNativeMulticardBriefsAndActionSendsToChat
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=3
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=todayUsesNativeMulticardBriefsAndActionSendsToChat
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=3
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=sitesUseOffscreenViewportCacheAndFailureFallback
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=3
+INSTRUMENTATION_STATUS: stack=androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 16000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback$lambda$18(V4Checks.kt:64)
+	at com.xiamu.agent.V4Checks.$r8$lambda$TTf5lki2HJLhRgrOpMpEVoFjTVU(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda41.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback(V4Checks.kt:61)
+
+INSTRUMENTATION_STATUS: stream=
+Error in sitesUseOffscreenViewportCacheAndFailureFallback(com.xiamu.agent.V4Checks):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 16000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback$lambda$18(V4Checks.kt:64)
+	at com.xiamu.agent.V4Checks.$r8$lambda$TTf5lki2HJLhRgrOpMpEVoFjTVU(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda41.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback(V4Checks.kt:61)
+
+INSTRUMENTATION_STATUS: test=sitesUseOffscreenViewportCacheAndFailureFallback
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 21.988
+There was 1 failure:
+1) sitesUseOffscreenViewportCacheAndFailureFallback(com.xiamu.agent.V4Checks)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 16000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback$lambda$18(V4Checks.kt:64)
+	at com.xiamu.agent.V4Checks.$r8$lambda$TTf5lki2HJLhRgrOpMpEVoFjTVU(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda41.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback(V4Checks.kt:61)
+
+FAILURES!!!
+Tests run: 3,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

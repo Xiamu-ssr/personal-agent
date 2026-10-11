@@ -291,6 +291,7 @@ struct PillTabs: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(titles[i])
             }
         }
     }

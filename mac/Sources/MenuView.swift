@@ -2,13 +2,11 @@ import SwiftUI
 
 /// The menu-bar bubble: a quick chat that stays around when the main window is closed.
 struct MenuView: View {
-    @Environment(\.openWindow) private var openWindow
     @State private var input = ""
     @State private var focused = false
     @State private var windowActivity = WindowActivity()
     @State private var follower = BottomFollower()
     private var chat: ChatClient { .shared }
-    private var device: DeviceClient { .shared }
     private var session: Session { .shared }
 
     var body: some View {
@@ -34,29 +32,23 @@ struct MenuView: View {
         .preferredColorScheme(.light)
         .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
         .environment(\.interactiveWindow, windowActivity.active)
-        .onAppear { AppDelegate.openMain = { openWindow(id: "main") } }
+        .task { if session.configured { await ProfileStore.shared.load() } }
     }
 
     private func openMain() {
-        openWindow(id: "main")
+        AppDelegate.openMain?()
+        MenuController.shared.close()
         NSApp.activate(ignoringOtherApps: true)
     }
 
     private var header: some View {
         HStack(spacing: 10) {
-            Orb(size: 28)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("豆豆").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
-                HStack(spacing: 5) {
-                    Dot(on: chat.connected)
-                    Text(statusLine(chat, device)).font(.system(size: 11)).foregroundStyle(Theme.sub).lineLimit(1)
-                }
-            }
+            AgentAvatar(size: 28)
+            Text(ProfileStore.shared.agentName).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+            AgentStatusDot()
             Spacer()
-            Button(action: openMain) { Image(systemName: "macwindow") }
-                .buttonStyle(.borderless).help("打开主窗口")
-            Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
-                .buttonStyle(.borderless).help("退出豆豆")
+            MenuActionButton(symbol: "macwindow", label: "打开主窗口", action: openMain).frame(width: 20, height: 24)
+            MenuActionButton(symbol: "power", label: "退出豆豆") { NSApp.terminate(nil) }.frame(width: 20, height: 24)
         }
         .foregroundStyle(Theme.ink.opacity(0.75))
         .padding(.horizontal, 14)
@@ -132,5 +124,30 @@ struct MenuView: View {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !Composer.shared.sending else { return }
         if chat.send(text) { input = "" }
+    }
+}
+
+/// Native popover actions expose the same press target to mouse, accessibility and local acceptance.
+private struct MenuActionButton: NSViewRepresentable {
+    let symbol: String
+    let label: String
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+    func makeNSView(context: Context) -> NSButton {
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
+        image.isTemplate = true
+        let button = NSButton(image: image, target: context.coordinator, action: #selector(Coordinator.press(_:)))
+        button.isBordered = false; button.imagePosition = .imageOnly
+        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        button.contentTintColor = NSColor(Theme.ink).withAlphaComponent(0.75)
+        button.toolTip = label; button.setAccessibilityLabel(label)
+        return button
+    }
+    func updateNSView(_ button: NSButton, context: Context) { context.coordinator.action = action }
+    final class Coordinator: NSObject {
+        var action: () -> Void
+        init(action: @escaping () -> Void) { self.action = action }
+        @objc func press(_ sender: NSButton) { action() }
     }
 }

@@ -2,7 +2,7 @@ package com.xiamu.agent
 
 sealed class ChatItem {
     /** pending waits for the echo; queued waits for a user turn. They are independent. */
-    data class User(val text: String, val attachments: List<Attachment> = emptyList(), val pending: Boolean = false, val ts: Long = 0, val queued: Boolean = false, val queueOrder: Long = 0) : ChatItem()
+    data class User(val text: String, val attachments: List<Attachment> = emptyList(), val pending: Boolean = false, val ts: Long = 0, val queued: Boolean = false, val queueOrder: Long = 0, val id: String = "") : ChatItem()
     data class Assistant(val text: String, val ts: Long = 0) : ChatItem()
     data class Alarm(val text: String, val ts: Long = 0) : ChatItem()
     data class Card(val title: String, val label: String, val path: String?, val ts: Long = 0) : ChatItem()
@@ -69,8 +69,8 @@ class TaskBook {
     fun clear() { live.clear(); ended.clear() }
 }
 
-fun incomingUser(text: String, source: String, attachments: List<Attachment> = emptyList(), ts: Long = 0): ChatItem =
-    if (source == "schedule") ChatItem.Alarm(alarmLabel(text), ts) else ChatItem.User(text, attachments, ts = ts)
+fun incomingUser(text: String, source: String, attachments: List<Attachment> = emptyList(), ts: Long = 0, id: String = ""): ChatItem =
+    if (source == "schedule") ChatItem.Alarm(alarmLabel(text), ts) else ChatItem.User(text, attachments, ts = ts, id = id)
 
 fun alarmLabel(text: String): String {
     val name = Regex("该出「([^」\\r\\n]+)」了").find(text)?.groupValues?.get(1)?.trim()
@@ -111,13 +111,27 @@ class Conversation(val items: MutableList<ChatItem> = mutableListOf()) {
     var turnClosed = true
         private set
 
-    fun hello(history: List<ChatItem>, busy: Boolean, reason: String, tasks: List<BackgroundTask>) {
+    fun hello(history: List<ChatItem>, busy: Boolean, reason: String, tasks: List<BackgroundTask>, queued: List<ChatItem> = emptyList()) {
         items.clear(); items.addAll(history)
         echoOrder = 0
         this.busy = busy
         this.reason = if (busy) reason else ""
         streaming = ""; toolHint = ""; turnClosed = !busy
         background.snapshot(tasks, reconnect = true)
+        queued.forEach { item ->
+            if(item is ChatItem.User) {
+                val accepted = item.copy(pending=false, queued=true, queueOrder=++echoOrder)
+                val existing = items.indexOfFirst { it is ChatItem.User && item.id.isNotBlank() && it.id == item.id }
+                if(existing >= 0) items[existing] = accepted else items.add(accepted)
+            } else if(item !in items) items.add(item)
+        }
+    }
+
+    /** Undispatched users are absent from chat.jsonl; refreshing history must keep their bubbles. */
+    fun replaceHistory(history: List<ChatItem>) {
+        val ids = history.filterIsInstance<ChatItem.User>().map { it.id }.filter { it.isNotBlank() }.toSet()
+        val waiting = items.filterIsInstance<ChatItem.User>().filter { (it.pending || it.queued) && (it.id.isBlank() || it.id !in ids) }
+        items.clear(); items.addAll(history); items.addAll(waiting)
     }
 
     fun status(busy: Boolean, reason: String? = null): Boolean {
@@ -141,13 +155,29 @@ class Conversation(val items: MutableList<ChatItem> = mutableListOf()) {
         items.add(ChatItem.User(text, attachments, pending = true, ts = ts, queued = busy))
     }
 
-    fun user(text: String, source: String, attachments: List<Attachment>, ts: Long) {
-        val echo = incomingUser(text, source, attachments, ts)
+    fun user(text: String, source: String, attachments: List<Attachment>, ts: Long, id: String = "") {
+        val echo = incomingUser(text, source, attachments, ts, id)
         if (echo !is ChatItem.User) { items.add(echo); return }
+        val existing = items.indexOfFirst { id.isNotBlank() && it is ChatItem.User && it.id == id }
+        if (existing >= 0) return
         val i = items.indexOfFirst { it is ChatItem.User && it.pending && it.text == text && it.attachments.map { a -> a.path } == attachments.map { a -> a.path } }
         val queued = busy || (i >= 0 && (items[i] as ChatItem.User).queued)
         val accepted = echo.copy(queued = queued, queueOrder = if (queued) ++echoOrder else 0)
         if (i >= 0) items[i] = accepted else items.add(accepted)
+    }
+
+    /** Only authoritative queue_update mutates a bubble; request sending never removes it early. */
+    fun queueUpdate(id: String, state: String, text: String? = null): String {
+        val i = items.indexOfFirst { it is ChatItem.User && it.id == id && id.isNotBlank() }
+        if (i >= 0) {
+            val user = items[i] as ChatItem.User
+            when (state) {
+                "removed" -> items.removeAt(i)
+                "edited" -> if (text != null) items[i] = user.copy(text = text)
+                "too_late" -> items[i] = user.copy(queued = false)
+            }
+        }
+        return if (state == "too_late") "豆豆已经在看这条了" else ""
     }
 
     fun delta(text: String) { streaming += text; toolHint = ""; turnClosed = false }

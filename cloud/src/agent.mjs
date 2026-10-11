@@ -1,16 +1,18 @@
 // One long-lived main thread: user/schedule turns, native background forks, isolated maintenance.
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { config, CODE, MEMORY_CATEGORIES } from "./config.mjs";
 import { readJson, appendJsonl, nowIn } from "./store.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
-import { ConnectorManager, customPlugins, customConnectorEnv, writePrivateJson } from "./connectors.mjs";
+import { ConnectorManager, writePrivateJson } from "./connectors.mjs";
 import { checkConnectorAccess, CONNECTOR_GUARD_TOOLS } from "./connector-guard.mjs";
 import { COMPACT_INSTRUCTIONS, inputUsage } from "./context-policy.mjs";
 import { contextFailure, humanError, recoveryContext, withRecovery, RECOVERY_NOTICE } from "./conversation-recovery.mjs";
 import { BackgroundTasks, TaskError } from "./background-tasks.mjs";
+import { isBriefPath, isOutputPath, readBrief } from "./briefs.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const SCHEDULE_FORK_REASON = '定时简报请先用 Agent（subagent_type: "fork"，run_in_background: true）派到后台，再简短回复用户';
@@ -70,6 +72,7 @@ function rel(p) {
 // "data/memory/<category>/<topic>.md", one level, known categories only.
 function memoryPathError(r) {
   if (!r.startsWith("data/memory/")) return null;
+  if (r === "data/memory/health/latest.json") return null;
   const parts = r.split("/");
   if (parts.length !== 4 || !parts[3].endsWith(".md")) {
     return `记忆路径必须是 data/memory/<分类>/<主题>.md（只有一层目录），你写的是 ${r}`;
@@ -161,7 +164,6 @@ export class Harness {
         hooks: { PreCompact: [{ hooks: [{ type: "command", timeout: 10,
           command: `${shellQuote(process.execPath)} ${shellQuote(path.join(CODE, "scripts/compact-instructions.mjs"))}` }] }] },
       },
-      plugins: customPlugins(),
       mcpServers: { devices: this.hub.mcpServer(), ...this.connectors.mcpServers() },
       includePartialMessages: !isolated,
       agentProgressSummaries: true,
@@ -173,7 +175,6 @@ export class Harness {
       },
       env: {
         ...process.env,
-        ...customConnectorEnv(),
         CLAUDE_CONFIG_DIR: config.sessions,
         CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
         ANTHROPIC_DEFAULT_HAIKU_MODEL: m,
@@ -187,7 +188,7 @@ export class Harness {
         // CLI defaults to treating background agents as session "running" even between main turns.
         // We expose their separate activity list, so idle must describe the main thread alone.
         CLAUDE_CODE_BG_TASKS_REPORT_RUNNING: "0",
-        // Last in the env overlay: project/custom .env cannot disable the 100K policy.
+        // Last in the env overlay: inherited values cannot disable the 200K policy.
         ...config.context.env,
       },
       hooks: {
@@ -200,7 +201,13 @@ export class Harness {
           { matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] },
           ...(!isolated ? [{ hooks: [async (input) => this.checkScheduleFork(input)] }] : []),
         ],
-        PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => (onWrite(rel(input.tool_input?.file_path || input.tool_input?.notebook_path), input), {})] }],
+        PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => {
+          const r = rel(input.tool_input?.file_path || input.tool_input?.notebook_path);
+          const error = isBriefPath(r) && readBrief(config.root, r).error;
+          onWrite(r, input, !error);
+          return error ? { decision: "block", reason: `简报校验失败：${error}。请用 Write / Edit 修正。`,
+            hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `简报校验失败：${error}。请修正后再完成任务。` } } : {};
+        }] }],
       },
       stderr: (d) => {
         const s = String(d).trim();
@@ -251,27 +258,28 @@ export class Harness {
   }
 
   // Shared side effects of any write the agent makes.
-  noteWrite(r, job) {
+  noteWrite(r, job, valid = true) {
     if (!r) return;
     if (r.startsWith("data/memory/")) this.bus.emit({ t: "memory_updated", path: r });
     if (r.startsWith("data/")) this.bus.emit({ t: "files_changed", path: r });
-    if (r.startsWith("system/custom-connectors/")) this.reloadSoon();
-    if (job && r.endsWith(".html") && (r.startsWith("data/briefs/") || r.startsWith("data/sites/"))) job.outputs.add(r);
+    if (job && isOutputPath(r)) valid ? job.outputs.add(r) : job.outputs.delete(r);
   }
 
   backgroundTasks() { return this.main?.tasks.list() || []; }
 
-  noteMainWrite(r, input) {
+  noteMainWrite(r, input, valid = true) {
     this.noteWrite(r);
-    if (input?.agent_id && r.endsWith(".html") && (r.startsWith("data/briefs/") || r.startsWith("data/sites/"))) {
-      this.main?.tasks.record({ task_id: input.agent_id })?.outputs.add(r);
+    if (input?.agent_id && isOutputPath(r)) {
+      const outputs = this.main?.tasks.record({ task_id: input.agent_id })?.outputs;
+      if (outputs) valid ? outputs.add(r) : outputs.delete(r);
     }
   }
 
   taskCard(task, notification) {
-    if (!task.outputs.size) return;
+    const outputs = this.validOutputs(task.outputs);
+    if (!outputs.length) return;
     const entry = { role: "card", label: task.description, title: task.description + (notification.status === "completed" ? "" : "（未完成）"),
-      outputs: [...task.outputs], ok: notification.status === "completed", ts: Date.now(), taskId: task.id };
+      outputs, ...this.briefCardFields(outputs), ok: notification.status === "completed", ts: Date.now(), taskId: task.id };
     appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - task.startedAt });
     appendJsonl(config.chatLog, entry);
     this.bus.emit({ t: "job", phase: "done", ...entry }); // Same card/files protocol as isolated briefs.
@@ -280,8 +288,14 @@ export class Harness {
   reloadSoon() {
     // SDK setMcpServers() keeps an already-registered same-name SDK instance.
     // Reconstruct the query BEFORE dispatching the next turn instead of replacing it in a running tool call.
-    // This also discovers new custom plugin directories and reloads their .env without interrupting a reply.
     this.reloadRevision++;
+  }
+
+  validOutputs(outputs) { return [...outputs].filter((r) => isOutputPath(r) && (!isBriefPath(r) || !readBrief(config.root, r).error)); }
+
+  briefCardFields(outputs) {
+    const briefPath = outputs.find(isBriefPath);
+    return briefPath ? { path: briefPath } : {};
   }
 
   // ---------- main thread ----------
@@ -292,7 +306,7 @@ export class Harness {
     const inbox = new Inbox();
     let q;
     const compaction = this.compactionControl(() => q);
-    const opts = this.options({ isolated: false, onWrite: (r, input) => this.noteMainWrite(r, input), compaction });
+    const opts = this.options({ isolated: false, onWrite: (r, input, valid) => this.noteMainWrite(r, input, valid), compaction });
     if (state.mainSessionId) opts.resume = state.mainSessionId;
     q = this.queryFactory({ prompt: inbox, options: opts });
     const tasks = new BackgroundTasks({ bus: this.bus, log: this.log, redact: (s) => this.connectors.redact(s),
@@ -350,8 +364,12 @@ export class Harness {
     const main = this.main;
     await main.compaction.restore();
     // A native task-result turn can start while the control request above is awaiting acknowledgement.
-    if (this.busy || this.main !== main || main.ended) return;
+    if (this.busy || this.main !== main || main.ended || !this.turnQueue.length) return;
     const active = this.turnQueue.shift();
+    if (active.entry && !active.persisted) {
+      appendJsonl(config.chatLog, active.entry);
+      active.persisted = true;
+    }
     this.beginMainTurn(main, active, active.source === "schedule" ? "schedule" : "user");
     main.inbox.push(withRecovery(active.input, main.recoveryContext));
   }
@@ -538,12 +556,38 @@ export class Harness {
       }
       atts.push(att);
     }
-    const entry = { role: "user", text, ts: Date.now(), source };
+    const id = crypto.randomUUID();
+    const entry = { role: "user", id, text, ts: Date.now(), source };
     if (atts.length) entry.attachments = atts;
-    appendJsonl(config.chatLog, entry);
-    this.bus.emit({ t: "user", text, source, attachments: atts });
-    this.turnQueue.push({ source, input: { type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null } });
+    this.turnQueue.push({ id, entry, source, input: { type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null } });
+    this.bus.emit({ t: "user", id, text, source, ts: entry.ts, attachments: atts });
     await this.scheduleDispatch();
+    return id;
+  }
+
+  queuedMessages() {
+    return this.turnQueue.filter((turn) => turn.entry && !turn.persisted).map(({ entry }) => ({
+      id: entry.id, text: entry.text, source: entry.source, ts: entry.ts, attachments: entry.attachments || [],
+    }));
+  }
+
+  updateQueued(id, text) {
+    const index = this.turnQueue.findIndex((turn) => turn.id === id && !turn.persisted && turn.source !== "schedule");
+    let event;
+    if (index < 0) event = { t: "queue_update", id, state: "too_late" };
+    else if (text === undefined) {
+      this.turnQueue.splice(index, 1);
+      event = { t: "queue_update", id, state: "removed" };
+    } else {
+      const turn = this.turnQueue[index];
+      if (typeof text !== "string" || (!text.trim() && !turn.entry.attachments?.length)) throw new Error("排队消息不能为空");
+      turn.entry.text = text.trim();
+      turn.input.message.content = userContent(turn.entry.text, turn.entry.attachments || []);
+      event = { t: "queue_update", id, state: "edited", text: turn.entry.text };
+    }
+    // All connected Apps observe the same queue; too_late is returned only to the requester.
+    if (event.state !== "too_late") this.bus.emit(event);
+    return event;
   }
 
   async interrupt() {
@@ -590,7 +634,7 @@ export class Harness {
       const compaction = this.compactionControl(() => q);
       try {
         // Streaming input permits live effort control in PreCompact, just as in the main session.
-        q = this.queryFactory({ prompt: inbox, options: this.options({ isolated: true, onWrite: (r) => this.noteWrite(r, job), compaction }) });
+        q = this.queryFactory({ prompt: inbox, options: this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), compaction }) });
         inbox.push({ type: "user", message: { role: "user", content: prompt }, parent_tool_use_id: null });
         for await (const m of q) {
           if (m.type === "system" && m.subtype === "compact_boundary") job.error = undefined;
@@ -620,8 +664,8 @@ export class Harness {
         this.log("[job model error]", this.connectors.redact(job.error));
         job.text = humanError(job.error);
       }
-      const outputs = [...job.outputs];
-      const entry = { role: "card", label, title: job.text.trim().split("\n").pop() || label, outputs, ok: !!job.ok, ts: Date.now() };
+      const outputs = this.validOutputs(job.outputs);
+      const entry = { role: "card", label, title: label + (job.ok ? "" : "（未完成）"), outputs, ...this.briefCardFields(outputs), ok: !!job.ok, ts: Date.now() };
       appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - started });
       if (outputs.length) appendJsonl(config.chatLog, entry);
       this.bus.emit({ t: "job", phase: "done", ...entry });

@@ -7,7 +7,7 @@ import { DeviceHub } from "../src/devices.mjs";
 import { config } from "../src/config.mjs";
 import { readJson, writeJson, tailJsonl } from "../src/store.mjs";
 import { runScheduledTask } from "../src/scheduler.mjs";
-import email from "../connectors/email/index.mjs";
+import email from "../connectors/qq-mail/index.mjs";
 import { setImmediate as tick } from "node:timers/promises";
 
 // Purely local SDK query stand-in: it exercises lifecycle/queue boundaries without launching the CLI or a model.
@@ -45,7 +45,7 @@ async function flush(harness) {
   await harness.dispatchChain;
   await tick();
 }
-const values = { preset: "qq", address: "fixture@qq.test", password: "fictional-harness-password" };
+const values = { address: "fixture@qq.test", password: "fictional-harness-password" };
 function setup(t) {
   const calls = [], events = [];
   writeJson(config.stateFile, { mainSessionId: "same-fictional-session" });
@@ -66,12 +66,12 @@ function setup(t) {
 test("active turn finishes; queued next turn uses rebuilt MCP and resumes same session; pending messages survive", async (t) => {
   const { calls, harness, connectors } = setup(t);
   await flush(harness);
-  assert.equal("email" in calls[0].options.mcpServers, false);
+  assert.equal("qq-mail" in calls[0].options.mcpServers, false);
   assert.equal(calls[0].options.allowedTools.includes("mcp__connectors__add_account"), true);
   await harness.send("first");
   await flush(harness);
   assert.equal(calls[0].received.length, 1);
-  const account = await connectors.addAccount("email", values);
+  const account = await connectors.addAccount("qq-mail", values);
   await harness.send("second");
   await harness.send("third");
   assert.equal(calls.length, 1, "a config mutation cannot close the query inside a running turn");
@@ -81,7 +81,7 @@ test("active turn finishes; queued next turn uses rebuilt MCP and resumes same s
   assert.equal(calls[0].closed, true);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].options.resume, "same-fictional-session");
-  assert.equal(calls[1].options.mcpServers.email.type, "sdk");
+  assert.equal(calls[1].options.mcpServers["qq-mail"].type, "sdk");
   assert.equal(calls[1].received.length, 1);
   assert.equal(calls[1].received[0].message.content, "second");
   calls[1].emit({ type: "result", subtype: "success" });
@@ -90,20 +90,20 @@ test("active turn finishes; queued next turn uses rebuilt MCP and resumes same s
   assert.equal(calls[1].received[1].message.content, "third");
   calls[1].emit({ type: "result", subtype: "success" });
   await flush(harness);
-  const previousServer = calls[1].options.mcpServers.email;
-  await connectors.updateAccount("email", account.id, { label: "Changed" });
+  const previousServer = calls[1].options.mcpServers["qq-mail"];
+  await connectors.updateAccount("qq-mail", account.id, { label: "Changed" });
   await harness.send("after update");
   await flush(harness);
   assert.equal(calls.length, 3);
-  assert.notEqual(calls[2].options.mcpServers.email.instance, previousServer.instance);
+  assert.notEqual(calls[2].options.mcpServers["qq-mail"].instance, previousServer.instance);
   assert.equal(calls[2].options.resume, "same-fictional-session");
   calls[2].emit({ type: "result", subtype: "success" });
   await flush(harness);
-  await connectors.removeAccount("email", account.id);
+  await connectors.removeAccount("qq-mail", account.id);
   await harness.send("after removal");
   await flush(harness);
   assert.equal(calls.length, 4);
-  assert.equal("email" in calls[3].options.mcpServers, false);
+  assert.equal("qq-mail" in calls[3].options.mcpServers, false);
   assert.equal(readJson(config.stateFile, {}).mainSessionId, "same-fictional-session");
 });
 
@@ -134,13 +134,31 @@ test("a message arriving after the SDK query ended is dispatched to a new query,
   assert.equal(calls[1].options.resume, "same-fictional-session");
 });
 
-test("main, isolated and subagent env share the model cap and the 95K estimated input trigger", async (t) => {
+test("withdrawing the last queued message while compaction restore awaits cannot dispatch an empty queue", async (t) => {
+  const { calls, harness, events } = setup(t);
+  await flush(harness);
+  let release, entered = false;
+  const gate = new Promise((r) => { release = r; });
+  calls[0].applyFlagSettings = async () => { entered = true; await gate; };
+  harness.main.compaction.active = true;
+  const sending = harness.send("withdraw while restore waits");
+  await tick(); assert.equal(entered, true);
+  const id = events.findLast((e) => e.t === "user").id;
+  assert.deepEqual(harness.updateQueued(id), { t: "queue_update", id, state: "removed" });
+  release(); await sending; await flush(harness);
+  assert.equal(harness.busy, false);
+  assert.equal(calls[0].received.length, 0);
+  assert.equal(harness.turnQueue.length, 0);
+  assert.equal(tailJsonl(config.chatLog, 100).some((e) => e.id === id), false);
+});
+
+test("main, isolated and subagent env share the model cap and the 167K estimated input trigger", async (t) => {
   const { calls, harness } = setup(t);
   await flush(harness);
   const opts = harness.options({ isolated: true, onWrite: () => {} });
   for (const o of [calls[0].options, opts]) {
     assert.equal(o.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, "128000");
-    assert.equal(o.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "128000");
+    assert.equal(o.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000");
     assert.equal(o.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, "100");
     assert.equal(o.env.CLAUDE_CODE_SUBAGENT_MODEL, config.model);
     assert.deepEqual(o.settings.modelOverrides, { "claude-haiku-5-5": config.model });
@@ -168,6 +186,7 @@ test("stuck resumed conversation resets once, replays only a turn without tools,
   assert.match(calls[1].received[0].message.content, /data\/todos.md/);
   assert.match(calls[1].received[0].message.content, /供应商报价/);
   assert.equal(readJson(config.stateFile, {}).unrelated, "keep");
+  assert.equal(tailJsonl(config.chatLog, 100).filter((e) => e.role === "user" && e.text === "继续处理 data/todos.md").length, 1, "automatic replay never appends the same user envelope twice");
   assert.ok(events.some((e) => e.t === "turn_end" && e.text.includes("记忆不受影响")));
   assert.equal(JSON.stringify(events).includes("32000"), false);
   calls[1].emit({ type: "assistant", message: { content: [{ type: "text", text: "recovered reply" }] } });

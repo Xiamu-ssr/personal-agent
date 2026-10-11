@@ -52,7 +52,7 @@ enum Tab: String, CaseIterable {
 }
 
 enum Route: Hashable {
-    /// An HTML brief/site (or any file the web view can show).
+    /// A site (or any file the web view can show).
     case web(title: String, path: String)
     /// A Markdown/text file rendered natively.
     case doc(title: String, path: String)
@@ -75,8 +75,13 @@ final class Nav {
     /// Full-window image viewer.
     var preview: String? = nil
     var toast = ""
+    var briefFocus: String?
+    var todaySection = 0
+    var tasksSection = 0
 
     func go(_ t: Tab) {
+        if t == .today { todaySection = 0 }
+        if t == .tasks { tasksSection = 0 }
         if tab == t || t == .settings { stacks[t] = [] }
         tab = t
     }
@@ -112,6 +117,14 @@ final class Nav {
 
     /// Open a data/ path the best way we can: web view, Markdown page, image viewer, or the default app.
     func open(_ path: String, title: String? = nil) {
+        if path.hasPrefix("data/briefs/") {
+            guard path.hasSuffix(".json") else { show("这份简报不是 JSON 格式"); return }
+            stacks[.today] = []
+            todaySection = 0
+            tab = .today
+            briefFocus = path
+            return
+        }
         let ext = (path as NSString).pathExtension.lowercased()
         let name = title ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension
         if Self.imageExts.contains(ext) {

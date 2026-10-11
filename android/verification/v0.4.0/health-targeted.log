@@ -1,0 +1,139 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.HealthChecks:
+INSTRUMENTATION_STATUS: test=actualProviderAndSensorAvailabilityAndFallbackAreReported
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=actualProviderAndSensorAvailabilityAndFallbackAreReported
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=simulatedStepObservationsPersistOnlyDeltaAndMarkPartial
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=simulatedStepObservationsPersistOnlyDeltaAndMarkPartial
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=healthFallbackDiagnosticScreenshot
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=healthFallbackDiagnosticScreenshot
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stack=org.json.JSONException: No value for steps
+	at org.json.JSONObject.get(JSONObject.java:398)
+	at org.json.JSONObject.getLong(JSONObject.java:523)
+	at com.xiamu.agent.HealthChecks$realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv$1.invokeSuspend(HealthChecks.kt:48)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.xiamu.agent.HealthChecks.realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv(HealthChecks.kt:30)
+
+INSTRUMENTATION_STATUS: stream=
+Error in realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv(com.xiamu.agent.HealthChecks):
+org.json.JSONException: No value for steps
+	at org.json.JSONObject.get(JSONObject.java:398)
+	at org.json.JSONObject.getLong(JSONObject.java:523)
+	at com.xiamu.agent.HealthChecks$realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv$1.invokeSuspend(HealthChecks.kt:48)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.xiamu.agent.HealthChecks.realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv(HealthChecks.kt:30)
+
+INSTRUMENTATION_STATUS: test=realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=invalidHealthRangesAreRejectedAndOldCapabilityIsGone
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=invalidHealthRangesAreRejectedAndOldCapabilityIsGone
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ConnectorApiChecks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.ConnectorApiChecks:
+INSTRUMENTATION_STATUS: test=endpointsUseExpectedMethodsBodiesAndErrors
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ConnectorApiChecks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=6
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=endpointsUseExpectedMethodsBodiesAndErrors
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 3.757
+There was 1 failure:
+1) realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv(com.xiamu.agent.HealthChecks)
+org.json.JSONException: No value for steps
+	at org.json.JSONObject.get(JSONObject.java:398)
+	at org.json.JSONObject.getLong(JSONObject.java:523)
+	at com.xiamu.agent.HealthChecks$realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv$1.invokeSuspend(HealthChecks.kt:48)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.xiamu.agent.HealthChecks.realHealthConnectReadsLocallySeededStepsSleepHeartAndHrv(HealthChecks.kt:30)
+
+FAILURES!!!
+Tests run: 6,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

@@ -46,6 +46,8 @@ class DeviceService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!Prefs.configured) { stopSelf(); return START_NOT_STICKY }
         startInForeground()
+        StepCounter.start(this)
+        scope.launch { runCatching { HealthAccess.refresh(this@DeviceService) } }
         running = true
         if (intent?.action == ACTION_REREGISTER) {
             val old = ws
@@ -58,6 +60,7 @@ class DeviceService : Service() {
     }
 
     override fun onDestroy() {
+        StepCounter.stop()
         running = false
         ws?.close(1000, null)
         ws = null

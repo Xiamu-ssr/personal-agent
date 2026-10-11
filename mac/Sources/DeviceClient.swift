@@ -41,7 +41,7 @@ final class DeviceClient {
     private func register() {
         let device: [String: Any] = [
             "id": Prefs.deviceId, "name": Prefs.deviceName, "kind": "mac",
-            "capabilities": Capabilities.all.map(\.json),
+            "capabilities": Capabilities.tools.map(\.json),
         ]
         online = socket.send(["t": "register", "device": device])
         ChatClient.shared.devicesVersion += 1
@@ -63,16 +63,16 @@ final class DeviceClient {
         let id = m["id"] as? String ?? ""
         let name = m["capability"] as? String ?? ""
         let args = m["args"] as? [String: Any] ?? [:]
-        let cap = Capabilities.enabled.first { $0.name == name }
+        let cap = Capabilities.enabled.first { $0.name == name && $0.run != nil }
         let socket = self.socket
         Task.detached {
             var reply: [String: Any] = ["t": "result", "id": id]
             do {
-                guard let cap else {
+                guard let run = cap?.run else {
                     throw CapError(name == "__read_since" ? "这台 Mac 没有可补读的数据" : "用户没有开启这个能力：\(name)")
                 }
-                reply["data"] = try await cap.run(args)
-                reply["ok"] = true
+                // Preserve image/mime and all metadata inside data for the cloud's MCP image conversion.
+                reply = DeviceResult.success(id: id, data: try await run(args))
             } catch {
                 reply["ok"] = false
                 reply["error"] = error.localizedDescription

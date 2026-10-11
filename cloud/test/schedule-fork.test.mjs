@@ -56,7 +56,7 @@ test("schedule guard denies main Bash in Chinese, permits fork's Bash/Write, and
   const blockedFile = path.join(config.root, "schedule-main-must-not-run.txt");
   const childFile = path.join(config.root, "schedule-child-bash.txt");
   const notificationFile = path.join(config.root, "schedule-notification-bash.txt");
-  const brief = "data/briefs/2026-10-11/guard-brief.html";
+  const brief = "data/briefs/2026-10-11/guard-brief.json";
   let rootStep = 0, childStep = 0, releaseChild;
   const childGate = new Promise((r) => { releaseChild = r; });
   const api = await fakeAnthropic(async (body) => {
@@ -68,7 +68,7 @@ test("schedule guard denies main Bash in Chinese, permits fork's Bash/Write, and
       if (childStep === 2) {
         assert.ok(resultFor(body, "guard_child_bash"));
         assert.notEqual(resultFor(body, "guard_child_bash").is_error, true);
-        return tool("guard_child_write", "Write", { file_path: path.join(config.root, brief), content: "<!doctype html><title>守卫简报</title><p>完成</p>" });
+        return tool("guard_child_write", "Write", { file_path: path.join(config.root, brief), content: JSON.stringify({"v": 1, "name": "\u5b88\u536b\u7b80\u62a5", "time": "2026-10-11T07:30:00+08:00", "cards": [{"chip": "2026-10-11", "title": "\u5b8c\u6210"}]}) });
       }
       return textReply("守卫简报完成：" + brief);
     }

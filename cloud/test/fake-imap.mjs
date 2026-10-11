@@ -5,7 +5,7 @@ import tls from "node:tls";
 import { execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { ImapFlow } from "imapflow";
-import { createEmailConnector } from "../connectors/email/index.mjs";
+import { createImapConnector } from "../connectors/_shared/imap.mjs";
 
 export const FAKE_PASSWORD = "fake-imap-only-password";
 const q = (value) => '"' + String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
@@ -159,9 +159,10 @@ export async function startFakeImap(dir) {
   await once(server, "listening");
   const port = server.address().port;
   fixture.port = port;
-  fixture.values = (address = "alpha@example.test") => ({ preset: "custom", address, password: FAKE_PASSWORD, host: "127.0.0.1", port });
-  fixture.connector = createEmailConnector({
-    clientFactory: (options) => new ImapFlow({ ...options, host: "127.0.0.1", port, tls: { ca } }),
+  fixture.values = (address = "alpha@example.test") => ({ address, password: FAKE_PASSWORD, host: "127.0.0.1", port });
+  fixture.clientFactory = (options) => new ImapFlow({ ...options, host: "127.0.0.1", port, tls: { ca } });
+  fixture.connector = createImapConnector({
+    clientFactory: fixture.clientFactory, icon: "icon.svg",
   });
   fixture.close = async () => {
     for (const socket of sockets) socket.destroy();

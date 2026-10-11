@@ -31,7 +31,6 @@ export const config = {
   workspace: path.join(ROOT, "workspace"),
   system: path.join(ROOT, "system"),
   connectors: path.join(ROOT, "system", "connectors"),
-  customConnectors: path.join(ROOT, "system", "custom-connectors"),
   sync: path.join(ROOT, "system", "sync"),
   sessions: path.join(ROOT, "system", "sessions"),
   stateFile: path.join(ROOT, "system", "state.json"),

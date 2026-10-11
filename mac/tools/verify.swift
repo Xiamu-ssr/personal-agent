@@ -1,4 +1,4 @@
-// Local verification: fixtures never reach the user's server; --live only reads real data and logs in WebViews.
+// Local verification: fixture transport or an explicit loopback service only.
 import AppKit
 import AVFoundation
 import EventKit
@@ -50,12 +50,10 @@ struct Verify {
                     try await LocalMenuReview.run()
                 } else if CommandLine.arguments.contains("--input-review") {
                     try await inputFixtures()
-                } else if CommandLine.arguments.contains("--memory-review") {
-                    try await memoryFixtures()
-                    try await memoryReview()
+                } else if CommandLine.arguments.contains("--local-review") {
+                    try await V04Review.run()
                 } else {
                     try await fixtures()
-                    if CommandLine.arguments.contains("--live") { try await live() }
                 }
                 print("PASS: Mac verification finished")
                 exit(0)
@@ -190,7 +188,7 @@ struct Verify {
         config.protocolClasses = [FixtureProtocol.self]
         Api.session = URLSession(configuration: config)
         defer { Api.session.invalidateAndCancel(); Api.session = transport; FixtureProtocol.respond = nil }
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let now = Fmt.dayKey.date(from: "2026-10-11")!
         let first = (now.timeIntervalSince1970 - 7 * 86400) * 1000
         var requests = 0
         for (state, expected) in [
@@ -207,7 +205,7 @@ struct Verify {
             let value = await HomePage.fetchFirstChat()
             try check(value == expected, "missing/null firstChat must not use a cached timestamp")
             let intro = HomePage.intro(firstChat: value, now: now)
-            try check(intro == (expected == nil ? "从第一次对话开始，慢慢了解你" : "从 7 天前第一次对话开始，慢慢了解你"),
+            try check(intro == (expected == nil ? "从第一次对话起陪伴 你" : "从 2026年10月4日起陪伴 你"),
                       "firstChat milliseconds and missing/null introduction")
         }
         try check(requests == 3, "firstChat requires one small state request per load")
@@ -255,48 +253,8 @@ struct Verify {
 
     /// Two production pages only; every request is read-only and the app socket never sends a user message.
     @MainActor
-    static func memoryReview() async throws {
-        try check(Prefs.configured, "saved account is required for read-only memory review")
-        let state = try await Api.json("/api/state")
-        let value = state["firstChat"] as? Double
-        print("Live state: firstChat present=\(state.keys.contains("firstChat")), numeric=\(value != nil) (value hidden)")
-        let fetched = await HomePage.fetchFirstChat()
-        try check(fetched == value, "live firstChat metadata matches the state response")
-        Session.shared.onboarded = true // In-memory only. No settings write or permission request.
-        Nav.shared.stacks = [:]
-        Nav.shared.go(.memory)
-        ChatClient.shared.start()
-        let output = URL(fileURLWithPath: CommandLine.arguments.last!, isDirectory: true)
-        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
-        window.title = "豆豆 · 记忆审查"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: MainView())
-        window.center(); window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        defer { ChatClient.shared.stop(); window.close() }
-        for _ in 0..<100 where !ChatClient.shared.connected { try await Task.sleep(nanoseconds: 100_000_000) }
-        for (tab, name) in [(Tab.memory, "04-memory"), (.home, "05-doudou")] {
-            Nav.shared.go(tab)
-            try await Task.sleep(nanoseconds: 4_000_000_000)
-            guard let view = window.contentView else { throw VerificationError(description: "memory review window") }
-            view.layoutSubtreeIfNeeded()
-            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
-                throw VerificationError(description: "memory review native snapshot")
-            }
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name + ".png"))
-            print("Snapshot: \(name).png")
-        }
-        print("PASS: live memory and Doudou production pages captured read-only")
-    }
-
-    @MainActor
     static func fixtures() async throws {
-        let savedServer = Prefs.server, savedToken = Prefs.token
+        let savedServer = Prefs.server, savedToken = Api.authToken
         let transport = Api.session
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [FixtureProtocol.self]
@@ -325,7 +283,7 @@ struct Verify {
         } catch let e as ApiError {
             try check(e.message == "服务端错误测试", "login preserves the server error message")
         }
-        try check(Prefs.server == savedServer && Prefs.token == savedToken, "credential checks must not mutate the saved account")
+        try check(Prefs.server == savedServer && Api.authToken == savedToken, "credential checks must not mutate the saved account")
         FixtureProtocol.respond = { _ in (200, [:], Data("<html>wrong service</html>".utf8)) }
         do {
             _ = try await Api.authenticate(server: "https://fixture.invalid/agent", password: "bad")
@@ -368,7 +326,7 @@ struct Verify {
         } catch let e as ApiError { try check(e.code == 413, "transcription byte limit") }
 
         FixtureProtocol.respond = { _ in (200, ["Set-Cookie": "pa_token=fixture-cookie; Path=/agent; HttpOnly; Secure; SameSite=Lax"], Data(#"{"ok":true}"#.utf8)) }
-        let cookies = try await Api.webCookies()
+        let cookies = try await Api.webCookies(server: "https://fixture.test/agent", token: "local-fixture")
         try check(cookies.contains { $0.name == "pa_token" && $0.path == "/agent" && $0.isSecure && $0.isHTTPOnly }, "WebView must use the server cookie")
         try check(WebPage.resourcePath("data/sites/demo") == "data/sites/demo/", "site directory relative resource base")
         let path = "data/memory/life/测试 100%?x#y.md"
@@ -393,7 +351,7 @@ struct Verify {
         try check(Markdown.parse(sample).contains { if case .table = $0 { return true }; return false }, "Markdown table")
         try check(Markdown.pointers("内容 → work/文件.md").1 == ["work/文件.md"], "memory pointer tag")
         try check(Markdown.pointers("变化 → 下一个状态").0 == "变化 → 下一个状态", "ordinary arrows must preserve their text")
-        let expected = Set(["battery", "notify", "calendar_events", "clipboard_read", "clipboard_write", "open_url", "frontmost_app", "shortcuts", "folder"])
+        let expected = Set(["shell", "folder_desktop", "folder_documents", "folder_downloads", "computer_use", "browser", "notify", "calendar_events"])
         try check(Set(Capabilities.all.map(\.name)) == expected, "full Mac capability registry without unverified location")
         try check(Capabilities.all.allSatisfy { $0.json["enabled"] is Bool && !($0.json["title"] as? String ?? "").isEmpty }, "all capabilities register enabled and title")
         print("PASS: image compression, cron, Markdown, complete capability registry")
@@ -431,125 +389,15 @@ struct Verify {
         print("PASS: failed transcription retains audio without uploading or sending")
         try await TaskProtocolFixtures.run()
         try await ConnectorFixtures.run()
+        try await V04Fixtures.run()
         try await memoryFixtures()
         try await inputFixtures()
-    }
-
-    @MainActor
-    static func live() async throws {
-        try check(Prefs.configured, "saved account is required for read-only live checks")
-        let state = try await Api.json("/api/state")
-        try check(state["schedule"] is [[String: Any]], "live state schedule shape")
-        let cookies = try await Api.webCookies()
-        try check(cookies.contains { $0.name == "pa_token" }, "live server WebView cookie")
-        print("PASS: live state and /api/login cookie (values hidden)")
-        print("Permission status only: microphone=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue), calendar=\(EKEventStore.authorizationStatus(for: .event).rawValue), screenCapture=\(CGPreflightScreenCaptureAccess())")
-        Session.shared.onboarded = true // In-memory only. No walkthrough or system permission prompt.
-        ChatClient.shared.start() // app socket only; never sends a user message or device call.
-        let output = URL(fileURLWithPath: CommandLine.arguments.last!, isDirectory: true)
-        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
-        window.identifier = NSUserInterfaceItemIdentifier("main")
-        window.title = "豆豆 · 本地只读验证"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: MainView())
-        window.center(); window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        for _ in 0..<100 where !ChatClient.shared.connected { try await Task.sleep(nanoseconds: 200_000_000) }
-        if !ChatClient.shared.connected {
-            let reason = ChatClient.shared.error.replacingOccurrences(of: Prefs.token, with: "[redacted]")
-            print("WebSocket reason: " + reason)
-        }
-        try check(ChatClient.shared.connected, "live app WebSocket hello")
-        for _ in 0..<50 where ChatClient.shared.items.isEmpty { try await Task.sleep(nanoseconds: 100_000_000) }
-        try check(!ChatClient.shared.items.isEmpty, "live chat history loaded")
-        print("PASS: live app WebSocket and read-only history")
-
-        func capture(_ name: String, wait: UInt64 = 3) async throws {
-            try await Task.sleep(nanoseconds: wait * 1_000_000_000)
-            guard let view = window.contentView else { throw VerificationError(description: "missing window content") }
-            view.layoutSubtreeIfNeeded()
-            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw VerificationError(description: "native view snapshot") }
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name + ".png"))
-            print("Snapshot: \(name).png")
-        }
-        for (tab, name) in [(Tab.chat, "01-chat"), (.today, "02-today"), (.tasks, "03-tasks"), (.memory, "04-memory"), (.home, "05-doudou"), (.settings, "06-settings")] {
-            Nav.shared.go(tab)
-            try await capture(name)
-        }
-        Nav.shared.go(.tasks)
-        try await Task.sleep(nanoseconds: 1_000_000_000)
-        // The segment positions follow the real 1100×760 layout. Events stay inside this process/window.
-        if !press(window.contentView!, label: "已完成") { click(window, x: 351, y: window.contentView!.bounds.height - 121) }
-        try await capture("03-tasks-completed", wait: 1)
-        if !press(window.contentView!, label: "定时") { click(window, x: 417, y: window.contentView!.bounds.height - 121) }
-        try await capture("03-tasks-scheduled", wait: 1)
-        print("Task segments captured through the verification window's own event queue")
-        for (route, name) in [(Route.connectors(tab: 0), "07-connectors-local"), (.connectors(tab: 1), "08-connectors-cloud"), (.connectors(tab: 2), "09-connectors-other"), (.devices, "10-devices"), (.skills, "11-skills")] {
-            Nav.shared.stacks[.settings] = []
-            Nav.shared.push(route, in: .settings)
-            try await capture(name)
-        }
-        if let dir = try await Api.tree("data/memory").first(where: { $0.dir && $0.name == "work" }) {
-            Nav.shared.push(.memoryCategory(dir.name), in: .memory)
-            try await capture("19-memory-category", wait: 2)
-        }
-        if let diary = try await Api.tree("data/diary").first(where: { !$0.dir && $0.name.hasSuffix(".md") }) {
-            Nav.shared.push(.doc(title: "豆豆的日记", path: "data/diary/" + diary.name), in: .home)
-            try await capture("20-diary-detail", wait: 2)
-        }
-        if let day = try await Api.tree("data/briefs").first(where: { $0.dir }),
-           let brief = try await Api.tree("data/briefs/" + day.name).first(where: { !$0.dir && $0.name.hasSuffix(".html") }) {
-            Nav.shared.push(.web(title: "简报", path: "data/briefs/" + day.name + "/" + brief.name), in: .today)
-            try await capture("21-brief", wait: 4)
-            if let web = findWeb(window.contentView!) {
-                let valid = try await web.evaluateJavaScript("document.readyState === 'complete' && document.body.innerText.length > 20") as? Bool
-                try check(valid == true, "live brief WebView")
-            }
-        }
-        Nav.shared.push(.doc(title: "总档", path: "data/memory/profile/总档.md"), in: .memory)
-        try await capture("12-memory-detail")
-        Nav.shared.push(.diaries, in: .home)
-        try await capture("13-diaries")
-        Nav.shared.push(.doc(title: "豆豆的设定", path: "data/memory/role/角色.md"), in: .home)
-        try await capture("14-role")
-        if let entry = try await Api.tree("data/sites").first {
-            Nav.shared.push(.web(title: entry.name, path: "data/sites/" + entry.name), in: .today)
-            try await capture("15-site", wait: 6)
-            if let web = findWeb(window.contentView!) {
-                let valid = try await web.evaluateJavaScript("document.readyState === 'complete' && document.body.innerText.length > 20 && !document.body.innerText.includes('unauthorized')") as? Bool
-                try check(valid == true, "live WKWebView authenticated document")
-                let image = try await web.takeSnapshot(configuration: nil)
-                try image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))!.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("15-site-content.png"))
-                print("PASS: live WKWebView document and native web snapshot")
-            } else { throw VerificationError(description: "live WKWebView was not mounted") }
-        }
-        window.contentView = NSHostingView(rootView: LoginView().preferredColorScheme(.light))
-        try await capture("16-login", wait: 1)
-        window.contentView = NSHostingView(rootView: OnboardingView().preferredColorScheme(.light))
-        try await capture("17-onboarding", wait: 1)
-        window.contentView = NSHostingView(rootView: MenuView().preferredColorScheme(.light))
-        window.setContentSize(NSSize(width: 380, height: 540))
-        try await capture("18-menu-chat", wait: 1)
-        let delegate = AppDelegate()
-        try check(!delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp), "closing the last window must keep the app alive")
-        AppDelegate.openMain = { window.makeKeyAndOrderFront(nil) }
-        window.close()
-        _ = delegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
-        try check(window.isVisible, "Dock reopen delegate must bring back the window")
-        print("PASS: last-window persistence and reopen delegate")
-        ChatClient.shared.stop()
-        window.close()
     }
 
     /// Only our own view tree; no AXUIElement, System Events, system permission request or external control.
     static func press(_ node: Any, label: String, depth: Int = 0) -> Bool {
         guard depth < 40, let element = node as? NSAccessibilityProtocol else { return false }
-        if element.accessibilityRole() == .button, element.accessibilityLabel() == label {
+        if element.accessibilityRole() == .button, element.accessibilityLabel() == label || element.accessibilityTitle() == label {
             return element.accessibilityPerformPress()
         }
         for child in element.accessibilityChildren() ?? [] {

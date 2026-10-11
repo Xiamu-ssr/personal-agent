@@ -113,6 +113,28 @@ enum TaskProtocolFixtures {
         offline.applyTasks([a]); offline.stopTask("a")
         try check(offline.stoppingTasks.isEmpty && !offline.taskError.isEmpty, "disconnected stop restores button immediately")
         try check(!offline.send("不能丢草稿") && offline.items.isEmpty, "failed send creates no phantom queue bubble")
+        let queue = ChatClient(sender: { sent.append($0); return true })
+        queue.busy = true
+        _ = queue.send("待修改")
+        queue.handle(["t": "user", "id": "queue-1", "text": "待修改", "source": "app"])
+        try check(queue.items.count == 1 && queue.items[0].serverID == "queue-1", "server user id correlates optimistic send")
+        try check(queue.updateQueue(queue.items[0], text: "最终文本"), "queued edit is transmitted")
+        try check(sent.last?["t"] as? String == "edit_queued" && sent.last?["id"] as? String == "queue-1" && queue.items[0].text == "待修改", "edit waits for server acknowledgement")
+        queue.handle(["t": "queue_update", "id": "queue-1", "state": "edited", "text": "最终文本"])
+        try check(queue.items[0].text == "最终文本" && queue.items[0].queued && queue.queueOperations.isEmpty, "edited acknowledgement preserves queue placement")
+        try check(queue.updateQueue(queue.items[0]), "queued recall is transmitted")
+        queue.handle(["t": "queue_update", "id": "queue-1", "state": "removed"])
+        try check(queue.items.isEmpty && queue.queueOperations.isEmpty, "removed acknowledgement deletes bubble and FIFO reservation")
+        queue.handle(["t": "user", "id": "late-1", "text": "来不及了", "source": "app"])
+        try check(queue.updateQueue(queue.items[0]), "recall race sends identity")
+        queue.handle(["t": "queue_update", "id": "late-1", "state": "too_late"])
+        try check(!queue.items[0].queued && queue.queueNotice == "豆豆已经在看这条了", "too_late retains message and shows server authority")
+        queue.handle(["t": "hello", "busy": true, "tasks": [], "history": [], "queued": [["id": "remote-1", "text": "另一端排队", "source": "app", "ts": 1000]]])
+        try check(queue.items.count == 1 && queue.items[0].queued && queue.items[0].serverID == "remote-1", "hello restores server queue after reconnect")
+        queue.handle(["t": "user", "id": "remote-1", "text": "另一端排队", "source": "app"])
+        try check(queue.items.count == 1, "repeated server user identity does not duplicate queue")
+        queue.stop(); offline.stop()
+        Nav.shared.toast = ""
         print("PASS: task snapshots/edges/stops/reconnect, FIFO queued bubbles, alarms, native task-result turns and status authority")
     }
 }

@@ -114,7 +114,7 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
             Column(Modifier.padding(horizontal = 20.dp)) {
                 BigTitle("连接应用", "连接设备和服务，豆豆就能替你做更多事")
                 SegTabs(
-                    listOf("本机 · ${Capabilities.all.size}", "云端 · ${data?.let { it.connected.size + it.catalog.size + it.custom.size } ?: "—"}",
+                    listOf("本机 · ${Capabilities.all.size}", "云端 · ${data?.let { it.connected.size + it.catalog.size } ?: "—"}",
                         "其他设备 · ${data?.others?.sumOf { it.caps.size } ?: "—"}"),
                     selected, Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp),
                 ) { selected = it }
@@ -125,6 +125,7 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
             ) {
                 when (selected) {
                     0 -> {
+                        item { EnableAllCapabilities() }
                         item { SectionTitle("本机能力") }
                         item { LocalCapabilities() }
                         item { FooterNote("只把你打开的能力交给豆豆。系统权限也可以随时收回。") }
@@ -136,17 +137,15 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                             fun matches(c: ConnectorInfo) = "${c.title} ${c.description} ${c.name}".contains(query.trim(), true)
                             val connected = data.connected.filter(::matches)
                             val catalog = data.catalog.filter(::matches)
-                            val custom = data.custom.filter(::matches)
                             if (connected.isNotEmpty()) {
                                 item { SectionTitle("已接入") }
                                 item {
                                     CardList {
                                         connected.forEachIndexed { i, c ->
                                             if (i > 0) Hairline()
-                                            ListRow(c.title, c.description, connectorIcon(c.icon.ifBlank { c.name }), Pal.Link, subLines = 2,
+                                            ListRow(c.title, c.description, subLines = 2, leading = { ConnectorLogo(c.name) },
                                                 trailing = {
                                                     when {
-                                                        c.builtin -> Tag("内置能力")
                                                         c.accounts.isNotEmpty() -> Tag("${c.accounts.size} 个账号", if (c.enabled) Pal.GoldInk else Pal.Danger)
                                                         else -> Tag(if (c.enabled) "已连接" else "未开启")
                                                     }
@@ -161,26 +160,14 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                                     CardList {
                                         catalog.forEachIndexed { i, c ->
                                             if (i > 0) Hairline()
-                                            ListRow(c.title, c.description, connectorIcon(c.icon.ifBlank { c.name }), Pal.Link, subLines = 2, trailing = {
+                                            ListRow(c.title, c.description, subLines = 2, leading = { ConnectorLogo(c.name) }, trailing = {
                                                 QuietButton(if (c.fields == null) "即将支持" else "连接") { Nav.open(Route.ConnectorDetail(c)) }
                                             }) { Nav.open(Route.ConnectorDetail(c)) }
                                         }
                                     }
                                 }
                             }
-                            if (custom.isNotEmpty()) {
-                                item { SectionTitle("自建连接器") }
-                                item {
-                                    CardList {
-                                        custom.forEachIndexed { i, c ->
-                                            if (i > 0) Hairline()
-                                            ListRow(c.title, c.description, connectorIcon(c.icon.ifBlank { c.name }), Pal.Link, subLines = 2,
-                                                trailing = { Tag("豆豆自建") })
-                                        }
-                                    }
-                                }
-                            }
-                            if (connected.isEmpty() && catalog.isEmpty() && custom.isEmpty()) item { EmptyNote(if (query.isBlank()) "还没有云端连接器" else "没有找到匹配的应用") }
+                            if (connected.isEmpty() && catalog.isEmpty()) item { EmptyNote(if (query.isBlank()) "还没有云端连接器" else "没有找到匹配的应用") }
                         }
                     }
                     else -> {

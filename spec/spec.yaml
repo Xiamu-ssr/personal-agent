@@ -1,0 +1,1992 @@
+# 架构模拟器 0.4：编辑此文件，然后在 personal-agent 目录运行 node spec/build.mjs。
+# source.file 相对 spec/；代码用唯一 start/end 锚点引用，行号由 build 计算。
+# index.html 的生成区只内联数据；渲染和交互代码保留在 HTML。
+meta:
+  version: "0.4"
+  title: Personal Agent · 架构模拟器
+  subtitle: Spec 0.4 · Claude Harness 内核 · 亮 = 当前模拟步骤
+layout:
+  width: 1080
+  height: 860
+  padding: 16
+initialState:
+  memory:
+    profile: 1
+    people: 2
+    preferences: 4
+    life: 2
+    work: 1
+    project: 1
+    interests: 1
+    history: 1
+    health: 3
+    finance: 1
+    feedback: 0
+    automation-prefs: 1
+    role: 1
+    voice-notes: 0
+  stats:
+    egress: 0
+    sub: 0
+    mem: 0
+    dev: 0
+  phone: 豆豆 · 等待中…
+ui:
+  overview: |-
+    # 怎么读这张图
+    - 大框是域，卡片是域里的节点；图上只显示名称，说明放在详情。
+    - 点节点或连线会展开右侧详情；顶部按钮可随时收起或展开侧栏。
+    - 粗线连域，细线连域内部件；虚线表示数据出境，白心包表示沿原路返回。
+    - 亮起表示当前场景的一次调用或读写；日志页显示场景消息、统计和记忆写入。
+    - 视图「边界」按设备、云、第三方染色；场景可手动触发，默认自动轮播。
+    - 这里只做本地架构模拟，不连接真实云端或设备。
+
+    ## 修改规格
+    编辑 spec/spec.yaml，然后在 personal-agent 目录执行 node spec/build.mjs，再双击打开 spec/index.html。页面内的「Spec YAML」可以临时编辑并预览；复制后保存回 YAML 文件。
+
+    ## 连线图例
+    - 蓝色：指令。
+    - 金色：个人数据。
+    - 绿色：结果。
+    - 紫色：进度或上线事件。
+  stats:
+    egress: 次出境
+    dev: 次设备调用
+    sub: 个子任务
+    mem: 处记忆写入
+zones:
+  dev:
+    label: 你的设备
+    color: "#2faa7a"
+  cloud:
+    label: 你的云
+    color: "#3b82f6"
+  third:
+    label: 第三方
+    color: "#f08a3c"
+kinds:
+  cmd:
+    label: 指令
+    color: "#3b82f6"
+  data:
+    label: 个人数据
+    color: "#f59e0b"
+  result:
+    label: 结果
+    color: "#10b981"
+  event:
+    label: 进度/上线
+    color: "#8b5cf6"
+domains:
+  - id: app
+    name: 豆豆 App
+    icon: 📱
+    zone: dev
+    rect: [1, 15, 22, 41]
+    role: 同一个产品，安卓是手机布局，Mac 是桌面布局。
+    can:
+      - 五个栏目：聊天 / 今日 / 任务 / 记忆 / 豆豆
+      - 今日就是看板：简报 + 站点
+      - 连接器：自己在 App 填，或让豆豆引导、代填参数
+      - 引导和本机页支持一键开启，仍可单项开关
+      - 设置：连接应用、设备、技能、通知、配对和版本
+    cannot:
+      - 记忆由云端维护，App 只展示和缓存
+      - App 关了不影响云端本体；本机能力取决于设备连接
+    holds:
+      - 本地缓存
+    chips:
+      - id: app_chat
+        name: 聊天
+        icon: 💬
+        desc: 主会话 · 可编辑队列
+        note: 输入框一直可用。主会话忙时按提交顺序排队，后台任务另计；停止当前回复和停止某个后台任务分开。
+        doc: |-
+          - 主会话状态点：在线绿、离线灰、忙时金色呼吸；忙碌说明在输入框上方。
+          - 长按排队气泡：撤回 / 修改。WS 发 `unqueue {id}` / `edit_queued {id, text}`，收到 `queue_update` 的 removed / edited 才更新。
+          - 已开始处理返回 too_late：豆豆已经在看这条了。
+          - 消息轮到时才写 chat.jsonl：撤回的不留历史，修改的只写最终文本。
+          - 以 status 和原生 session_state_changed.idle 放行队列，turn_end 只是回复结果。
+      - id: app_board
+        name: 今日
+        icon: 📋
+        desc: 看板 = 简报 + 站点
+        note: 简报 / 站点两个分段，默认简报。简报按天分组、时间倒序直接看 JSON 卡片；站点常驻，两列缩略图，点开 WebView。
+        doc: |-
+          - 简报：GET /api/briefs?days=7，一次返回解析好的内容；没有详情页。
+          - 聊天里的简报卡片带 path，点了切到今日并滚到该份简报。卡片 action 把 prompt 作为用户消息发到聊天。
+          - 站点标题 / 简介来自 HTML 的 title / meta description，mtime 来自 /api/tree。
+          - 缩略图由 App 在隐藏 WebView 中按手机宽度截首屏，按路径 + mtime 缓存；失败用渐变底 + 首字。
+      - id: app_task
+        name: 任务
+        icon: ✅
+        desc: 任务 · 定时
+        note: 任务合成一个列表：进行中的置顶并可单独停止，已完成的按今天 / 近 7 天 / 更早分组。定时是另一分段，不做为你推荐。
+        doc: |-
+          - 后台任务以服务端 tasks / task.snapshot 完整快照为准，不从历史还原运行计数。
+          - task.progress 更新摘要；completed / failed / stopped 从运行列表移除。
+          - stop_task {id} 只停这一项，最终状态等 notification / snapshot；interrupt 只停主回复，保留队列和后台任务。
+          - 有简报的完成项跳到今日，有站点文件的打开 WebView。
+      - id: app_mem
+        name: 记忆
+        icon: 🗂
+        desc: 总档 · 健康 · 分类
+        note: 总档前几行作大卡，查看全部打开完整总档；指针可点。健康读 latest.json，语音笔记显示条数和最近时间，其余有文件的分类用文件夹卡。
+        doc: |-
+          - 健康：data/memory/health/latest.json，由健康周报写 {updated, metrics:[{key,label,value,unit}]}。
+          - 四个指标：睡眠、静息心率、步数、心率变异性；缺数据显示 --。
+          - 分类和主题 MD 的目录约定不变；没有自动召回，模型按需查文件。
+      - id: app_diary
+        name: 豆豆
+        icon: 📔
+        desc: 头像 · 便签日记
+        note: 豆豆 / 女生 / 男生 / 猫，晨雾蓝 / 暮光金 / 薄荷 / 樱粉；代码绘制头像，选择存 system/app-profile.json，两端同步。日记仍在 diary/，便签预览，点开 Markdown。
+      - id: app_set
+        name: 设置
+        icon: ⚙️
+        desc: 连接应用 · 设备 · 技能
+        note: 会员卡是装饰；删掉模型一行。连接器只配参数，不写代码；用户自己填表单，或由豆豆引导并用配置工具代填。
+        doc: |-
+          - 设置 → 连接应用，分云端 / 本机两页；所有连接器使用通用详情页。
+          - 云端只列已发布连接器，内置搜索、网页读取、命令行、文件、定时、语音转写不展示。
+          - 设备入口跳到对应设备的本机连接器；其他设备只读，去对应设备开关，离线设备可移除。
+          - 通知开关、云端地址、生成配对码、退出登录和版本保留；定时任务在任务页。
+      - id: app_guide
+        name: 引导
+        icon: 🧭
+        desc: 一键开启 · 可跳过
+        note: 本机能力由用户在这台设备上授权。安卓集中申请运行时权限，再申请 Health Connect；Mac 顺序申请通知、日历、三个文件夹、屏幕录制、辅助功能。每项仍能单独关闭。
+      - id: app_connect
+        name: 连接应用
+        icon: 🧩
+        desc: 设置 → 连接应用 · 云端 / 本机
+        note: 入口在设置 → 连接应用，分云端 / 本机两页；所有连接器使用通用详情页。用户自己填参数，或让豆豆引导提供必要参数并代填。
+        doc: |-
+          - 云端：一服务一连接器，用官方图标；已连接服务在上面，可接入服务在下面，内置能力不展示。
+          - 本机：列当前设备的已授权能力；点设备直接去它的本机连接器页，其他设备只读。
+          - 通用详情页：服务说明、所需字段、账号列表、添加、测试、修改、删除；同一邮箱服务支持多个账号。
+          - 豆豆只能通过 connectors 工具代填账号配置，不写代码、不自建连接器。
+          - 允许用户在聊天里提供密钥并由豆豆代填；成功后提醒：聊天记录里会留下授权码。用户也可直接在 App 的表单填写。
+  - id: mac_app
+    name: Mac
+    icon: 💻
+    zone: dev
+    rect: [1, 60, 22, 11]
+    compact: true
+    role: 页面和豆豆 App 一样，是同一个产品的桌面布局。
+    chips: []
+    doc: "- 差异在本机能力（见「端侧连接器 → Mac」）和菜单栏快捷发消息弹窗。"
+  - id: cloud
+    name: 本体 · ECS
+    icon: ☁️
+    zone: cloud
+    rect: [27, 15, 46, 56]
+    free: true
+    qs:
+      - q_dirs
+      - q_boundary
+    role: Claude Harness + 两个网关 + 调度器 + 工作目录。
+    can:
+      - 主会话处理用户消息、简报闹钟和后台完成通知
+      - 定时简报派后台 fork；补读、夜间整理用隔离会话
+      - 通过设备网关用已授权本机能力
+      - 只用 connectors 工具改已发布连接器的账号配置
+    cannot:
+      - 没有工具审批流程；设备系统权限仍由用户开启
+      - 不全量同步设备数据，不把原始短信等写进记忆
+      - 没有模型主动心跳；网络保活不触发推理
+      - 不写连接器代码、不自建连接器
+    holds:
+      - 工作目录（记忆、简报、站点、日记、连接器配置、会话记录）
+    chips:
+      - id: cl_sched
+        name: 调度器
+        icon: ⏰
+        desc: 闹钟入队 · 隔离维护
+        at: [4, 3, 32, 15]
+        note: system/schedule.json 存 cron + prompt。普通定时任务 / 手动运行都给主会话投递闹钟，再派后台 fork；维护任务单独处理。
+        doc: |-
+          | 默认任务 | 时间 | 产出 / 行为 |
+          |---|---|---|
+          | 晨报 | 每天 07:30 | data/briefs/<日期>/晨报.json |
+          | 晚报 | 每天 21:30 | data/briefs/<日期>/晚报.json |
+          | 健康周报 | 周日 20:00 | 简报 JSON + health/latest.json |
+          | 夜间整理 / 日记 | 每天 22:30 | 隔离整理记忆，写 diary/<日期>.md |
+          | 主线程压缩 | 每天 03:00 | 主线程空闲时 /compact，忙则跳过 |
+          | 清理草稿 | 周一 04:00 | 代码删除 workspace/ 中 7 天没动的目录 |
+
+          - 实际时间以 schedule.json 为准，不是 HTML 中的固定承诺。
+          - 定时简报首个工具应是 Agent（subagent_type: fork，run_in_background: true）；运行层拒绝其他工具三次，随后放开，避免卡死。
+          - fork 继承主会话上下文；完成通知原生唤醒主会话转述，必要时继续修改简报。
+          - [补读] / [夜间整理] 隔离执行；设备重连补读目前有 20 小时冷却，按已开启且标记 sync 的来源读取。
+          - 云端补读、站点刷新需要相应定时配置；不把站点存在当成自动登记，也没有 schedule_create 工具。
+      - id: cl_appgw
+        name: App 网关
+        icon: 🚪
+        desc: WebSocket · 读目录给 App
+        at: [4, 33, 32, 16]
+        note: 把 SDK 消息流翻成 App 事件，维护消息队列；简报接口返回解析后的 JSON，站点、记忆、日记按目录提供。
+        doc: |-
+          - 文字流：includePartialMessages；工具调用 / 结果：tool_use / tool_result。
+          - 主会话：status {busy, reason}，reason 可为 user / schedule / task_result；原生 idle 才放行下一条。
+          - 后台任务：background_tasks_changed 完整快照 → task.snapshot；task_started / task_progress / task_notification 更新进度。
+          - 写 memory/：PostToolUse → memory_updated；写 data/ → files_changed。
+          - 写简报 JSON：PostToolUse 校验，错误用中文反馈模型修正；完成 job.done 卡片带 path。
+          - GET /api/briefs?days=7 → {items:[{date,name,time,path,brief}]}；GET /api/profile / PUT /api/profile 同步头像选择。
+      - id: cl_harness
+        name: Claude Harness
+        icon: ⚙️
+        desc: Agent SDK · 机制不画
+        at: [44, 20, 52, 27]
+        pills:
+          - 系统提示词 · 固定
+          - 连接器 = MCP
+          - Skills
+          - 后台 fork
+          - Hooks
+          - 200K · 约167K压缩
+        note: Agent SDK 提供执行机制，薄壳管理生命周期、队列、任务和校验；内置搜索等可直接用，App 不把它们列为连接器。
+        doc: |-
+          ```js
+          query({ prompt: inbox, options: {
+            model: config.model,
+            systemPrompt: PROMPT,
+            mcpServers: { devices, connectors, ...services },
+            cwd: "/srv/agent", resume: mainId,
+            permissionMode: config.permissionMode,
+            includePartialMessages: true,
+            perTaskStopAffordance: true,
+            hooks: { UserPromptSubmit, PreToolUse, PostToolUse }
+          }})
+          ```
+          - 模型由 AGENT_MODEL 配置，当前代码默认 anthropic/claude-haiku-5.5；App 不提供模型切换。
+          - 系统提示词启动时填一次，有利于缓存复用；时间、在线设备由 UserPromptSubmit 附加。新会话和压缩后重读总档。
+          - 200K 是 CLI 策略窗口：200000 - 20000 输出预留 - 13000 摘要预留 = 约 167000 输入触发；包括普通输入、缓存读取和缓存创建，不是精确硬闸门。主会话、隔离会话和子任务共用策略。
+          - 简报 fork 的原生完成通知进入主会话；busy 和后台任务数分开。
+          - 连接器代码在 cloud/connectors/ 随版本发布，账号变更后重建 MCP，在下一轮边界重载主查询；账号配置不会作为可执行代码加载。
+          - 目录只是约定，不是操作系统沙箱；服务以非 root 用户运行。没有产品审批流程，系统权限和写入校验仍保留。
+      - id: cl_devgw
+        name: 设备网关
+        icon: 🔗
+        desc: 外连通道 · 在线状态
+        at: [64, 61, 32, 16]
+        note: "设备主动外连（WebSocket），网关代理为 devices MCP。只暴露已开启能力；离线 / 未授权 → 直接返回原因。截图 {image: base64, mime} 转成 MCP image，让模型真的看到。"
+      - id: cl_fs
+        name: 工作目录 /srv/agent
+        icon: 💾
+        desc: 按寿命分三区：data 精心维护 · workspace 随便写 · system 配置和状态
+        at: [4, 80, 92, 17]
+        q: q_dirs
+        widget: memory
+        pills:
+          - data/ · memory briefs sites diary
+          - workspace/ · 脚本 中间结果
+          - system/ · connectors sync sessions
+          - .claude/skills/
+        note: data / workspace / system 的目录约定保留。简报改 JSON 卡片，站点仍是 HTML，记忆和日记仍在原目录。
+        doc: |-
+          ```
+          /srv/agent/            ← cwd，属于 Linux 用户 agent
+            data/                 ← 持久，要精心维护、要备份；App 展示的都在这
+              memory/<分类>/<主题>.md
+              memory/health/latest.json
+              briefs/<日期>/<任务名>.json
+              sites/<名>/index.html
+              diary/<日期>.md
+              uploads/<日期>/     ← 用户附件，只读不移动
+            workspace/<任务>/     ← 草稿：脚本、下载、中间结果；可清理
+            system/               ← 配置和状态
+              connectors/<名>/accounts.json ← 账号，600 权限、原子写入
+              connectors/<名>/state.json    ← 连接器游标和状态
+              sync/<设备>.json    ← 补读游标，网关维护
+              sessions/           ← CLAUDE_CONFIG_DIR
+              chat.jsonl          ← 主会话聊天记录
+              schedule.json       ← 定时配置
+              app-profile.json    ← 头像选择
+            .claude/skills/       ← 第二次使用的做法整理成技能
+          ```
+          - profile/ 只有总档.md；其余分类多个主题 MD，不建子目录。health/latest.json 是原生指标卡的数据，不替代健康主题 MD。
+          - voice-notes/ 保存用户用语音笔记交代要留存的内容，音频附件放 uploads/，转写后按记忆标准整理。
+          - system/connectors/ 只能通过配置工具操作，密钥返回为 ••••，不直接 Read / Write / Edit / Bash。
+          - 简报 {v:1,name,time,cards}：time 是带时区的 ISO 时间，1–5 张卡，首张总览；title ≤28 字，summary ≤80 字，每张最多 4 个 blocks。
+          - blocks：timeline ≤4 项、tiles 2–3 项、metrics ≤4 项、list ≤6 项、note 写暂不可读原因；tone 为 ok / warn / info。
+          - 可选 action {label,prompt}；卡片文字不含 emoji、链接或 Markdown。未知 type / 缺字段在 App 跳过。
+          - 站点写好 title 和 meta description，不需 site.json 或注册表；旧 HTML 简报由版本迁移，App 和接口只认 JSON。
+  - id: model
+    name: ZenMux
+    icon: 🧠
+    zone: third
+    rect: [27, 0, 28, 10]
+    compact: true
+    role: SDK 经 ANTHROPIC_BASE_URL 指向 ZenMux。
+    can:
+      - 推理
+    cannot:
+      - 不负责工作目录和记忆的持久化
+    holds:
+      - 本次请求的上下文；Read 过的记忆和工具结果会进入这里
+    chips:
+      - id: md_main
+        name: Haiku 5.5
+        icon: ⚡
+        desc: 代码默认 · 云端可配置
+  - id: conn
+    name: 云端连接器
+    icon: 🧩
+    zone: third
+    rect: [59, 0, 34, 10]
+    compact: true
+    role: 已发布服务，一服务一连接器。
+    can:
+      - 连接器代码读取账号配置并调用对应服务
+      - 同一邮箱服务多个账号，用 account 指定或查询全部；Tavily 和微信读书是单账号
+    cannot:
+      - 目录里没有的暂时接不了，不自建
+      - 内置能力不在 App 的云端连接器列表展示
+    holds:
+      - 第三方账号数据；云端账号配置与连接器代码分开
+    doc: |-
+      - 云端目录来自 cloud/connectors/index.mjs，下面列出每个已发布服务的名称、说明和配置字段。
+      - 不支持自建连接器。内置能力不展示；目录里没有的服务暂时接不了。
+      - 允许豆豆引导参数并代填；提醒用户聊天里会留下授权码。也可以直接在 App 表单填。
+    chips: []
+    catalog: connectors
+  - id: dev
+    name: 端侧连接器
+    icon: 🔌
+    zone: dev
+    rect: [78, 15, 21, 24]
+    role: 也是连接器，只是宿主是设备：要授权，会离线。
+    can:
+      - 执行本体经设备网关下发的工具调用
+    cannot:
+      - 数据不整盘上传：被调用时才读
+      - 未授权或设备离线时不执行，诚实返回原因
+    holds:
+      - 原始短信、日历、运动健康、电脑文件
+    chips:
+      - id: dev_android
+        name: 安卓
+        icon: 🤖
+        desc: 电量 · 发通知 · 位置 · 日历 · 短信 · 写剪贴板 · 运动健康
+        note: 授权 + 在线才可用。删掉 open_url；notify 可带 url，用户点通知才打开链接。被厂商杀后台就算离线。
+        doc: |-
+          - battery / location / calendar_events / sms / clipboard_write 保留；notify 增加可选 url。
+          - health {from, days}：优先 Health Connect，读取步数、睡眠、心率、心率变异性；不可用或无数据时以 TYPE_STEP_COUNTER 兜底，只有步数。
+          - 不宣称能读体重、跑步记录、联系人或相册；没有 Mac 命令行和操作电脑能力。
+          - 系统权限可以一键申请，Health Connect 随后单独打开；厂商健康 App 是否同步需真机验证。
+      - id: dev_mac
+        name: Mac
+        icon: 💻
+        desc: 命令行 · 三文件夹授权 · 操作电脑 · 浏览器 · 通知 · 日历
+        note: 授权 + 在线才可用。睡眠或断线就是离线；三个文件夹只有授权开关。浏览器是 App 自带的「豆豆浏览器」，登录状态持久，并与 Safari、Chrome 隔离。
+        doc: |-
+          | 能力 | 规则 |
+          |---|---|
+          | shell | zsh，{command,cwd?,timeout?≤300}；返回 stdout / stderr / exit code，输出超过 20k 字截断 |
+          | folder_desktop / folder_documents / folder_downloads | 桌面 / 文稿 / 下载的 TCC 授权开关，授权后 shell 访问，不各建文件工具 |
+          | computer_use | screenshot / click / type / key / scroll / drag；需要屏幕录制 + 辅助功能，移动鼠标走带随机抖动的曲线，不瞬移 |
+          | browser | App 内置 WKWebView「豆豆浏览器」窗口，多标签，登录状态持久，和 Safari / Chrome 隔离 |
+          | notify | 原生发通知，显示豆豆的名字 |
+          | calendar_events | 原生日历，权限挂在 App 上 |
+
+          ## 内置浏览器
+          - 页面读取：类似 Playwright aria snapshot 的层级无障碍树，节点带 ref；不是 HTML，内容最多 12k 字。
+          - 点击和输入发送原生事件；鼠标走带随机抖动的曲线，输入带随机间隔。
+          - 工具：tabs()、open({url,tab?})、snapshot({tab})、click({tab,ref})、type({tab,ref,text,submit?})、scroll({tab,dy})、screenshot({tab})、back({tab})、close({tab})。
+          - 用户能在「豆豆浏览器」接手登录；需要使用 Safari / Chrome 中的已有登录状态时，走 computer_use。
+          - 浏览器直接内置在 App 中，不做 Chrome 扩展，也没有本机 WebSocket。设备连云端的 WebSocket 和 ping 保活仍保留。
+
+          - 电量、剪贴板、打开网页、快捷指令、当前应用、文件读写统一用 shell，删旧独立能力，不做兼容；Mac 没有运动健康。
+          - 系统设置里的屏幕录制 / 辅助功能由用户开启。
+          - 构建用 ~/.personal-agent/signing/ 的固定自签名证书，避免升级反复丢 TCC 授权。
+  - id: prompts
+    name: 提示词
+    icon: 📝
+    zone: cloud
+    rect: [1, 75, 98, 24]
+    role: 引用源文件，构建时内联全文或代码片段，并计算当前行号；不复制修改云端提示词。
+    doc: |-
+      - 文件正文和 schedule.json 中的 prompt 显示全文；代码中的动态模板显示完整源代码片段，变量保持原样。
+      - 每项注明来源文件、构建时的行号和使用时机。修改源文件后重新 build，HTML 才更新。
+      - 主线程压缩 / 清理草稿两个种子任务没有独立 prompt：压缩复用同一份指令，清理草稿是普通代码。
+      - 后台完成通知由 SDK 原生生成，没有本地手写模板。
+    chips:
+      - id: p_system
+        name: 本体系统
+        icon: 📝
+        desc: 启动主会话、隔离会话和后台 agent 时；运行层只取第一个 --- 后的正文，名字、称呼、时区在启动时填一次。
+        prompt: p_system
+      - id: p_morning
+        name: 晨报
+        icon: 📝
+        desc: 每天 07:30，或用户手动运行；主会话接闹钟后派后台 fork。
+        prompt: p_morning
+      - id: p_evening
+        name: 晚报
+        icon: 📝
+        desc: 每天 21:30，或用户手动运行；主会话接闹钟后派后台 fork。
+        prompt: p_evening
+      - id: p_health_weekly
+        name: 健康周报
+        icon: 📝
+        desc: 周日 20:00，或用户手动运行；写简报和健康指标。
+        prompt: p_health_weekly
+      - id: p_night
+        name: 夜间整理
+        icon: 📝
+        desc: 每天 22:30；在隔离会话整理记忆、总档、工作区和日记。
+        prompt: p_night
+      - id: p_compact
+        name: 压缩
+        icon: 📝
+        desc: 原生自动压缩（200K 策略、约 167K 输入触发）和空闲时的手动 /compact；命令钩子复用同一份指令。
+        prompt: p_compact
+      - id: p_alarm
+        name: 闹钟消息
+        icon: 📝
+        desc: 普通定时任务或 /api/run：进入主会话队列，要求先派后台 fork；不是主动模型心跳。
+        prompt: p_alarm
+      - id: p_catchup
+        name: 补读
+        icon: 📝
+        desc: 支持 sync 的设备重连且满足冷却条件时，生成 [补读] 消息并开隔离会话。
+        prompt: p_catchup
+      - id: p_completion
+        name: 完成通知
+        icon: 📝
+        desc: 后台 task_notification 到达后，SDK 原生唤醒主会话转述；本地只消费事件和展示产出卡片。
+        prompt: p_completion
+      - id: p_fork_guard
+        name: 派发纠错
+        icon: 📝
+        desc: 定时回合没先派后台 fork 时，PreToolUse 拒绝并反馈这条要求；拒绝三次后放开。
+        prompt: p_fork_guard
+      - id: p_turn_context
+        name: 每轮上下文
+        icon: 📝
+        desc: UserPromptSubmit：把当前时间、时区和在线设备附加到当前轮，系统正文保持固定。
+        prompt: p_turn_context
+      - id: p_recovery
+        name: 会话恢复
+        icon: 📝
+        desc: 压缩或上下文失败重开主会话时，注入最近聊天摘要及记忆检索指针，再附当前消息。
+        prompt: p_recovery
+      - id: p_attachments
+        name: 附件说明
+        icon: 📝
+        desc: 用户发送图片、文件或语音笔记时，把附件路径和转写说明附在用户消息中；图片另附 image block。
+        prompt: p_attachments
+      - id: p_brief_guard
+        name: 简报纠错
+        icon: 📝
+        desc: Write / Edit 后简报 JSON 校验失败时，PostToolUse 把原因反馈给模型，要求修正。
+        prompt: p_brief_guard
+      - id: p_memory_guard
+        name: 记忆路径纠错
+        icon: 📝
+        desc: 写记忆前的 PreToolUse 路径校验失败时，向模型返回分类、层级或总档路径要求。
+        prompt: p_memory_guard
+      - id: p_connector_guard
+        name: 连接器纠错
+        icon: 📝
+        desc: 模型试图直接读写连接器账号文件，或搜索范围覆盖配置目录时，工具校验返回改用 connectors 工具的要求。
+        prompt: p_connector_guard
+      - id: p_device_tools
+        name: 设备工具
+        icon: 📝
+        desc: devices MCP 注册时，模型收到服务器 instructions 和 list_devices / call_device / read_since / sync_commit 的工具说明。
+        prompt: p_device_tools
+      - id: p_connector_tools
+        name: 配置工具
+        icon: 📝
+        desc: connectors MCP 的账号管理工具说明；代填授权码成功后 notice 要提醒聊天留痕。
+        prompt: p_connector_tools
+      - id: p_asr
+        name: 语音转写
+        icon: 📝
+        desc: 按住说话或语音笔记的音频转写请求：只输出带正常标点的逐字文字。
+        prompt: p_asr
+      - id: p_role
+        name: 角色口吻
+        icon: 📝
+        desc: 种子角色记忆，系统提示词要求按需读角色文件以保持豆豆的性格和口吻；实际运行文件可由豆豆维护。
+        prompt: p_role
+      - id: p_error_notice
+        name: 失败告知
+        icon: 📝
+        desc: 模型或压缩失败时发给用户的中文提示；这是 UI 通知，不作为新的模型执行指令。
+        prompt: p_error_notice
+edges:
+  - id: e_msg
+    from: app
+    to: cloud
+    label: 消息
+    kind: cmd
+    "off": -45
+    desc: 你在聊天里说的话
+    trigger: 你发消息
+    trust: 来自你本人
+  - id: e_evt
+    from: cloud
+    to: app
+    label: 进度流
+    kind: event
+    "off": -15
+    desc: 文字流、busy / reason、任务快照 / 进度、queue_update、记忆 / 文件更新
+    trigger: SDK 原生状态或运行层事件
+    trust: 主会话忙闲和后台任务数分开，队列操作以服务端回包为准
+  - id: e_card
+    from: cloud
+    to: app
+    label: 卡片/文件
+    kind: result
+    "off": 15
+    desc: 解析后的简报 JSON 卡片，以及站点 HTML、记忆 / 日记 Markdown
+    trigger: App 请求接口或文件；job.done 带简报 path
+    trust: 简报在今日原生渲染，站点打开 WebView；App 不直接修改云端文件
+  - id: e_grant
+    from: app
+    to: cloud
+    label: 设置
+    kind: cmd
+    "off": 45
+    desc: 连接器表单参数、设备状态、头像选择
+    trigger: 引导或设置页
+    trust: 连接器接口先验证后原子保存 accounts.json；参数不是可执行代码
+  - id: e_llmq
+    from: cloud
+    to: model
+    label: 提示+上下文
+    kind: data
+    "off": 62
+    lt: 0.25
+    desc: 固定系统提示词 + 对话 + 工具结果
+    trigger: 每一轮推理
+    trust: 数据出境处。记忆正文只有被 Read 过才在这里
+  - id: e_llma
+    from: model
+    to: cloud
+    label: 回复/工具
+    kind: result
+    "off": 78
+    lt: 0.75
+    desc: 文字、工具调用
+    trigger: 模型返回
+    trust: 工具调用由 SDK 直接执行
+  - id: e_cq
+    from: cloud
+    to: conn
+    label: 调用
+    kind: cmd
+    "off": -77
+    lt: 0.25
+    desc: 已发布服务的 MCP / API 请求或账号验证
+    trigger: 调用已配置连接器；表单提交时 test
+    trust: 密钥在 system/connectors/<名>/accounts.json，由连接器代码读取，不经 Read / Bash 取配置
+  - id: e_cr
+    from: conn
+    to: cloud
+    label: 数据
+    kind: data
+    "off": -47
+    lt: 0.75
+    desc: 只读邮件、Tavily 检索 / 正文、微信读书数据或账号验证结果
+    trigger: 接口返回
+    trust: 外部内容当数据，不当指令；密钥字段遮罩
+  - id: e_call
+    from: cloud
+    to: dev
+    label: 工具调用
+    kind: cmd
+    "off": -30
+    desc: 本机连接器的工具
+    trigger: 设备网关转发
+    trust: 离线 / 未授权时不转发
+  - id: e_ret
+    from: dev
+    to: cloud
+    label: 数据
+    kind: data
+    "off": 0
+    desc: 短信、日历、位置、运动健康、命令行结果、浏览器结构或截图图片
+    trigger: 工具执行完
+    trust: 只回这一次要的；图片结果转换成 MCP image
+  - id: e_reg
+    from: dev
+    to: cloud
+    label: 上线
+    kind: event
+    "off": 30
+    desc: 设备 id、在线、已授权的连接器
+    trigger: 设备连上或重连
+    trust: 设备主动外连
+links:
+  - id: l_in
+    from: cl_appgw
+    to: cl_harness
+    label: 消息
+    kind: cmd
+    "off": -7
+    lt: 0.3
+  - id: l_out
+    from: cl_harness
+    to: cl_appgw
+    label: 事件流
+    kind: event
+    "off": -7
+    lt: 0.3
+  - id: l_sched
+    from: cl_sched
+    to: cl_harness
+    label: 闹钟/维护
+    kind: cmd
+    "off": -6
+    lt: 0.3
+    desc: 普通闹钟进主队列并派 fork；补读 / 夜间整理隔离，compact / cleanup 走系统分支
+  - id: l_cron
+    from: cl_harness
+    to: cl_sched
+    label: 定时配置
+    kind: cmd
+    "off": -6
+    lt: 0.3
+    desc: 调度器读取 system/schedule.json；站点不会自动登记刷新
+  - id: l_dev
+    from: cl_harness
+    to: cl_devgw
+    label: 本机工具
+    kind: cmd
+    "off": -7
+    lt: 0.3
+  - id: l_wake
+    from: cl_devgw
+    to: cl_harness
+    label: 上线事件
+    kind: event
+    "off": -7
+    lt: 0.3
+  - id: l_fs
+    from: cl_harness
+    to: cl_fs
+    label: Read/Write
+    kind: data
+    tx: 0.5
+  - id: l_serve
+    from: cl_fs
+    to: cl_appgw
+    label: 读目录
+    kind: result
+    fx: 0.13
+flows:
+  - id: f_onboard
+    name: 首装·开启与填表
+    icon: 🧭
+    steps:
+      - t: 0
+        "on":
+          - app_guide
+        phone: |-
+          首次登录 · 开通本机能力
+          一键开启，也可逐项开关或跳过
+        log: 登录后进入本机能力引导，不自动全量扫描设备
+      - t: 1000
+        "on":
+          - dev_android
+        log: 安卓示例：集中申请运行时权限，再单独申请 Health Connect
+      - t: 2100
+        pkt: e_reg
+        label: 在线·开启 7 项
+        log: 示例设备注册：电量、发通知、位置、日历、短信、写剪贴板、运动健康
+      - t: 3200
+        "on":
+          - cl_devgw
+        log: 网关只把已开启能力暴露给模型；开启即授权，无工具审批
+      - t: 4000
+        "on":
+          - dev_mac
+        log: Mac 示例：通知 → 日历 → 桌面 / 文稿 / 下载 → 屏幕录制 → 辅助功能；豆豆浏览器内置，不需要安装扩展
+      - t: 5100
+        "on":
+          - app_connect
+        phone: |-
+          连接应用 · 云端
+          QQ 邮箱 / 163 邮箱，各自一个连接器
+          点服务，在统一详情页添加账号
+        log: 云端只列已发布服务，内置搜索等不展示
+      - t: 6200
+        pkt: e_grant
+        label: QQ 邮箱表单
+        log: 本地模拟：地址与授权码通过表单提交，不展示明文密钥
+      - t: 7000
+        pkt: e_cq
+        label: test 账号
+        "on":
+          - conn
+        log: 连接器代码先验证登录；不是豆豆写代码或自行安装
+      - t: 8100
+        pkt: e_cr
+        label: 验证通过·已遮罩
+        log: 模拟验证成功；失败应保留输入并显示中文原因
+      - t: 9200
+        "on":
+          - cl_appgw
+        log: 配置层原子保存 system/connectors/qq-mail/accounts.json，权限 600；游标在 state.json
+      - t: 10300
+        "on":
+          - cl_harness
+        log: 账号变更通知运行层，下一轮边界重建 MCP / 主查询
+      - t: 11400
+        pkt: e_evt
+        label: connectors_changed
+        log: App 刷新账号列表；配置结果不携带明文密钥
+      - t: 12500
+        "on":
+          - app_set
+        phone: |-
+          已开启本机能力
+          QQ 邮箱 · 1 个账号已连接
+          其他设备去对应设备上开启
+        log: 引导完成；有同步来源且满足冷却条件时另走隔离补读
+  - id: f_chat
+    name: 聊天·主线程
+    icon: 💬
+    steps:
+      - t: 0
+        "on":
+          - app_chat
+        phone: |-
+          你：周六带娃去哪？
+          以后周末优先室内活动。
+        pkt: e_msg
+        label: 周六带娃去哪
+        log: 用户问周末去处，并明确交代稳定偏好
+      - t: 1100
+        pkt: l_in
+        label: 消息+时间
+        log: 进主线程；UserPromptSubmit 钩子带上时间和在线设备
+      - t: 1800
+        pkt: e_llmq
+        label: 消息
+        "on":
+          - md_main
+        log: → 模型（固定系统提示词有利于缓存复用）
+      - t: 2900
+        pkt: e_llma
+        label: Read people/孩子.md
+        log: ← 模型自己决定翻记忆
+      - t: 3600
+        pkt: l_fs
+        label: Read people/孩子.md
+        log: 一次普通的 Read
+      - t: 4400
+        pkt: l_fs
+        back: true
+        label: 5 岁，怕晒
+        log: 内容回来
+      - t: 5100
+        pkt: e_llmq
+        label: 文件内容
+        "on":
+          - md_main
+        log: → 模型
+      - t: 6200
+        pkt: e_llma
+        label: 位置、搜索
+        log: ← 要用两个工具
+      - t: 6900
+        pkt: l_dev
+        label: 读位置
+        log: → 设备网关
+      - t: 7600
+        pkt: e_call
+        label: 读位置
+        stat:
+          dev: 1
+        log: → 手机
+      - t: 8600
+        pkt: e_ret
+        label: 位置
+        log: ← 手机
+      - t: 9400
+        pkt: l_dev
+        back: true
+        label: 位置
+        log: 回 Harness
+      - t: 9600
+        label: 内置网页搜索
+        "on":
+          - cl_harness
+        log: SDK 内置搜索查附近亲子活动；App 不列成连接器
+      - t: 10600
+        label: 搜索结果
+        log: 内置搜索返回结果，作为数据处理
+        "on":
+          - cl_harness
+      - t: 10800
+        pkt: l_out
+        label: Ran 3 tools
+        log: 事件流
+      - t: 11400
+        pkt: e_evt
+        label: Ran 3 tools
+        log: App 看到折叠的工具链
+      - t: 12100
+        pkt: e_llmq
+        label: 工具结果
+        "on":
+          - md_main
+        log: → 模型
+      - t: 13200
+        pkt: e_llma
+        label: 回答 + Write
+        log: ← 回答，外加写记忆
+      - t: 13900
+        pkt: l_fs
+        label: Write interests/周末.md
+        mem:
+          interests: 1
+        log: 只记录用户明确说的室内活动偏好，不从一次提问猜兴趣
+      - t: 14700
+        pkt: l_out
+        label: 回答+记忆已更新
+        log: PostToolUse 看到写了 memory/
+      - t: 15400
+        pkt: e_evt
+        label: 回答
+        log: → App
+      - t: 16400
+        "on":
+          - app_chat
+        phone: |-
+          推荐：科技馆，室内避晒，也适合孩子。
+          记忆已更新
+        log: 回答 +「记忆已更新」
+  - id: f_queue
+    name: 排队·撤回与修改
+    icon: ✏️
+    steps:
+      - t: 0
+        "on":
+          - cl_harness
+          - app_chat
+        phone: |-
+          豆豆正在转述后台结果
+          输入框仍可发送
+        log: 主会话 task_result 回合 busy，后台任务数量独立
+      - t: 900
+        pkt: e_msg
+        label: 消息 A
+        phone: |-
+          你：明天提醒取快递
+          排队中 · 可撤回 / 修改
+        log: user 事件带 id=A，消息进入云端 turnQueue，尚不写历史
+      - t: 2000
+        pkt: e_msg
+        label: 消息 B
+        phone: |-
+          你：明早 8 点提醒带伞
+          排队中 · 可撤回 / 修改
+        log: 第二条 id=B 按提交顺序排队
+      - t: 3100
+        "on":
+          - app_chat
+        pkt: e_msg
+        label: edit_queued B
+        phone: |-
+          修改排队消息 B
+          明早 9 点提醒带伞
+        log: 长按 B → 修改，发 {t:edit_queued,id:B,text:最终文本}
+      - t: 4200
+        pkt: e_evt
+        label: B edited
+        log: queue_update {id:B,state:edited,text:最终文本}，各端同步气泡
+      - t: 5300
+        pkt: e_msg
+        label: unqueue A
+        log: 长按 A → 撤回，发 {t:unqueue,id:A}
+      - t: 6400
+        pkt: e_evt
+        label: A removed
+        phone: |-
+          消息 A 已撤回
+          消息 B：明早 9 点提醒带伞 · 排队中
+        log: queue_update removed 后删除 A；撤回的消息不进 chat.jsonl
+      - t: 7500
+        pkt: l_out
+        label: turn_end
+        log: 当前回复结束，但 turn_end 本身还不能放行队列
+      - t: 8500
+        pkt: e_evt
+        label: status idle
+        log: 原生 session_state_changed.idle → status busy=false，才可派发下一条
+      - t: 9500
+        pkt: l_in
+        label: B 最终文本
+        log: B 出队后写入 chat.jsonl，修改前文本不进入历史
+      - t: 10500
+        pkt: e_llmq
+        label: B 最终文本
+        "on":
+          - md_main
+        log: SDK 此时才收到 B；不需要 SDK 原生排队编辑能力
+      - t: 11600
+        pkt: e_msg
+        label: 再次 unqueue B
+        log: 开始处理后再请求撤回，服务端不会删除正在看的消息
+      - t: 12700
+        pkt: e_evt
+        label: too_late
+        phone: 豆豆已经在看这条了
+        log: queue_update too_late，App 提示来不及撤回，不假报成功
+      - t: 13800
+        "on":
+          - app_chat
+        log: 停止当前回复另用 interrupt；不会清空其余排队消息或后台任务
+  - id: f_config
+    name: 连接器·引导与代填
+    icon: 🔧
+    steps:
+      - t: 0
+        "on":
+          - app_chat
+        phone: 你：帮我接上 163 邮箱
+        pkt: e_msg
+        label: 接入 163 邮箱
+        log: 可以聊天引导，也可以自己在 App 填表
+      - t: 1100
+        pkt: l_in
+        label: 消息
+        log: 进主会话
+      - t: 1800
+        pkt: e_llmq
+        label: 消息
+        "on":
+          - md_main
+        log: → 模型
+      - t: 2900
+        pkt: e_llma
+        label: connectors.list
+        log: 先查已发布目录、配置字段与帮助说明，不写代码
+      - t: 3600
+        "on":
+          - cl_harness
+        log: 本地示例目录包含 netease-163；同一服务可以有多个账号
+      - t: 4200
+        pkt: e_evt
+        label: 参数指引
+        phone: |-
+          需要邮箱地址和 IMAP 授权码
+          按字段帮助去 163 邮箱获取
+          可在 App 的连接应用中自己填
+        log: 按 fields / help 引导；推荐 App 表单提交密钥
+      - t: 5300
+        "on":
+          - app_chat
+        pkt: e_msg
+        label: 代填参数·已遮罩
+        phone: |-
+          你：请替我代填这些参数
+          授权码已遮罩
+        log: 若用户把密钥发到聊天，会进入上下文和记录，豆豆提醒表单更安全
+      - t: 6400
+        pkt: l_in
+        label: 用户参数
+        log: 示例参数送入主会话；模拟器不收集真实密钥
+      - t: 7100
+        pkt: e_llmq
+        label: 用户参数
+        "on":
+          - md_main
+        log: → 模型，仅表示聊天代填路径
+      - t: 8200
+        pkt: e_llma
+        label: connectors.add_account
+        log: 用 add_account(name=netease-163, values) 代填，不 Read / Write 配置文件
+      - t: 8900
+        pkt: e_cq
+        label: test 账号
+        log: 调用随版本发布的 163 连接器验证账号
+      - t: 10000
+        pkt: e_cr
+        label: 验证通过·已遮罩
+        log: 模拟连接成功；错误也要遮罩密钥并显示原因
+      - t: 11100
+        "on":
+          - cl_appgw
+        log: 配置层原子保存 accounts.json；下一轮重建该服务的 MCP，无自建目录
+      - t: 12100
+        pkt: l_out
+        label: 已接入
+        log: 返回已遮罩账号状态
+      - t: 12700
+        pkt: e_evt
+        label: 已接入
+        log: → App
+      - t: 13700
+        "on":
+          - app_connect
+        phone: |-
+          连接应用 · 云端
+          163 邮箱 · 1 个账号已连接
+          目录里没有的服务暂时接不了
+        log: 可再添加同服务账号；不支持的服务如实说明，不自己写连接器
+  - id: f_brief
+    name: 晨报·fork 与卡片
+    icon: 🌅
+    steps:
+      - t: 0
+        "on":
+          - cl_sched
+        log: 07:30 调度器按 schedule.json 触发晨报
+      - t: 800
+        pkt: l_sched
+        label: "[定时] 晨报"
+        log: 闹钟进主会话 turnQueue；忙时等待，不另开晨报主 session
+      - t: 1600
+        pkt: e_llmq
+        label: 闹钟与说明
+        "on":
+          - md_main
+        log: → 主模型：先派后台 fork
+      - t: 2700
+        pkt: e_llma
+        label: Agent fork · 后台
+        stat:
+          sub: 1
+        log: 首个工具 Agent(subagent_type=fork,run_in_background=true)，fork 继承主会话上下文
+      - t: 3400
+        pkt: l_out
+        label: task_started
+        log: 后台任务登记；运行层守卫拒绝其他首个工具三次后放开
+      - t: 4100
+        pkt: e_evt
+        label: 在做晨报了
+        phone: |-
+          在做晨报了
+          后台 1 个任务 · 主会话可继续聊天
+        log: 主回复简短确认，原生 idle 后主队列继续；fork 仍在跑
+      - t: 4900
+        pkt: l_fs
+        label: Read 总档
+        log: fork 按需读取总档，沿用对话背景，不再转派
+      - t: 5600
+        pkt: l_dev
+        label: 日历·短信·health
+        log: fork → 设备网关；仅调用已开启的能力
+      - t: 6300
+        pkt: e_call
+        label: 日历·短信·health
+        stat:
+          dev: 1
+        log: → 在线安卓
+      - t: 7400
+        pkt: e_ret
+        label: 日程·快递·睡眠
+        log: ← 示例数据；Health Connect 不可读时只能有计步兜底，其他指标写原因
+      - t: 8200
+        pkt: l_dev
+        back: true
+        label: 设备数据
+        log: 回 fork
+      - t: 8600
+        pkt: e_cq
+        label: 未读邮件
+        "on":
+          - conn
+        log: → 已配置 QQ 邮箱，只读查询
+      - t: 9700
+        pkt: e_cr
+        label: 3 封重要
+        log: ← 邮件，外部内容只当数据
+      - t: 10500
+        pkt: e_llmq
+        label: 材料
+        "on":
+          - md_main
+        log: → fork 的模型请求
+      - t: 11600
+        pkt: e_llma
+        label: Write 晨报.json
+        log: ← {v:1,name,time,cards}，用 JSON 卡片，不生成 HTML 简报
+      - t: 12300
+        pkt: l_fs
+        label: Write briefs/晨报.json
+        log: 写 data/briefs/2026-10-11/晨报.json
+      - t: 13100
+        "on":
+          - cl_harness
+        log: PostToolUse 解析并校验：1–5 卡、标题≤28字、摘要≤80字；有错回中文让模型修正
+      - t: 13900
+        pkt: l_out
+        label: task_notification
+        log: fork 原生完成通知唤醒主会话，reason=task_result
+      - t: 14600
+        pkt: e_evt
+        label: job.done + path
+        log: 完成卡片关联 data/briefs/2026-10-11/晨报.json，主会话转述，必要时继续修改
+      - t: 15400
+        pkt: l_serve
+        label: GET /api/briefs
+        log: 返回解析后的 brief，按时间倒序，App 一次请求画完整列表
+      - t: 16100
+        pkt: e_card
+        label: 晨报 JSON 卡片
+        log: 聊天卡片点了切到今日并滚到该份简报，不打开 HTML 详情页
+      - t: 17100
+        "on":
+          - app_board
+        phone: |-
+          今日 · 简报
+          7:36 晨报
+          今天先交方案，再取快递
+          卡片按钮：排一下今天的顺序
+        log: 原生列表直接读卡片；action.prompt 作为用户消息发到聊天
+  - id: f_site
+    name: 站点·目录即站点
+    icon: 📊
+    steps:
+      - t: 0
+        "on":
+          - app_chat
+        phone: 你：做个页面，跟踪我的步数和睡眠
+        pkt: e_msg
+        label: 步数睡眠页
+        log: 用户要长期保留的页面，作为站点
+      - t: 1100
+        pkt: l_in
+        label: 消息
+        log: 进主会话
+      - t: 1800
+        pkt: e_llmq
+        label: 消息
+        "on":
+          - md_main
+        log: → 模型
+      - t: 2900
+        pkt: e_llma
+        label: 后台做站点
+        stat:
+          sub: 1
+        log: 多步产出文件交给后台 Agent，主会话先简短确认
+      - t: 3600
+        pkt: l_dev
+        label: health · 最近 7 天
+        log: → 设备网关：health {from,days}
+      - t: 4300
+        pkt: e_call
+        label: 步数·睡眠
+        stat:
+          dev: 1
+        log: → 已开启运动健康的安卓
+      - t: 5300
+        pkt: e_ret
+        label: 可读的步数·睡眠
+        log: ← 示例 Health Connect 数据；缺失指标写原因，不宣称能读体重 / 跑步记录
+      - t: 6100
+        pkt: l_dev
+        back: true
+        label: 健康数据
+        log: 回后台任务
+      - t: 6800
+        pkt: e_llmq
+        label: 数据
+        "on":
+          - md_main
+        log: → 模型
+      - t: 7900
+        pkt: e_llma
+        label: Write index.html
+        log: ← 自包含站点 HTML，写好 title 与 meta description
+      - t: 8600
+        pkt: l_fs
+        label: Write sites/健康趋势/
+        log: data/sites/健康趋势/index.html 存在即站点，不需登记或 site.json
+      - t: 9400
+        "on":
+          - cl_appgw
+        log: files_changed 后 App 读站点目录和 mtime；不会自动登记刷新任务
+      - t: 10200
+        pkt: l_serve
+        label: 站点 HTML + mtime
+        log: App 自己在隐藏 WebView 截首屏，按路径 + mtime 缓存缩略图
+      - t: 10900
+        pkt: e_card
+        label: 健康趋势站点
+        log: 后台完成通知回主会话，站点出现在今日的站点分段
+      - t: 11900
+        "on":
+          - app_board
+        phone: |-
+          今日 · 站点
+          健康趋势
+          步数与睡眠 · 更新于刚刚
+          点开 WebView
+        log: 站点常驻；用户需要定时刷新时再配置相应任务
+  - id: f_task
+    name: 子任务·进度
+    icon: 🧩
+    steps:
+      - t: 0
+        "on":
+          - app_chat
+        phone: 你：调研三款儿童安全座椅，出对比表
+        pkt: e_msg
+        label: 调研安全座椅
+        log: 你：调研安全座椅
+      - t: 1100
+        pkt: l_in
+        label: 消息
+        log: 进主线程
+      - t: 1800
+        pkt: e_llmq
+        label: 消息
+        "on":
+          - md_main
+        log: → 模型
+      - t: 2900
+        pkt: e_llma
+        label: 派子任务
+        log: 派后台 Agent 做深入调研；主会话可继续聊天，结果由主会话转述
+      - t: 3600
+        pkt: l_out
+        label: task_started
+        stat:
+          sub: 1
+        log: SDK 消息：task_started
+      - t: 4200
+        pkt: e_evt
+        label: 在弄了
+        "on":
+          - app_task
+        phone: |-
+          任务 · 安全座椅调研
+          进行中
+        log: → App 任务页
+      - t: 4900
+        pkt: e_cq
+        label: 搜评测
+        "on":
+          - conn
+        log: 后台任务 → 已配置 Tavily：深度搜索和正文提取
+      - t: 5900
+        pkt: e_cr
+        label: 12 篇
+        log: ← 检索材料，只作为数据
+      - t: 6600
+        pkt: e_llmq
+        label: 评测
+        "on":
+          - md_main
+        log: 子任务自己的上下文
+      - t: 7700
+        pkt: e_llma
+        label: 要点
+        log: ← 要点
+      - t: 8400
+        pkt: l_fs
+        label: Write workspace/座椅/
+        log: 脚本、中间结果放草稿区
+      - t: 9200
+        pkt: l_out
+        label: task_progress
+        log: task.progress 一行摘要；任务数量以完整 snapshot 为准
+      - t: 9800
+        pkt: e_evt
+        label: 进度：已读 12 篇
+        "on":
+          - app_task
+        log: → App
+      - t: 10500
+        pkt: e_llmq
+        label: 汇总
+        "on":
+          - md_main
+        log: → 模型
+      - t: 11600
+        pkt: e_llma
+        label: 对比表
+        log: ← 对比表 HTML
+      - t: 12300
+        pkt: l_fs
+        label: Write data/sites/座椅对比/
+        log: 交付物放 data/，看板能看到
+      - t: 13100
+        pkt: l_out
+        label: task_notification
+        log: 完成通知原生唤醒主会话，产生 task_result 回合并转述要点
+      - t: 13700
+        pkt: e_evt
+        label: 完成
+        log: → App，completed 从运行快照移除，完成项留在合并列表
+      - t: 14700
+        "on":
+          - app_task
+        phone: |-
+          任务 · 今天
+          安全座椅对比表 · 已完成
+          点开站点，也可继续追问
+        log: 任务页
+  - id: f_night
+    name: 夜间整理·日记·压缩
+    icon: 🌙
+    steps:
+      - t: 0
+        "on":
+          - cl_sched
+        log: 22:30 夜间整理，按定时配置进入隔离会话
+      - t: 800
+        pkt: l_sched
+        label: "[夜间整理]"
+        log: 隔离维护，不继承或占用主聊天，也不把它当晨报 fork
+      - t: 1600
+        pkt: e_llmq
+        label: 整理记忆
+        "on":
+          - md_main
+        log: → 模型
+      - t: 2700
+        pkt: e_llma
+        label: Read 总档与细节
+        log: 先读 memory/ 总档和分类文件，不直接读写 system/ 会话状态
+      - t: 3400
+        pkt: l_fs
+        label: Read memory/
+        log: 检查细节事实、来源和分类
+      - t: 4200
+        pkt: l_fs
+        back: true
+        label: 现有记忆
+        log: 只整理来源明确、稳定且值得留存的事实
+      - t: 4900
+        pkt: e_llmq
+        label: 记忆与产出
+        "on":
+          - md_main
+        log: → 模型：合并重复、核对总档指针
+      - t: 6000
+        pkt: e_llma
+        label: Edit 原有事实
+        log: 事实改变原地改、更新日期；不把被推翻的事实搬到 history/
+      - t: 6700
+        pkt: l_fs
+        label: Write feedback/晨报.md
+        mem:
+          feedback: 1
+        log: 把用户明确的晨报反馈整理到主题文件，删除不符合记忆标准的内容
+      - t: 7500
+        pkt: l_fs
+        label: 更新 people/ 细节
+        mem:
+          people: 0
+        stat:
+          mem: 1
+        log: 先改细节文件，再同步总档；原地修改不增加文件数
+      - t: 8300
+        pkt: l_fs
+        label: 重写 profile/总档.md
+        log: 每行都指向存在的细节文件，总档不新增无来源内容
+      - t: 9100
+        pkt: l_fs
+        label: Write diary/10-11.md
+        log: data/diary/2026-10-11.md，以豆豆自己的视角写日记，维护回合完成
+      - t: 9900
+        "on":
+          - cl_sched
+          - cl_harness
+        log: 另一个系统定时项在 03:00 检查主会话：空闲才 /compact，忙则跳过；自动压缩阈值约 167K
+      - t: 10600
+        pkt: l_serve
+        label: diary/ 有新文件
+        log: files_changed → App 刷新日记目录
+      - t: 11300
+        pkt: e_card
+        label: 日记 Markdown
+        log: → 豆豆页便签；详情仍为 Markdown
+      - t: 12300
+        "on":
+          - app_diary
+        phone: |-
+          豆豆 · 便签日记
+          10 月 11 日
+          今天整理了记忆，
+          晨报的反馈也合并好了。
+        log: 日记在豆豆页，不再是独立一级导航
+      - t: 13300
+        "on":
+          - cl_sched
+        log: 周一 04:00 的 cleanup 用代码清理 workspace/ 中 7 天没动的目录，不调用模型
+  - id: f_catchup
+    name: 设备上线·补读
+    icon: 📥
+    steps:
+      - t: 0
+        "on":
+          - dev_android
+        pkt: e_reg
+        label: 重新上线
+        log: 手机离线几天后重连；仅补读已开启且声明 sync 的来源
+      - t: 1100
+        "on":
+          - cl_devgw
+        log: 设备网关：上次游标仍在，距上次触发已超过 20 小时冷却
+      - t: 1900
+        pkt: l_wake
+        label: "[补读] 安卓"
+        log: 开一个独立 session，不进主线程，聊天里什么都不会多
+      - t: 2700
+        pkt: e_llmq
+        label: "[补读] 安卓"
+        "on":
+          - md_main
+        log: → 模型
+      - t: 3800
+        pkt: e_llma
+        label: read_since
+        log: ← 调网关的 read_since，不用自己算时间
+      - t: 4500
+        pkt: l_dev
+        label: read_since(短信)
+        log: → 设备网关：按游标取一批（最多 50 条）
+      - t: 5200
+        pkt: e_call
+        label: 第 1 批
+        stat:
+          dev: 1
+        log: → 手机
+      - t: 6200
+        pkt: e_ret
+        label: 50 条
+        log: ← 手机
+      - t: 7000
+        pkt: l_dev
+        back: true
+        label: 50 条 + 批次号
+        log: 工具结果用于提炼，SDK 会话记录仍按运行层保存
+      - t: 7700
+        pkt: e_llmq
+        label: 第 1 批
+        "on":
+          - md_main
+        log: → 模型：挑出值得记的
+      - t: 8800
+        pkt: e_llma
+        label: Write + commit
+        log: ← 写记忆，再提交这一批
+      - t: 9500
+        pkt: l_fs
+        label: Write people/老王.md
+        mem:
+          people: 1
+        log: 只把符合记忆标准的事实写入记忆库，不保存短信全文为记忆
+      - t: 10300
+        pkt: l_dev
+        label: sync_commit(批次 1)
+        log: 写完记忆才提交 → 网关把游标推到第 1 批末尾
+      - t: 11100
+        pkt: l_dev
+        label: read_since(短信)
+        log: 取第 2 批
+      - t: 11800
+        bad:
+          - dev_android
+        dur: 2600
+        log: 读到一半，手机又离线了
+        logKind: bad
+      - t: 12300
+        pkt: l_dev
+        back: true
+        label: 设备离线
+        bad:
+          - cl_devgw
+        dur: 1200
+        log: 第 2 批没提交 → 游标不动；session 结束
+        logKind: bad
+      - t: 13300
+        "on":
+          - cl_devgw
+        log: 冷却后下次符合条件的重连从第 2 批继续；最坏重读一批，写前查重
+  - id: f_offline
+    name: 设备离线·诚实降级
+    icon: 🫥
+    steps:
+      - t: 0
+        "on":
+          - cl_sched
+        log: 07:30 晨报闹钟
+      - t: 600
+        pkt: l_sched
+        label: "[定时] 晨报"
+        log: 进入主会话队列
+      - t: 900
+        bad:
+          - dev_android
+        dur: 10800
+        log: 安卓被杀后台 → 离线
+        logKind: bad
+      - t: 1700
+        pkt: e_llmq
+        label: 晨报闹钟
+        "on":
+          - md_main
+        log: → 主模型
+      - t: 2800
+        pkt: e_llma
+        label: Agent fork · 后台
+        stat:
+          sub: 1
+        log: 先派后台 fork，主会话简短确认，继续可聊天
+      - t: 3500
+        pkt: l_dev
+        label: calendar_events
+        log: fork → 设备网关
+      - t: 4300
+        pkt: l_dev
+        back: true
+        label: 设备离线
+        bad:
+          - cl_devgw
+        dur: 1500
+        log: 网关直接回设备离线，不向离线设备派发
+        logKind: bad
+      - t: 5000
+        pkt: e_cq
+        label: 未读邮件
+        "on":
+          - conn
+        log: → 已配置邮箱（不依赖手机在线，服务失败也要照实说明）
+      - t: 6000
+        pkt: e_cr
+        label: 3 封重要
+        log: ← 本地示例邮件
+      - t: 6700
+        pkt: e_llmq
+        label: 材料（缺日程）
+        "on":
+          - md_main
+        log: 读不到就说读不到，不拿记忆或常识补，不反复重试同一调用
+      - t: 7800
+        pkt: e_llma
+        label: 晨报 JSON
+        log: ← 卡片用 note 区块说明日程暂不可读
+      - t: 8500
+        pkt: l_fs
+        label: Write 晨报.json
+        log: 写 data/briefs/2026-10-11/晨报.json，PostToolUse 校验
+      - t: 9300
+        pkt: l_out
+        label: task_notification
+        log: fork 完成原生唤醒主会话，转述缺失项；job.done 带 path
+      - t: 10000
+        pkt: e_card
+        label: 含离线说明的卡片
+        log: App 获取 /api/briefs 并画原生卡片
+      - t: 11000
+        "on":
+          - app_board
+        phone: |-
+          今日 · 简报
+          晨报
+          日程暂不可读：手机离线
+          邮件：3 封重要
+        log: 设备离线 → 诚实降级，保留原有决定
+questions:
+  - id: q_boundary
+    title: 对外动作
+    decided: 没有工具审批页面。明确用户意图就直接做，不明确先在聊天里问；钱、合同、对第三方的承诺和不可恢复删除仍先问。只在已经支持且已授权的能力内执行。
+  - id: q_dirs
+    title: 工作目录怎么分区？
+    decided: 保留三区：data/ 精心维护、备份、App 展示；workspace/ 放任务草稿；system/ 放配置和状态。目录约定不变，只更新简报格式和账号配置的文件说明。第二次使用的做法整理成 .claude/skills/ 技能。
+  - id: q_sync
+    title: 增量补读
+    decided: 已开启且支持 sync 的设备来源在重连时隔离补读，目前距上次补读至少 20 小时，不按自然日计数；云端来源需要对应定时配置。
+    rec: 设备游标在 system/sync/<设备>.json，连接器游标在 system/connectors/<名>/state.json。分批读，写完记忆再 sync_commit；未提交游标不动，冷却后再次触发可续读。
+  - id: q_session
+    title: 压缩
+    decided: CLI 策略窗口 200K，预留输出 20K、摘要 13K，下一请求输入估计约 167K 时自动压缩。缓存读 / 写计入输入；夜间另有空闲 /compact，忙则跳过。
+  - id: q_site
+    title: 看板与站点
+    decided: 看板 = 简报 + 站点，App 名为今日。简报 JSON 原生卡片；站点仍是 data/sites/<名>/index.html，存在即站点，不做低代码；标题和简介在 HTML 里，缩略图由 App 生成。
+  - id: q_conn
+    title: 连接器和设备怎么分
+    decided: 设备能力经 devices MCP 调用，用户本机授权、可能离线；云端一服务一连接器，代码随版本发布，可配多账号。内置能力不展示，不做自建连接器。
+    rec: 豆豆只查目录、引导必要参数并通过 connectors 工具代填；用户也可直接在 App 填。没有的服务如实说暂时接不了。账号变更后在下一轮重建 MCP / 主查询。
+  - id: q_prompt
+    title: 系统提示词
+    decided: 启动时填一次后固定，有利于缓存复用；不装总档或索引，模型在新会话和压缩后自己读总档。
+    rec: 时间、在线设备由 UserPromptSubmit 附加。写入 Hook 做路径 / 简报校验，连接器配置只能走工具；这些校验不增加用户审批流程。
+  - id: q_memory
+    title: 记忆库形态
+    decided: 保留 data/memory/<分类>/<主题>.md，profile/ 只有总档；health/latest.json 专供原生指标卡。只记来源明确、稳定且值得留存的事实；事实改变原地更新，不把被推翻的内容归档到 history/。
+  - id: q_host
+    title: 云主机
+    decided: ECS。
+  - id: q_model
+    title: 模型
+    decided: 由云端 AGENT_MODEL 配置，当前代码默认 Haiku 5.5；不在 App 设置中展示模型一行或提供切换。
+  - id: q_proto
+    title: 设备离线
+    decided: 设备网关直接返回「设备离线」。
+  - id: q_push
+    title: App 不在前台时怎么联系你
+    decided: 设备 WebSocket 仍在线时收到回复 / 任务事件可发系统通知，用户能关消息通知。设备断开或进程被杀时不承诺能送达，独立离线推送后放。
+  - id: q_hw
+    title: 以后的硬件
+    decided: 后放。
+  - id: q_spike
+    title: 0.4 对齐依据
+    decided: app-v3.md 和 connectors.md 优先；没提到的按 app-v2.md，并核对系统提示词、任务协议和实际云端代码。模拟场景不是部署或真实设备验收。
+  - id: q_health
+    title: 厂商健康数据能否接入？
+    body: Health Connect 支持的指标已定，但荣耀等厂商健康 App 是否向它同步，需要真机验证；计步传感器兜底只有步数。
+    rec: 用真机确认数据来源、可用指标和授权效果，再决定是否需要补充来源。没有数据时显示 -- / 暂不可读，不编造。
+  - id: q_secret
+    title: 密钥代填
+    decided: 允许豆豆指引用户提供必要参数并代填，同时提醒聊天记录里会留下授权码；用户也可在 App 填表单。
+  - id: q_heartbeat
+    title: 心跳
+    decided: 没有主动的模型心跳；设备和 App 的 WebSocket ping 保活保留，不触发推理。
+  - id: q_browser
+    title: Mac 内置浏览器
+    decided: App 自带 WKWebView「豆豆浏览器」，持久登录且与 Safari / Chrome 隔离；读取层级无障碍树并给节点 ref，原生点击和输入，鼠标沿带随机抖动的曲线移动。computer_use 同样用曲线移动，不瞬移。
+connectors:
+  source: ../cloud/connectors/index.mjs
+  fieldSource: ../cloud/connectors/_shared/imap.mjs
+  items:
+    - id: qq-mail
+      name: QQ 邮箱
+      description: 读取QQ 邮箱里的邮件（IMAP，只读）
+      source: ../cloud/connectors/qq-mail/index.mjs
+      multiAccount: true
+      host: imap.qq.com
+      fields:
+        - key: address
+          label: 邮箱地址
+          type: text
+          required: true
+        - key: password
+          label: 授权码 / 客户端专用密码
+          type: secret
+          required: true
+        - key: label
+          label: 备注
+          type: text
+          required: false
+    - id: netease-163
+      name: 163 邮箱
+      description: 读取163 邮箱里的邮件（IMAP，只读）
+      source: ../cloud/connectors/netease-163/index.mjs
+      multiAccount: true
+      host: imap.163.com
+      fields:
+        - key: address
+          label: 邮箱地址
+          type: text
+          required: true
+        - key: password
+          label: 授权码 / 客户端专用密码
+          type: secret
+          required: true
+        - key: label
+          label: 备注
+          type: text
+          required: false
+    - id: netease-126
+      name: 126 邮箱
+      description: 读取126 邮箱里的邮件（IMAP，只读）
+      source: ../cloud/connectors/netease-126/index.mjs
+      multiAccount: true
+      host: imap.126.com
+      fields:
+        - key: address
+          label: 邮箱地址
+          type: text
+          required: true
+        - key: password
+          label: 授权码 / 客户端专用密码
+          type: secret
+          required: true
+        - key: label
+          label: 备注
+          type: text
+          required: false
+    - id: gmail
+      name: Gmail
+      description: 读取Gmail里的邮件（IMAP，只读）
+      source: ../cloud/connectors/gmail/index.mjs
+      multiAccount: true
+      host: imap.gmail.com
+      fields:
+        - key: address
+          label: 邮箱地址
+          type: text
+          required: true
+        - key: password
+          label: 授权码 / 客户端专用密码
+          type: secret
+          required: true
+        - key: label
+          label: 备注
+          type: text
+          required: false
+    - id: exmail
+      name: 腾讯企业邮
+      description: 读取腾讯企业邮里的邮件（IMAP，只读）
+      source: ../cloud/connectors/exmail/index.mjs
+      multiAccount: true
+      host: imap.exmail.qq.com
+      fields:
+        - key: address
+          label: 邮箱地址
+          type: text
+          required: true
+        - key: password
+          label: 授权码 / 客户端专用密码
+          type: secret
+          required: true
+        - key: label
+          label: 备注
+          type: text
+          required: false
+    - id: aliyun-mail
+      name: 阿里企业邮
+      description: 读取阿里企业邮里的邮件（IMAP，只读）
+      source: ../cloud/connectors/aliyun-mail/index.mjs
+      multiAccount: true
+      host: imap.qiye.aliyun.com
+      fields:
+        - key: address
+          label: 邮箱地址
+          type: text
+          required: true
+        - key: password
+          label: 授权码 / 客户端专用密码
+          type: secret
+          required: true
+        - key: label
+          label: 备注
+          type: text
+          required: false
+    - id: imap
+      name: 其他邮箱
+      description: 读取其他邮箱里的邮件（IMAP，只读）
+      source: ../cloud/connectors/imap/index.mjs
+      multiAccount: true
+      fields:
+        - key: address
+          label: 邮箱地址
+          type: text
+          required: true
+        - key: password
+          label: 授权码 / 客户端专用密码
+          type: secret
+          required: true
+        - key: host
+          label: IMAP 服务器
+          type: text
+          required: true
+        - key: port
+          label: 端口
+          type: number
+          required: false
+          default: 993
+        - key: label
+          label: 备注
+          type: text
+          required: false
+    - id: tavily
+      name: Tavily
+      description: 深入调研和整篇网页正文提取
+      source: ../cloud/connectors/tavily/index.mjs
+      multiAccount: false
+      fields:
+        - key: apiKey
+          label: API Key
+          type: secret
+          required: true
+    - id: weread
+      name: 微信读书
+      description: 查看书架、阅读统计、划线和想法，搜索书籍
+      source: ../cloud/connectors/weread/index.mjs
+      multiAccount: false
+      fields:
+        - key: apiKey
+          label: 个人 API Key
+          type: secret
+          required: true
+prompts:
+  - id: p_system
+    name: 本体系统
+    when: 启动主会话、隔离会话和后台 agent 时；运行层只取第一个 --- 后的正文，名字、称呼、时区在启动时填一次。
+    sources:
+      - file: prompts/system-prompt.md
+        kind: file
+  - id: p_morning
+    name: 晨报
+    when: 每天 07:30，或用户手动运行；主会话接闹钟后派后台 fork。
+    sources:
+      - file: ../cloud/seed/system/schedule.json
+        kind: json
+        item: morning
+        field: prompt
+  - id: p_evening
+    name: 晚报
+    when: 每天 21:30，或用户手动运行；主会话接闹钟后派后台 fork。
+    sources:
+      - file: ../cloud/seed/system/schedule.json
+        kind: json
+        item: evening
+        field: prompt
+  - id: p_health_weekly
+    name: 健康周报
+    when: 周日 20:00，或用户手动运行；写简报和健康指标。
+    sources:
+      - file: ../cloud/seed/system/schedule.json
+        kind: json
+        item: health-weekly
+        field: prompt
+  - id: p_night
+    name: 夜间整理
+    when: 每天 22:30；在隔离会话整理记忆、总档、工作区和日记。
+    sources:
+      - file: ../cloud/seed/system/schedule.json
+        kind: json
+        item: night
+        field: prompt
+  - id: p_compact
+    name: 压缩
+    when: 原生自动压缩（200K 策略、约 167K 输入触发）和空闲时的手动 /compact；命令钩子复用同一份指令。
+    sources:
+      - file: ../cloud/src/context-policy.mjs
+        kind: code
+        start: export const COMPACT_INSTRUCTIONS
+      - file: ../cloud/scripts/compact-instructions.mjs
+        kind: file
+      - file: ../cloud/src/agent.mjs
+        kind: code
+        start: "  compactMain() {"
+        end: "  runIsolated(label, prompt) {"
+  - id: p_alarm
+    name: 闹钟消息
+    when: 普通定时任务或 /api/run：进入主会话队列，要求先派后台 fork；不是主动模型心跳。
+    sources:
+      - file: ../cloud/src/scheduler.mjs
+        kind: code
+        start: "  await harness.send(`[定时]"
+  - id: p_catchup
+    name: 补读
+    when: 支持 sync 的设备重连且满足冷却条件时，生成 [补读] 消息并开隔离会话。
+    sources:
+      - file: ../cloud/src/main.mjs
+        kind: code
+        start: "  harness.runIsolated(`补读"
+  - id: p_completion
+    name: 完成通知
+    when: 后台 task_notification 到达后，SDK 原生唤醒主会话转述；本地只消费事件和展示产出卡片。
+    sources:
+      - file: ../cloud/src/background-tasks.mjs
+        kind: code
+        start: "    if (m.subtype === \"task_notification\") {"
+        end: "    if (!record.background) return true;"
+      - file: ../cloud/src/agent.mjs
+        kind: code
+        start: "    if (m.type === \"system\" && main.tasks.handle(m)) return;"
+      - file: prompts/system-prompt.md
+        kind: code
+        start: "- `[定时] 该出"
+    doc: 没有本地手写的「完成通知提示词」。通知内容由 SDK 提供；这里引用消费位置和系统提示词里的转述要求，不合成一个不存在的模板。
+  - id: p_fork_guard
+    name: 派发纠错
+    when: 定时回合没先派后台 fork 时，PreToolUse 拒绝并反馈这条要求；拒绝三次后放开。
+    sources:
+      - file: ../cloud/src/agent.mjs
+        kind: code
+        start: const SCHEDULE_FORK_REASON
+  - id: p_turn_context
+    name: 每轮上下文
+    when: UserPromptSubmit：把当前时间、时区和在线设备附加到当前轮，系统正文保持固定。
+    sources:
+      - file: ../cloud/src/agent.mjs
+        kind: code
+        start: "  promptContext() {"
+        end: "  checkWrite(input) {"
+  - id: p_recovery
+    name: 会话恢复
+    when: 压缩或上下文失败重开主会话时，注入最近聊天摘要及记忆检索指针，再附当前消息。
+    sources:
+      - file: ../cloud/src/conversation-recovery.mjs
+        kind: code
+        start: export function recoveryContext(
+        end: export function withRecovery(
+  - id: p_attachments
+    name: 附件说明
+    when: 用户发送图片、文件或语音笔记时，把附件路径和转写说明附在用户消息中；图片另附 image block。
+    sources:
+      - file: ../cloud/src/agent.mjs
+        kind: code
+        start: function userContent(
+        end: function toolHint(
+  - id: p_brief_guard
+    name: 简报纠错
+    when: Write / Edit 后简报 JSON 校验失败时，PostToolUse 把原因反馈给模型，要求修正。
+    sources:
+      - file: ../cloud/src/agent.mjs
+        kind: code
+        start: "          return error ? { decision: \"block\", reason:"
+        end: "        }] }],"
+  - id: p_memory_guard
+    name: 记忆路径纠错
+    when: 写记忆前的 PreToolUse 路径校验失败时，向模型返回分类、层级或总档路径要求。
+    sources:
+      - file: ../cloud/src/agent.mjs
+        kind: code
+        start: function memoryPathError(
+        end: export class Harness
+  - id: p_connector_guard
+    name: 连接器纠错
+    when: 模型试图直接读写连接器账号文件，或搜索范围覆盖配置目录时，工具校验返回改用 connectors 工具的要求。
+    sources:
+      - file: ../cloud/src/connector-guard.mjs
+        kind: code
+        start: const REASON
+        end: const inside
+  - id: p_device_tools
+    name: 设备工具
+    when: devices MCP 注册时，模型收到服务器 instructions 和 list_devices / call_device / read_since / sync_commit 的工具说明。
+    sources:
+      - file: ../cloud/src/devices.mjs
+        kind: code
+        start: "      instructions: \"用户的手机和电脑。"
+        end: "      ],"
+  - id: p_connector_tools
+    name: 配置工具
+    when: connectors MCP 的账号管理工具说明；代填授权码成功后 notice 要提醒聊天留痕。
+    sources:
+      - file: ../cloud/src/connectors.mjs
+        kind: code
+        start: "      tool(\"list\", \"列出预置连接器"
+        end: "    ];"
+  - id: p_asr
+    name: 语音转写
+    when: 按住说话或语音笔记的音频转写请求：只输出带正常标点的逐字文字。
+    sources:
+      - file: ../cloud/src/transcribe.mjs
+        kind: code
+        start: "        { type: \"text\", text: \"把这段语音"
+  - id: p_role
+    name: 角色口吻
+    when: 种子角色记忆，系统提示词要求按需读角色文件以保持豆豆的性格和口吻；实际运行文件可由豆豆维护。
+    sources:
+      - file: ../cloud/seed/data/memory/role/角色.md
+        kind: file
+  - id: p_error_notice
+    name: 失败告知
+    when: 模型或压缩失败时发给用户的中文提示；这是 UI 通知，不作为新的模型执行指令。
+    sources:
+      - file: ../cloud/src/conversation-recovery.mjs
+        kind: code
+        start: export const RECOVERY_NOTICE
+      - file: ../cloud/src/conversation-recovery.mjs
+        kind: code
+        start: export function humanError(
+        end: // Bounded disk read

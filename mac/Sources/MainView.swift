@@ -48,6 +48,9 @@ struct MainView: View {
         .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
         .environment(\.interactiveWindow, windowActivity.active)
         .onAppear { AppDelegate.openMain = { openWindow(id: "main") } }
+        .task(id: "\(ChatClient.shared.connected)-\(ChatClient.shared.filesVersion)-\(windowActivity.active)") {
+            if session.configured { await ProfileStore.shared.load() }
+        }
         .animation(.easeOut(duration: 0.2), value: nav.toast)
     }
 
@@ -96,15 +99,9 @@ struct Sidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
-                Orb(size: 34)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("豆豆").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                    HStack(spacing: 5) {
-                        Dot(on: chat.connected)
-                        Text(chat.connected ? (chat.busy ? (chat.toolHint.isEmpty ? "在想…" : chat.toolHint) : "在线") : "连接中…")
-                            .font(.system(size: 11)).foregroundStyle(Theme.sub).lineLimit(1)
-                    }
-                }
+                AgentAvatar(size: 34)
+                Text(ProfileStore.shared.agentName).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                AgentStatusDot()
             }
             .padding(.horizontal, 10)
             .padding(.top, 52)

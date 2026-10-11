@@ -5,6 +5,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.rememberScrollState
@@ -44,6 +46,13 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -156,26 +165,17 @@ fun ChatScreen(list: LazyListState, bottom: Dp) {
 private fun ChatHeader(onSearch: () -> Unit) {
     val connected = Chat.connected.value
     val busy = Chat.busy.value
-    val (dot, status) = when {
-        !connected -> Pal.Faint to "连接中…"
-        busy -> Pal.Gold to Chat.toolHint.value.ifBlank { "在想" }
-        DeviceService.online.value -> Pal.Online to "在线 · 本机已接入"
-        else -> Pal.Online to "在线"
-    }
+    val dot = when { !connected -> Pal.Faint; busy -> Pal.Gold; else -> Pal.Online }
+    val pulse = rememberInfiniteTransition(label="busy-dot").animateFloat(.35f,1f,infiniteRepeatable(tween(900),RepeatMode.Reverse),label="breathe")
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(
             Modifier.clip(RoundedCornerShape(24.dp)).background(Color(0xA6FFFFFF)).border(1.dp, Color(0x80FFFFFF), RoundedCornerShape(24.dp))
                 .padding(start = 5.dp, end = 14.dp, top = 5.dp, bottom = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box {
-                Avatar(34.dp)
-                Box(Modifier.align(Alignment.BottomEnd)) { StatusDot(dot, 10.dp) }
-            }
-            Column(Modifier.padding(start = 9.dp)) {
-                Text("豆豆", fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Pal.Ink)
-                Text(status, fontSize = 11.sp, lineHeight = 14.sp, color = Pal.Muted, maxLines = 1)
-            }
+            Avatar(34.dp)
+            Text("豆豆", fontSize=15.sp, fontWeight=FontWeight.SemiBold, color=Pal.Ink, modifier=Modifier.padding(horizontal=9.dp))
+            Box(Modifier.alpha(if(connected && busy) pulse.value else 1f)) { StatusDot(dot, 8.dp) }
         }
         Spacer(Modifier.weight(1f))
         Row(
@@ -303,21 +303,7 @@ private fun EmptyChat() {
 @Composable
 private fun ChatRow(item: ChatItem, highlight: Boolean) {
     when (item) {
-        is ChatItem.User -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Spacer(Modifier.width(48.dp))
-            Column(
-                Modifier.weight(1f, fill = false).clip(RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp))
-                    .background(if (highlight) Color(0x66E2C88E) else if (item.queued) Pal.UserBubble.copy(alpha = 0.1f) else Pal.UserBubble)
-                    .testTag(if (item.queued) "queued-message" else "user-message")
-                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.End,
-            ) {
-                Attachments(item.attachments)
-                if (item.text.isNotBlank()) SelectionContainer { Text(item.text, fontSize = 15.sp, lineHeight = 23.sp, color = if (item.queued) Pal.UserText.copy(alpha = 0.65f) else Pal.UserText) }
-                if (item.queued) Text("排队中", fontSize = 10.sp, color = Pal.Muted.copy(alpha = 0.8f))
-            }
-        }
+        is ChatItem.User -> UserBubble(item, highlight)
         is ChatItem.Assistant -> Bubble(highlight) { SelectionContainer { Markdown(item.text, color = Color(0xFF3A4757)) } }
         is ChatItem.Alarm -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("schedule-message"),
             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -327,6 +313,14 @@ private fun ChatRow(item: ChatItem, highlight: Boolean) {
         is ChatItem.Card -> {
             val c = ctx()
             val scope = rememberCoroutineScope()
+            if(item.path?.startsWith("data/briefs/") == true && item.path.endsWith(".json")) {
+                val (brief, _) = load("chat-brief:${item.path}") { com.xiamu.agent.Api.briefs().firstOrNull { it.path == item.path } }
+                Column(Modifier.fillMaxWidth().tap { Nav.brief(item.path) }) {
+                    val card = brief?.cards?.firstOrNull() ?: com.xiamu.agent.BriefCard(item.label,item.title,"",emptyList(),null)
+                    BriefCardView(card,compact=true)
+                }
+                return
+            }
             Row(
                 Modifier.fillMaxWidth().card(radius = 20.dp).tap(item.path != null) { scope.launch { openFile(c, item.path!!, item.title) } }
                     .padding(14.dp),
@@ -347,6 +341,39 @@ private fun ChatRow(item: ChatItem, highlight: Boolean) {
             )
         }
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun UserBubble(item: ChatItem.User, highlight: Boolean) {
+    var menu by remember(item.id) { mutableStateOf(false) }
+    var editing by remember(item.id) { mutableStateOf(false) }
+    var text by remember(item.id,item.text) { mutableStateOf(item.text) }
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
+        Spacer(Modifier.width(48.dp))
+        Box(Modifier.weight(1f,fill=false)) {
+            Column(Modifier.clip(RoundedCornerShape(20.dp,20.dp,6.dp,20.dp))
+                .background(if(highlight) Color(0x66E2C88E) else if(item.queued) Pal.UserBubble.copy(alpha=.1f) else Pal.UserBubble)
+                .then(if(item.queued && item.id.isNotBlank()) Modifier.combinedClickable(onClick={},onLongClick={ menu=true }) else Modifier)
+                .testTag(if(item.queued) "queued-message" else "user-message").padding(horizontal=14.dp,vertical=11.dp),
+                verticalArrangement=Arrangement.spacedBy(8.dp),horizontalAlignment=Alignment.End) {
+                Attachments(item.attachments)
+                if(item.text.isNotBlank()) {
+                    if(item.queued) Text(item.text,fontSize=15.sp,lineHeight=23.sp,color=Pal.UserText.copy(alpha=.65f))
+                    else SelectionContainer { Text(item.text,fontSize=15.sp,lineHeight=23.sp,color=Pal.UserText) }
+                }
+                if(item.queued) Text("排队中",fontSize=10.sp,color=Pal.Muted)
+            }
+            DropdownMenu(expanded=menu,onDismissRequest={ menu=false }) {
+                DropdownMenuItem(text={ Text("撤回") },onClick={ menu=false; Chat.unqueue(item.id) })
+                DropdownMenuItem(text={ Text("修改") },onClick={ menu=false; text=item.text; editing=true })
+            }
+        }
+    }
+    if(editing) AlertDialog(onDismissRequest={editing=false},title={Text("修改排队消息")},text={
+        OutlinedTextField(text,{text=it},modifier=Modifier.fillMaxWidth(),minLines=2,maxLines=5)
+    },confirmButton={ TextButton(enabled=text.isNotBlank() || item.attachments.isNotEmpty(),onClick={ Chat.editQueued(item.id,text); editing=false }) { Text("保存") } },
+        dismissButton={TextButton(onClick={editing=false}) {Text("取消")}})
 }
 
 @Composable

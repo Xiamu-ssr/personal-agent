@@ -1,0 +1,9 @@
+{
+  "fixtureRecords": 4,
+  "source": "health_connect",
+  "assertedSteps": 1250,
+  "assertedSleepMinutes": 60,
+  "assertedHeartRate": 72,
+  "assertedHrv": 42,
+  "cleanup": "deleteRecords in finally"
+}

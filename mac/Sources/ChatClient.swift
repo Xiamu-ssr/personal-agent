@@ -40,6 +40,8 @@ struct ChatItem: Identifiable, Equatable {
     var pending = false
     var queued = false
     var source = ""
+    /// Server turnQueue identity, distinct from the stable local view identity.
+    var serverID = ""
 
     var scheduleTitle: String {
         guard let start = text.range(of: "该出「"), let end = text.range(of: "」了", range: start.upperBound..<text.endIndex) else {
@@ -70,11 +72,13 @@ final class ChatClient {
     var connected = false
     var toolHint = ""
     var error = ""
-    var configured = Prefs.configured
+    var configured = LocalVerification.explicitLoopback || Prefs.configured
     var live: [LiveTask] = []
     private(set) var backgroundTasks: [BackgroundTask] = []
     private(set) var stoppingTasks: Set<String> = []
     var taskError = ""
+    var queueNotice = ""
+    private(set) var queueOperations: Set<String> = []
 
     var replyStatus: String {
         switch busyReason {
@@ -150,17 +154,18 @@ final class ChatClient {
             self?.toolHint = ""
             self?.backgroundTasks = []
             self?.stoppingTasks = []
+            self?.queueOperations = []
             if let why { self?.error = why }
         }
     }
 
     func start() {
-        configured = Prefs.configured
+        configured = LocalVerification.explicitLoopback || Prefs.configured
         socket.start()
     }
 
     func reconnect() {
-        configured = Prefs.configured
+        configured = LocalVerification.explicitLoopback || Prefs.configured
         connected = false
         busy = false; busyReason = ""; toolHint = ""
         backgroundTasks = []; stoppingTasks = []
@@ -188,6 +193,7 @@ final class ChatClient {
         stoppingTasks = []
         endedTasks = []; endedOrder = []; waitingInputs = []; snapshotEchoes = [:]
         taskError = ""
+        queueNotice = ""; queueOperations = []
     }
 
     private func transmit(_ message: [String: Any]) -> Bool {
@@ -214,6 +220,18 @@ final class ChatClient {
 
     func interrupt() {
         if !transmit(["t": "interrupt"]) { error = "还没连上，无法停止当前回复" }
+    }
+
+    @discardableResult
+    func updateQueue(_ item: ChatItem, text: String? = nil) -> Bool {
+        guard item.queued, !item.serverID.isEmpty, !queueOperations.contains(item.serverID) else { return false }
+        if let text, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
+        var message: [String: Any] = ["t": text == nil ? "unqueue" : "edit_queued", "id": item.serverID]
+        if let text { message["text"] = text }
+        guard transmit(message) else { queueNotice = "还没连上，稍后再试"; return false }
+        queueOperations.insert(item.serverID)
+        queueNotice = ""
+        return true
     }
 
     func stopTask(_ id: String) {
@@ -282,10 +300,11 @@ final class ChatClient {
         let atts = (h["attachments"] as? [[String: Any]] ?? []).map(Attachment.init)
         switch str(h["role"]) {
         case "user": return ChatItem(kind: str(h["source"]) == "schedule" ? .schedule : .user,
-                                     text: str(h["text"]), attachments: atts, ts: date(h["ts"]), source: str(h["source"]))
+                                     text: str(h["text"]), attachments: atts, ts: date(h["ts"]), source: str(h["source"]), serverID: str(h["id"]))
         case "assistant": return ChatItem(kind: .assistant, text: str(h["text"]), ts: date(h["ts"]))
         case "card":
-            return ChatItem(kind: .card, text: str(h["title"]), outputs: h["outputs"] as? [String] ?? [], label: str(h["label"]), ts: date(h["ts"]))
+            let outputs = (h["path"] as? String).map { [$0] } ?? h["outputs"] as? [String] ?? []
+            return ChatItem(kind: .card, text: str(h["title"]), outputs: outputs, label: str(h["label"]), ts: date(h["ts"]))
         default: return nil
         }
     }
@@ -349,6 +368,7 @@ final class ChatClient {
     }
 
     private static func same(_ a: ChatItem, _ b: ChatItem) -> Bool {
+        if !a.serverID.isEmpty && !b.serverID.isEmpty { return a.serverID == b.serverID }
         guard a.kind == b.kind, a.text == b.text, a.outputs == b.outputs,
               a.attachments.map(\.path) == b.attachments.map(\.path) else { return false }
         if a.pending { return true }
@@ -366,8 +386,19 @@ final class ChatClient {
             busy = m["busy"] as? Bool ?? false
             busyReason = busy ? Self.str(m["reason"]) : ""
             waitingInputs = []; snapshotEchoes = [:]
+            for row in m["queued"] as? [[String: Any]] ?? [] {
+                var entry = row
+                entry["role"] = "user"
+                if var item = Self.item(entry), !item.serverID.isEmpty {
+                    item.queued = item.kind == .user
+                    items.removeAll { $0.serverID == item.serverID }
+                    add(item)
+                    waitingInputs.append((item.id, item.kind == .schedule))
+                }
+            }
             stoppingTasks = []; endedTasks = []; endedOrder = []
             taskError = ""; error = ""
+            queueOperations = []; queueNotice = ""
             applyTasks(m["tasks"] as? [[String: Any]] ?? [])
             streaming = ""
             toolHint = ""
@@ -378,24 +409,50 @@ final class ChatClient {
             devicesVersion += 1
         case "user":
             let text = Self.str(m["text"])
+            let serverID = Self.str(m["id"])
             let atts = (m["attachments"] as? [[String: Any]] ?? []).map(Attachment.init)
             // Our own message echoes back (now with voice transcripts); others' messages are new.
             let scheduled = Self.str(m["source"]) == "schedule"
             let receivedAt = Date()
-            if !scheduled, let i = items.firstIndex(where: { $0.pending && $0.text == text && $0.attachments.map(\.path) == atts.map(\.path) }) {
+            if !serverID.isEmpty, let i = items.firstIndex(where: { $0.serverID == serverID }) {
+                items[i].text = text
                 items[i].pending = false
+                if !atts.isEmpty { items[i].attachments = atts }
+            } else if !scheduled, let i = items.firstIndex(where: { $0.pending && $0.text == text && $0.attachments.map(\.path) == atts.map(\.path) }) {
+                items[i].pending = false
+                items[i].serverID = serverID
                 if !atts.isEmpty { items[i].attachments = atts }
             } else if let i = items.firstIndex(where: { (snapshotEchoes[$0.id] ?? .distantPast) > receivedAt && $0.kind == (scheduled ? .schedule : .user) &&
                 $0.text == text && $0.attachments.map(\.path) == atts.map(\.path) }) {
                 snapshotEchoes.removeValue(forKey: items[i].id)
+                items[i].serverID = serverID
                 items[i].queued = !scheduled && (busy || !waitingInputs.isEmpty)
                 waitingInputs.append((items[i].id, scheduled))
                 if !atts.isEmpty { items[i].attachments = atts }
             } else {
                 let item = ChatItem(kind: scheduled ? .schedule : .user, text: text, attachments: atts, ts: Date(),
-                                    queued: !scheduled && (busy || !waitingInputs.isEmpty), source: Self.str(m["source"]))
+                                    queued: !scheduled && (busy || !waitingInputs.isEmpty), source: Self.str(m["source"]), serverID: serverID)
                 add(item)
                 waitingInputs.append((item.id, scheduled))
+            }
+        case "queue_update":
+            let id = Self.str(m["id"])
+            queueOperations.remove(id)
+            guard let index = items.firstIndex(where: { $0.serverID == id }) else { return }
+            switch Self.str(m["state"]) {
+            case "removed":
+                let localID = items[index].id
+                items.remove(at: index)
+                waitingInputs.removeAll { $0.id == localID }
+                snapshotEchoes.removeValue(forKey: localID)
+            case "edited":
+                if let text = m["text"] as? String { items[index].text = text }
+            case "too_late":
+                items[index].queued = false
+                waitingInputs.removeAll { $0.id == items[index].id }
+                queueNotice = "豆豆已经在看这条了"
+                Nav.shared.show(queueNotice)
+            default: break
             }
         case "status":
             busy = m["busy"] as? Bool ?? false
@@ -441,7 +498,7 @@ final class ChatClient {
                 live.append(LiveTask(id: "job:" + label, label: label, started: Date(), detail: "定时任务"))
             } else {
                 live.removeAll { $0.id == "job:" + label }
-                let outputs = m["outputs"] as? [String] ?? []
+                let outputs = (m["path"] as? String).map { [$0] } ?? m["outputs"] as? [String] ?? []
                 if !outputs.isEmpty { add(ChatItem(kind: .card, text: Self.str(m["title"]), outputs: outputs, label: label, ts: Date())) }
                 jobsVersion += 1
                 filesVersion += 1

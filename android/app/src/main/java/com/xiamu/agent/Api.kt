@@ -75,7 +75,7 @@ object Api {
     suspend fun postJson(path: String, body: JSONObject = JSONObject()): JSONObject =
         call(req(path).post(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
 
-    private suspend fun putJson(path: String, body: JSONObject): JSONObject =
+    suspend fun putJson(path: String, body: JSONObject): JSONObject =
         call(req(path).put(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
 
     private fun accountsPath(name: String, id: String? = null) =
@@ -108,6 +108,16 @@ object Api {
             .optString("text").trim()
 
     suspend fun bytes(dataPath: String): ByteArray = fetch(req(filePath(dataPath)).build(), http) { it.body?.bytes() ?: byteArrayOf() }
+
+    suspend fun connectorIcon(name: String): ByteArray = fetch(req("/api/connectors/${enc(name)}/icon").build(), http) { it.body?.bytes() ?: byteArrayOf() }
+
+    suspend fun briefs(): List<BriefDocument> = getJson("/api/briefs?days=7").optJSONArray("items").objects()
+        .mapNotNull(BriefDocument::from).sortedByDescending { it.time }
+
+    suspend fun profile(): AvatarChoice = AvatarChoice.from(getJson("/api/profile").optJSONObject("avatar"))
+    suspend fun saveProfile(choice: AvatarChoice) {
+        putJson("/api/profile", JSONObject().put("avatar", JSONObject().put("shape", choice.shape).put("palette", choice.palette)))
+    }
 
     suspend fun download(dataPath: String, dest: File) {
         val b = bytes(dataPath)

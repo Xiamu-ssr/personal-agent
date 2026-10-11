@@ -66,7 +66,7 @@ class TaskChecks {
         compose.waitUntil(5000) { Chat.items.filterIsInstance<ChatItem.Assistant>().any { it.text == "简报已完成，请查看今日。" } }
         assertTrue(Chat.busy.value)
         assertEquals("", Chat.streaming.value)
-        emit(activity, """{"t":"job","phase":"done","label":"报价简报","title":"报价简报 · 今日","outputs":["data/briefs/2026-10-11/报价简报.html"],"ok":true,"taskId":"quote"}""")
+        emit(activity, """{"t":"job","phase":"done","label":"报价简报","title":"报价简报 · 今日","outputs":["data/briefs/2026-10-11/报价简报.json"],"ok":true,"taskId":"quote"}""")
         compose.waitUntil(5000) { Chat.items.filterIsInstance<ChatItem.Card>().any { it.title == "报价简报 · 今日" } }
         compose.onNodeWithText("报价简报 · 今日").assertExists()
         emit(activity, """{"t":"status","busy":false}""")

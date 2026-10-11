@@ -8,8 +8,8 @@ from pathlib import Path
 
 ADB = "/opt/homebrew/share/android-commandlinetools/platform-tools/adb"
 PACKAGE = "com.xiamu.agent.checks"
-ACTIVITY = "com.xiamu.agent.ConnectorReviewActivity"
-SCENARIOS = {"cloud", "legacy", "detail-empty", "detail-multi", "detail-error", "form-default", "form-custom", "form-failed", "form-validating", "form-edit", "form-edit-custom", "form-edit-legacy", "devices", "devices-conflict"}
+ACTIVITY = "com.xiamu.agent.V4ReviewActivity"
+SCENARIOS = {"connectors", "local", "devices"}
 
 def adb(*args):
     result = subprocess.run([ADB, "-s", "emulator-5554", *args], capture_output=True, timeout=25)
@@ -49,7 +49,8 @@ else:
         if not args.value or not re.fullmatch(r"[a-z0-9-]+", args.value):
             raise SystemExit("截图名称无效")
         tree()
-        path = Path("/tmp/pa-android-v03-" + args.value + ".png")
+        path = Path(__file__).resolve().parents[1] / "verification" / "v0.4.0" / (args.value + ".png")
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(adb("exec-out", "screencap", "-p"))
         print(path)
     elif args.action == "tap":

@@ -105,7 +105,7 @@ private fun Root() {
 }
 
 @Composable
-private fun MainScreens() {
+internal fun MainScreens() {
     val tab = Nav.tab.intValue
     val route = Nav.stack.lastOrNull()
     val chatList = rememberLazyListState()

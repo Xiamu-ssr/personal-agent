@@ -176,6 +176,7 @@ struct MarkdownView: View {
     let text: String
     var size: CGFloat = 14
     var cacheID: UUID? = nil
+    var lineHeight: CGFloat? = nil
     /// When set, trailing "→ path.md" pointers become tags that call this with the path.
     var onPointer: ((String) -> Void)? = nil
 
@@ -197,7 +198,7 @@ struct MarkdownView: View {
         case .paragraph(let s):
             if onPointer == nil && s.utf8.count > 1_000 {
                 // TextKit lays out long replies line by line without SwiftUI's large attributed-text drawing path.
-                MarkdownParagraph(text: s, size: size)
+                MarkdownParagraph(text: s, size: size, lineHeight: lineHeight)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(s.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
@@ -243,14 +244,14 @@ struct MarkdownView: View {
     private func pointerLine(_ line: String) -> some View {
         let (body, refs) = onPointer == nil ? (line, []) : Markdown.pointers(line)
         if !refs.isEmpty, let onPointer {
-            MemoryPointerText(text: body, refs: refs, size: size, onPointer: onPointer)
+            MemoryPointerText(text: body, refs: refs, size: size, lineHeight: lineHeight, onPointer: onPointer)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .alignmentGuide(.firstTextBaseline) { _ in
                     let font = NSFont.systemFont(ofSize: size)
                     return (22 - (font.ascender - font.descender)) / 2 + font.ascender
                 }
         } else {
-            Text(Markdown.inline(body)).font(.system(size: size)).lineSpacing(size * 0.3).fixedSize(horizontal: false, vertical: true)
+            Text(Markdown.inline(body)).font(.system(size: size)).lineSpacing(lineHeight.map { max(0, $0 - size * 1.2) } ?? size * 0.3).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -281,6 +282,7 @@ struct MarkdownView: View {
 struct MarkdownParagraph: NSViewRepresentable {
     let text: String
     let size: CGFloat
+    var lineHeight: CGFloat? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -296,7 +298,7 @@ struct MarkdownParagraph: NSViewRepresentable {
     func updateNSView(_ view: GrowingInputContainer, context: Context) {
         guard context.coordinator.text != text else { return }
         context.coordinator.text = text
-        view.editor.textStorage?.setAttributedString(MemoryPointerText.rendered(text: text, refs: [], size: size))
+        view.editor.textStorage?.setAttributedString(MemoryPointerText.rendered(text: text, refs: [], size: size, lineHeight: lineHeight))
         view.textChanged(force: true)
     }
 
@@ -339,6 +341,7 @@ struct MemoryPointerText: NSViewRepresentable {
     let text: String
     let refs: [String]
     let size: CGFloat
+    var lineHeight: CGFloat? = nil
     let onPointer: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onPointer: onPointer) }
@@ -358,7 +361,7 @@ struct MemoryPointerText: NSViewRepresentable {
 
     func updateNSView(_ view: NSTextView, context: Context) {
         context.coordinator.onPointer = onPointer
-        view.textStorage?.setAttributedString(Self.rendered(text: text, refs: refs, size: size))
+        view.textStorage?.setAttributedString(Self.rendered(text: text, refs: refs, size: size, lineHeight: lineHeight))
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
@@ -370,7 +373,7 @@ struct MemoryPointerText: NSViewRepresentable {
     }
 
     @MainActor
-    static func rendered(text: String, refs: [String], size: CGFloat) -> NSAttributedString {
+    static func rendered(text: String, refs: [String], size: CGFloat, lineHeight: CGFloat? = nil) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let base = NSFont.systemFont(ofSize: size)
         let markdown = Markdown.inline(text)
@@ -411,6 +414,7 @@ struct MemoryPointerText: NSViewRepresentable {
         }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = size * 0.3
+        if let lineHeight { paragraph.lineSpacing = 0; paragraph.minimumLineHeight = lineHeight; paragraph.maximumLineHeight = lineHeight }
         paragraph.lineBreakMode = .byWordWrapping
         result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
         return result

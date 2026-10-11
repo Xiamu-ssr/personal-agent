@@ -37,7 +37,8 @@ export function contextPolicy(model, env = process.env) {
   if (supported && maxOutputTokens > supported) throw new Error(`AGENT_MAX_OUTPUT_TOKENS 超过 ${canonical} 的 Messages 上限 ${supported}`);
   // Unknown CLI models are capped at 128K. Don't claim that a higher env value took effect.
   if (!supported && maxOutputTokens > 128_000) throw new Error("未知模型的 CLI 输出上限是 128000；请设置 AGENT_MODEL_CANONICAL 或升级模型能力配置");
-  const inputLimit = integer(env.AGENT_CONTEXT_INPUT_LIMIT, 100_000, "AGENT_CONTEXT_INPUT_LIMIT");
+  // 172K - 5K + 20K + 13K = exactly 200K, with a 167K native compaction trigger.
+  const inputLimit = integer(env.AGENT_CONTEXT_INPUT_LIMIT, 172_000, "AGENT_CONTEXT_INPUT_LIMIT");
   const toolHeadroom = integer(env.AGENT_CONTEXT_HEADROOM, 5000, "AGENT_CONTEXT_HEADROOM");
   const outputReserve = Math.min(maxOutputTokens, CLI_OUTPUT_RESERVE);
   const triggerTokens = inputLimit - toolHeadroom;

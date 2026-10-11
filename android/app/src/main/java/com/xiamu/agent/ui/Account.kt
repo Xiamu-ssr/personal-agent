@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Key
@@ -82,6 +83,7 @@ import com.xiamu.agent.Prefs
 import com.xiamu.agent.device.Capabilities
 import com.xiamu.agent.device.Capability
 import com.xiamu.agent.device.DeviceService
+import com.xiamu.agent.device.HealthAccess
 import kotlinx.coroutines.launch
 
 /** Whether we hold a token; flipping it swaps the whole UI between login and the app. */
@@ -98,6 +100,9 @@ object Session {
         com.xiamu.agent.media.VoicePlayer.stop()
         CookieManager.getInstance().removeAllCookies(null)
         DeviceService.stop(ctx)
+        java.io.File(ctx.cacheDir, "site-previews").deleteRecursively()
+        java.io.File(ctx.cacheDir, "connector-icons").deleteRecursively()
+        Appearance.choice.value = com.xiamu.agent.AvatarChoice()
         clearCache()
         Nav.home(0)
         loggedIn.value = false
@@ -111,7 +116,7 @@ fun capIcon(name: String): ImageVector = when (name) {
     "calendar_events" -> Icons.Outlined.CalendarMonth
     "sms" -> Icons.Outlined.Sms
     "clipboard_write", "clipboard_read" -> Icons.Outlined.ContentPaste
-    "open_url" -> Icons.Outlined.Link
+    "health" -> Icons.Outlined.FavoriteBorder
     "frontmost_app" -> Icons.Outlined.Apps
     "shortcuts" -> Icons.Outlined.Bolt
     "folder" -> Icons.Outlined.Folder
@@ -202,8 +207,9 @@ private fun LoginField(
 @Composable
 fun CapabilityRow(cap: Capability) {
     val c = ctx()
+    val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    var on by remember { mutableStateOf(cap.enabled(c)) }
+    var on by remember(permissionRevision.intValue) { mutableStateOf(cap.enabled(c)) }
     var denied by remember { mutableStateOf(false) }
     fun set(v: Boolean) {
         on = v
@@ -215,20 +221,29 @@ fun CapabilityRow(cap: Capability) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 on = cap.enabled(c)
                 if (on) denied = false
+                if(cap.name == "health") scope.launch { runCatching { HealthAccess.refresh(c) }; on=cap.enabled(c) }
             }
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
+    val health = rememberLauncherForActivityResult(HealthAccess.permissionContract) { result ->
+        HealthAccess.updateGranted(result)
+        val ok=cap.hasPermissions(c); denied=!ok; set(ok)
+    }
+    fun requestHealth() {
+        if(cap.name == "health" && HealthAccess.available(c)) health.launch(HealthAccess.permissions(c))
+    }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val ok = cap.hasPermissions(c)
         denied = !ok
         set(ok)
+        requestHealth()
     }
     ListRow(
         cap.title,
         if (denied) "系统权限被拒绝 · 点这里去系统设置打开" else cap.hint,
-        capIcon(cap.name), Color(0xFF4A77A0),
+        leading = { SystemCapabilityIcon(cap.name) },
         subColor = if (denied) Pal.Danger else Pal.Muted, subLines = 2,
         onClick = if (denied) {
             { c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", c.packageName, null))) }
@@ -237,7 +252,7 @@ fun CapabilityRow(cap: Capability) {
             GoldSwitch(on) { want ->
                 if (!want) return@GoldSwitch set(false)
                 val missing = cap.permissions.filter { ContextCompat.checkSelfPermission(c, it) != PackageManager.PERMISSION_GRANTED }
-                if (missing.isEmpty()) set(true) else launcher.launch(missing.toTypedArray())
+                if (missing.isEmpty()) { set(true); requestHealth() } else launcher.launch(missing.toTypedArray())
             }
         },
     )
@@ -270,6 +285,7 @@ fun OnboardingScreen() {
                 fontSize = 14.sp, lineHeight = 22.sp, color = Pal.Muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 22.dp),
             )
             LocalCapabilities()
+            EnableAllCapabilities()
             GoldButton("开始使用", Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 24.dp)) {
                 if (android.os.Build.VERSION.SDK_INT >= 33 && Prefs.notifyMessages &&
                     ContextCompat.checkSelfPermission(c, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -338,19 +354,7 @@ fun SettingsScreen() {
         notifyDenied = !ok
     }
     SubPage("设置") {
-        item {
-            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Avatar(72.dp)
-                Text("豆豆 · Personal Agent", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Pal.Ink, modifier = Modifier.padding(top = 14.dp))
-                Text(if (Chat.connected.value) "已连接云端" else "连接中…", fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(top = 4.dp))
-            }
-        }
-        item { SectionTitle("模型") }
-        item {
-            CardList {
-                ListRow(state?.optString("model")?.removePrefix("anthropic/")?.ifBlank { null } ?: "…", "在云端配置，这里只读", Icons.Outlined.Memory, Color(0xFF677CA3))
-            }
-        }
+        item { MembershipCard(state) }
         item { SectionTitle("能力与连接") }
         item {
             CardList {

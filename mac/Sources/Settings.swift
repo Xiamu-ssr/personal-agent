@@ -32,10 +32,8 @@ struct RemoteDevice: Identifiable, Hashable {
 final class ConnectorStore {
     static let shared = ConnectorStore()
 
-    var builtin: [CloudConnector] = []
     var installed: [CloudConnector] = []
     var catalog: [CloudConnector] = []
-    var custom: [CloudConnector] = []
     var devices: [RemoteDevice] = []
     var loaded = false
     var error = ""
@@ -44,13 +42,13 @@ final class ConnectorStore {
     private var generation = 0
 
     var others: [RemoteDevice] { devices.filter { $0.id != Prefs.deviceId } }
-    var connected: [CloudConnector] { builtin + installed + custom }
+    var connected: [CloudConnector] { installed }
 
     func connector(_ name: String) -> CloudConnector? { (connected + catalog).first { $0.name == name } }
 
     func reset() {
         generation += 1
-        builtin = []; installed = []; catalog = []; custom = []; devices = []
+        installed = []; catalog = []; devices = []
         loaded = false; error = ""; cloudOnline = false
     }
 
@@ -63,10 +61,8 @@ final class ConnectorStore {
             let cloud = r["cloud"] as? [String: Any] ?? [:]
             cloudOnline = cloud["online"] as? Bool ?? false
             cloudName = cloud["name"] as? String ?? "云电脑"
-            builtin = (cloud["builtin"] as? [[String: Any]] ?? []).map { CloudConnector($0, builtin: true) }
             installed = (cloud["installed"] as? [[String: Any]] ?? []).map { CloudConnector($0) }
             catalog = (cloud["catalog"] as? [[String: Any]] ?? []).map { CloudConnector($0) }
-            custom = (cloud["custom"] as? [[String: Any]] ?? []).map { CloudConnector($0, custom: true) }
             devices = (r["devices"] as? [[String: Any]] ?? []).map { d in
                 RemoteDevice(
                     id: d["id"] as? String ?? "", name: d["name"] as? String ?? "", kind: d["kind"] as? String ?? "",
@@ -93,76 +89,70 @@ struct CapRow: View {
     @State private var on: Bool
     @State private var note = ""
     @State private var asking = false
-    @State private var folder = Prefs.folder
-
-    init(cap: Capability) {
-        self.cap = cap
-        _on = State(initialValue: cap.enabled)
-    }
-
+    init(cap: Capability) { self.cap = cap; _on = State(initialValue: cap.enabled) }
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            IconTile(icon: cap.icon, tint: Color(hex: 0x487FA6), size: 34)
+        HStack(spacing: 12) {
+            Image(nsImage: cap.appIcon).resizable().scaledToFit().frame(width: 36, height: 36)
             VStack(alignment: .leading, spacing: 3) {
                 Text(cap.title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
-                Text(note.isEmpty ? (cap.hint ?? cap.description) : note)
-                    .font(.system(size: 12)).foregroundStyle(note.isEmpty ? Theme.sub : Theme.danger).lineLimit(2)
-                if cap.name == "folder" {
-                    HStack(spacing: 8) {
-                        Text(folder.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "还没选文件夹")
-                            .font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.faint).lineLimit(1).truncationMode(.middle)
-                        Button(folder == nil ? "选择…" : "更换…") { _ = pickFolder() }.buttonStyle(.plain)
-                            .font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.accent)
-                    }
-                }
+                Text(note.isEmpty ? (cap.hint ?? cap.description) : note).font(.system(size: 12)).foregroundStyle(note.isEmpty ? Theme.sub : Theme.danger).lineLimit(2)
             }
             Spacer(minLength: 10)
-            if asking { ProgressView().controlSize(.small) }
+            if asking { ActiveProgress().controlSize(.small) }
             Toggle("", isOn: Binding(get: { on }, set: set)).toggleStyle(.switch).labelsHidden().tint(Color(hex: 0xC9A869)).disabled(asking)
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 6)
+                .accessibilityLabel(cap.title)
+        }.padding(.vertical, 10).padding(.horizontal, 6)
     }
-
     private func set(_ want: Bool) {
         guard !asking else { return }
         note = ""
         guard want else {
-            on = false
-            Prefs.setGranted(cap.name, false)
-            DeviceClient.shared.reregister()
-            return
+            on = false; Prefs.setGranted(cap.name, false); DeviceClient.shared.reregister(); return
         }
-        if cap.name == "folder" && Prefs.folder == nil && !pickFolder() { return }
-        on = true
+        asking = true
         Task { @MainActor in
-            if let permit = cap.permit {
-                asking = true
-                let why = await permit()
-                asking = false
-                if let why {
-                    note = why
-                    on = false
-                    Prefs.setGranted(cap.name, false)
-                    DeviceClient.shared.reregister()
-                    return
-                }
-            }
-            Prefs.setGranted(cap.name, true)
+            let why = await cap.permit?()
+            asking = false
+            on = why == nil
+            note = why ?? ""
+            Prefs.setGranted(cap.name, on)
             DeviceClient.shared.reregister()
         }
     }
+}
 
-    private func pickFolder() -> Bool {
-        let p = NSOpenPanel()
-        p.canChooseDirectories = true
-        p.canChooseFiles = false
-        p.prompt = "授权给豆豆"
-        guard p.runModal() == .OK, let url = p.url else { return false }
-        Prefs.folder = url.path
-        folder = url.path
-        DeviceClient.shared.reregister()
-        return true
+struct LocalCapabilityList: View {
+    @State private var enabling = false
+    @State private var progress = ""
+    @State private var failures: [String: String] = [:]
+    @State private var revision = 0
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Button(enabling ? "正在开启…" : "一键开启") { enable() }.buttonStyle(GoldButtonStyle(height: 36)).disabled(enabling)
+                Text(progress).font(.system(size: 12)).foregroundStyle(Theme.sub)
+            }
+            Rows(items: Capabilities.all) { CapRow(cap: $0) }.id(revision).disabled(enabling).card(radius: 22, padding: 10)
+            ForEach(Capabilities.all.filter { failures[$0.name] != nil }) { cap in
+                Text("\(cap.title)：\(failures[cap.name] ?? "")").font(.system(size: 12)).foregroundStyle(Theme.danger)
+            }
+        }
+    }
+    private func enable() {
+        guard !enabling else { return }
+        enabling = true; failures = [:]; progress = "按系统顺序申请授权"
+        Task { @MainActor in
+            await Capabilities.enableAll { name, reason in
+                DispatchQueue.main.async {
+                    let title = Capabilities.all.first { $0.name == name }?.title ?? name
+                    progress = title + (reason == nil ? "已开启" : "未开启")
+                    failures[name] = reason
+                    revision += 1
+                }
+            }
+            revision += 1; enabling = false
+            DeviceClient.shared.reregister()
+        }
     }
 }
 
@@ -225,7 +215,6 @@ struct SettingsPage: View {
     private var chat: ChatClient { .shared }
     private var device: DeviceClient { .shared }
     private var store: ConnectorStore { .shared }
-    @State private var model = ""
     @State private var notify = Prefs.notifyMessages
     @State private var notifyNote = ""
     @State private var confirmSignOut = false
@@ -236,26 +225,10 @@ struct SettingsPage: View {
 
     var body: some View {
         PageScaffold(title: "设置", tab: .settings) {
-            HStack(spacing: 16) {
-                Orb(size: 58)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("豆豆 · Personal Agent").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.ink)
-                    HStack(spacing: 6) {
-                        Dot(on: chat.connected)
-                        Text(statusLine(chat, device)).font(.system(size: 12.5)).foregroundStyle(Theme.sub)
-                    }
-                }
-                Spacer()
-            }
-            .card(radius: 24, padding: 20)
+            MembershipCard()
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 18, alignment: .top)], alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 18) {
-                    CardSection(title: "模型") {
-                        ListRow(icon: "cpu", tint: Color(hex: 0x637DA0), title: "当前模型", subtitle: "由云端配置") {
-                            Text(model.isEmpty ? "—" : model).font(.system(size: 13, design: .monospaced)).foregroundStyle(Theme.sub)
-                        }
-                    }
                     CardSection(title: "能力与连接") {
                         ListRow(icon: "square.grid.2x2", tint: Color(hex: 0x487FA6), title: "连接应用",
                                 subtitle: "本机 \(Capabilities.enabled.count) 项已开启 · 云端 \(store.connected.count) 项已连接") {
@@ -304,10 +277,7 @@ struct SettingsPage: View {
             }
         }
         .task(id: chat.devicesVersion) {
-            if let st = try? await Api.json("/api/state") {
-                let current = st["model"] as? String ?? ""
-                model = current.hasPrefix("anthropic/") ? String(current.dropFirst(10)) : current
-            }
+            await ProfileStore.shared.load()
             await store.load()
         }
         .alert("退出登录？", isPresented: $confirmSignOut) {
@@ -324,9 +294,7 @@ struct SettingsPage: View {
         notifyNote = ""
         guard on else { return }
         Task { @MainActor in
-            if !(await Capabilities.requestNotifications()) {
-                notifyNote = "系统通知没打开，去「系统设置 → 通知 → 豆豆」允许"
-            }
+            if let permit = Capabilities.all.first(where: { $0.name == "notify" })?.permit, let reason = await permit() { notifyNote = reason }
         }
     }
 
@@ -369,11 +337,7 @@ struct ConnectorsPage: View {
     }
 
     private var local: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("开了的，豆豆可以随时用；没开的，它碰不到。要系统权限的会先问你。")
-                .font(.system(size: 12.5)).foregroundStyle(Theme.sub).padding(.horizontal, 6)
-            Rows(items: Capabilities.all) { CapRow(cap: $0) }.card(radius: 22, padding: 10)
-        }
+        LocalCapabilityList()
     }
 
     private func matches(_ c: CloudConnector) -> Bool {
@@ -395,12 +359,11 @@ struct ConnectorsPage: View {
             let on = store.connected.filter(matches)
             let off = store.catalog.filter(matches)
             VStack(alignment: .leading, spacing: 10) {
-                SectionTitle(text: "已接入")
+                SectionTitle(text: "已连接")
                 Group {
                     if on.isEmpty { Note(text: store.loaded ? "没有匹配的" : "加载中…") } else {
                         Rows(items: on) { c in
-                            ListRow(icon: c.icon, tint: Color(hex: 0x487FA6), title: c.title, subtitle: c.description,
-                                    action: { Nav.shared.openConnector(c.name, from: tab, focus: focus) }) { GoldTag(text: c.custom ? "豆豆自建" : "已连接") }
+                            ConnectorListRow(connector: c, connected: true) { Nav.shared.openConnector(c.name, from: tab, focus: focus) }
                         }
                     }
                 }
@@ -412,9 +375,7 @@ struct ConnectorsPage: View {
                 Group {
                     if off.isEmpty { Note(text: store.loaded ? "没有更多可接入的了" : "加载中…") } else {
                         Rows(items: off) { c in
-                            ListRow(icon: c.icon, tint: Theme.faint, title: c.title, subtitle: c.description) {
-                                Button(c.fields == nil ? "即将支持" : "连接") { Nav.shared.openConnector(c.name, from: tab, focus: focus) }.buttonStyle(SoftButtonStyle())
-                            }
+                            ConnectorListRow(connector: c, connected: false) { Nav.shared.openConnector(c.name, from: tab, focus: focus) }
                         }
                     }
                 }
@@ -592,5 +553,38 @@ struct SkillsPage: View {
                 err = "读不到：\(error.localizedDescription)"
             }
         }
+    }
+}
+
+struct MembershipCard: View {
+    private var profile: ProfileStore { .shared }
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 24).fill(Theme.gold)
+            Canvas { context, size in
+                for x in stride(from: 12.0, to: size.width, by: 14) {
+                    for y in stride(from: 10.0, to: size.height, by: 14) {
+                        context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1.5, height: 1.5)), with: .color(Theme.goldText.opacity(0.10)))
+                    }
+                }
+            }.clipShape(RoundedRectangle(cornerRadius: 24)).allowsHitTesting(false)
+            VStack(alignment: .leading, spacing: 14) {
+                Text("\(profile.userCall) Pro").font(.system(size: 30, weight: .semibold)).foregroundStyle(Theme.goldText)
+                Text(ProfileStore.companionDays(profile.firstChat).map { "陪伴第 \($0) 天" } ?? "从第一次对话起陪伴你")
+                    .font(.system(size: 14)).foregroundStyle(Theme.goldText.opacity(0.75))
+            }.padding(28)
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    ZStack {
+                        Circle().strokeBorder(Theme.goldText.opacity(0.3), lineWidth: 2)
+                        Circle().strokeBorder(Theme.goldText.opacity(0.25), lineWidth: 1).padding(5)
+                        VStack(spacing: 1) { Text(profile.agentName).font(.system(size: 13, weight: .semibold)); Text("COMPANION").font(.system(size: 5.5, weight: .semibold)).tracking(1) }
+                            .foregroundStyle(Theme.goldText.opacity(0.6))
+                    }.frame(width: 70, height: 70).rotationEffect(.degrees(-12)).padding(18)
+                }
+            }
+        }.frame(height: 164).overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.8), lineWidth: 1))
     }
 }

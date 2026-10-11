@@ -75,7 +75,7 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)) {
                 item {
                     Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconTile(connectorIcon(connector.icon.ifBlank { connector.name }), Pal.Link, 60.dp)
+                        ConnectorLogo(connector.name, 60.dp)
                         Column(Modifier.weight(1f)) {
                             Text(connector.title, fontSize = 27.sp, fontWeight = FontWeight.Bold, color = Pal.Ink)
                             Text(connector.description, fontSize = 13.sp, lineHeight = 20.sp, color = Pal.Muted, modifier = Modifier.padding(top = 5.dp))
@@ -86,9 +86,9 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
                 item { SectionTitle("账号") { Text("${connector.accounts.size} 个", fontSize = 12.sp, color = Pal.Muted) } }
                 if (connector.accounts.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().card().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(when { connector.builtin -> "这是豆豆的内置能力"; connector.fields == null -> "账号表单即将支持"; else -> "还没有添加账号" },
+                        Text(if (connector.fields == null) "账号表单即将支持" else "还没有添加账号",
                             fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Pal.Ink)
-                        Text(if (connector.builtin) "无需另外配置账号" else if (connector.fields == null) "敬请期待" else "添加后，豆豆就能使用这个服务",
+                        Text(if (connector.fields == null) "敬请期待" else "添加后，豆豆就能使用这个服务",
                             fontSize = 13.sp, lineHeight = 20.sp, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
@@ -124,7 +124,6 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
             }
             Column(Modifier.navigationBarsPadding().fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
                 when {
-                    connector.builtin -> FooterNote("内置能力随豆豆提供，无需添加账号")
                     connector.fields == null -> FooterNote("账号表单即将支持")
                     !connector.multiAccount && connector.accounts.isNotEmpty() -> FooterNote("这个连接器支持一个账号，可以编辑或删除后重新添加")
                     else -> GoldButton("添加账号", Modifier.fillMaxWidth(), enabled = busy == null) { Nav.open(Route.ConnectorForm(connector)) }
@@ -167,14 +166,14 @@ fun ConnectorFormScreen(route: Route.ConnectorForm, gateway: ConnectorGateway = 
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp)) {
                 item {
                     BigTitle(if (editing) "编辑账号" else "添加${connector.title}账号", route.account?.label ?: connector.description)
-                    if (editing) FooterNote(if (draft.partialEdit) "只填写要修改的项，未填写的配置会保留。授权码不修改请留空。" else "授权码不修改请留空，保存时会重新验证。")
+                    if (editing) FooterNote("授权码不修改请留空，保存时会重新验证。")
                 }
                 item {
                     if (connector.fields == null) EmptyNote("账号表单即将支持")
                     else CardList(Modifier.padding(top = 14.dp)) {
                         fields.forEachIndexed { i, field ->
                             if (i > 0) Hairline()
-                            AccountField(field, values[field.key].orEmpty(), values, editing, draft.partialEdit, !busy) { values[field.key] = it; error = "" }
+                            AccountField(field, values[field.key].orEmpty(), values, editing, !busy) { values[field.key] = it; error = "" }
                         }
                     }
                 }
@@ -205,7 +204,7 @@ fun ConnectorFormScreen(route: Route.ConnectorForm, gateway: ConnectorGateway = 
 }
 
 @Composable
-private fun AccountField(field: ConnectorField, value: String, values: Map<String, String>, editing: Boolean, partialEdit: Boolean, enabled: Boolean, onChange: (String) -> Unit) {
+private fun AccountField(field: ConnectorField, value: String, values: Map<String, String>, editing: Boolean, enabled: Boolean, onChange: (String) -> Unit) {
     var shown by remember(field.key) { mutableStateOf(false) }
     var expanded by remember(field.key) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
@@ -218,7 +217,7 @@ private fun AccountField(field: ConnectorField, value: String, values: Map<Strin
             } else Box {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Pal.Field).tap(enabled) { expanded = true }
                     .padding(horizontal = 14.dp, vertical = 13.dp).testTag("field:${field.key}"), verticalAlignment = Alignment.CenterVertically) {
-                    Text(field.options.firstOrNull { it.value == value }?.label ?: if (partialEdit) "保持原设置" else "请选择",
+                    Text(field.options.firstOrNull { it.value == value }?.label ?: "请选择",
                         fontSize = 14.sp, color = if (value.isBlank()) Pal.Faint else Pal.Ink, modifier = Modifier.weight(1f))
                     Icon(Icons.Outlined.KeyboardArrowDown, null, tint = Pal.Muted, modifier = Modifier.size(20.dp))
                 }
@@ -241,7 +240,7 @@ private fun AccountField(field: ConnectorField, value: String, values: Map<Strin
                     visualTransformation = if (secret && !shown) PasswordVisualTransformation() else VisualTransformation.None,
                     decorationBox = { inner ->
                         Box {
-                            if (value.isEmpty()) Text(when { editing && secret -> "不修改请留空"; partialEdit -> "留空保持原值"; else -> field.placeholder }, fontSize = 14.sp, color = Pal.Faint)
+                            if (value.isEmpty()) Text(when { editing && secret -> "不修改请留空"; else -> field.placeholder }, fontSize = 14.sp, color = Pal.Faint)
                             inner()
                         }
                     },

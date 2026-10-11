@@ -15,7 +15,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.3.0</string>
+    <string>0.4.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
@@ -28,6 +28,14 @@
     <string>开启「日历」能力后，豆豆会在你问起或做晨报时读取日程。</string>
     <key>NSCalendarsUsageDescription</key>
     <string>开启「日历」能力后，豆豆会在你问起或做晨报时读取日程。</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>开启「Mac 桌面」后，豆豆的命令行能力可以访问你的桌面文件。</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>开启「Mac 文稿」后，豆豆的命令行能力可以访问你的文稿文件。</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>开启「Mac 下载」后，豆豆的命令行能力可以访问你的下载文件。</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>开启「操作电脑」后，豆豆会截取屏幕来理解画面并操作鼠标键盘。</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

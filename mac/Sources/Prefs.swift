@@ -21,7 +21,7 @@ enum Prefs {
 
     private static var tokenFile: URL { supportDir.appendingPathComponent("token") }
 
-    /// Kept in a 0600 file rather than the keychain: ad-hoc signed builds would re-prompt for keychain access on every update.
+    /// The pairing credential is kept in an owner-only file in Application Support.
     static var token: String {
         get { ((try? String(contentsOf: tokenFile, encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
         set {
@@ -41,6 +41,10 @@ enum Prefs {
     /// Run once at launch, before anything reads [onboarded].
     static func migrate() {
         if d.object(forKey: "onboarded") == nil { onboarded = configured }
+        for key in ["battery", "clipboard_read", "clipboard_write", "open_url", "frontmost_app", "shortcuts", "folder"] {
+            d.removeObject(forKey: "cap.\(key)")
+        }
+        d.removeObject(forKey: "folder")
     }
 
     /// 接收消息通知: pop a system notification for replies and finished jobs while the app is in the background.
@@ -75,9 +79,4 @@ enum Prefs {
     static func granted(_ cap: String) -> Bool { d.bool(forKey: "cap.\(cap)") }
     static func setGranted(_ cap: String, _ on: Bool) { d.set(on, forKey: "cap.\(cap)") }
 
-    /// The one folder the agent may list/read/write through the `folder` capability.
-    static var folder: String? {
-        get { d.string(forKey: "folder") }
-        set { d.set(newValue, forKey: "folder") }
-    }
 }

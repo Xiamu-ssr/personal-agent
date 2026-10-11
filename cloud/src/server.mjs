@@ -4,17 +4,20 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
-import { config } from "./config.mjs";
+import { config, CODE } from "./config.mjs";
 import { readJson, writeJson, tailJsonl, firstTs, dateIn } from "./store.mjs";
 import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
 import { ConnectorManager } from "./connectors.mjs";
 import { runScheduledTask } from "./scheduler.mjs";
+import { listBriefs } from "./briefs.mjs";
+import { getProfile, putProfile } from "./profile.mjs";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8", ".json": "application/json",
   ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
   ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8",
+  ".ico": "image/x-icon", ".webp": "image/webp",
 };
 
 function tokenOf(req) {
@@ -56,22 +59,6 @@ function readRaw(req, max) {
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
-}
-
-// Built-in cloud capabilities are retained for older clients; the connector catalog comes from released code.
-const CLOUD_BUILTIN = [
-  { name: "web_search", title: "网页搜索", description: "上网搜最新信息" },
-  { name: "web_fetch", title: "网页读取", description: "打开网页、读取公开数据接口" },
-  { name: "shell", title: "命令行", description: "在云电脑上跑命令、写脚本、处理数据" },
-  { name: "files", title: "文件", description: "云电脑上的数据区和草稿区" },
-  { name: "schedule", title: "定时任务", description: "按时做简报、整理和提醒" },
-  { name: "transcribe", title: "语音转写", description: "把语音笔记和按住说话转成文字" },
-];
-function cloudConnectors(connectors) {
-  return {
-    builtin: CLOUD_BUILTIN.map((c) => ({ ...c, status: "on" })),
-    ...connectors.list(),
-  };
 }
 
 function skills() {
@@ -137,10 +124,23 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
 
     if (p === "/api/state") {
       return json(res, 200, {
-        busy: harness.busy, devices: hub.online(), model: config.model,
+        busy: harness.busy, devices: hub.online(), userCall: config.userCall, agentName: config.agentName,
         tasks: harness.backgroundTasks?.() || [],
         schedule: readJson(config.scheduleFile, []), firstChat: firstTs(config.chatLog),
       });
+    }
+    if (p === "/api/briefs" && req.method === "GET") {
+      const days = Number(url.searchParams.get("days") || 7);
+      if (!Number.isInteger(days) || days < 1 || days > 365) return json(res, 400, { error: "days 必须是 1 到 365 的整数" });
+      return json(res, 200, { items: listBriefs(config.root, { days, timezone: config.timezone }) });
+    }
+    if (p === "/api/profile") {
+      if (req.method === "GET") return json(res, 200, getProfile(config.root));
+      if (req.method !== "PUT") return json(res, 405, { error: "只支持 GET / PUT" });
+      try {
+        const value = JSON.parse((await readRaw(req, 4096)).toString("utf8"));
+        return json(res, 200, putProfile(config.root, value));
+      } catch (e) { return json(res, 400, { error: e instanceof SyntaxError ? "请提交有效的 JSON 头像设置" : e.message }); }
     }
     if (p === "/api/pair/new" && req.method === "POST") return json(res, 200, { code: issuePairCode() });
     if (p === "/api/history") {
@@ -149,8 +149,8 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     if (p === "/api/send" && req.method === "POST") {
       const { text, attachments } = await readBody(req);
       if (!text?.trim() && !attachments?.length) return json(res, 400, { error: "empty" });
-      await harness.send((text || "").trim(), "http", attachments || []);
-      return json(res, 200, { ok: true });
+      const id = await harness.send((text || "").trim(), "http", attachments || []);
+      return json(res, 200, { ok: true, id });
     }
     const taskStop = p.match(/^\/api\/tasks\/([^/]+)\/stop$/);
     if (taskStop && req.method === "POST") {
@@ -166,9 +166,21 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
     if (p === "/api/connectors") {
       return json(res, 200, {
-        cloud: { id: "cloud", name: "云电脑", kind: "cloud", online: true, ...cloudConnectors(connectors) },
+        cloud: { id: "cloud", name: "云电脑", kind: "cloud", online: true, ...connectors.list() },
         devices: hub.known(),
       });
+    }
+    const iconRoute = p.match(/^\/api\/connectors\/([^/]+)\/icon$/);
+    if (iconRoute && req.method === "GET") {
+      try {
+        const definition = connectors.definition(decodeURIComponent(iconRoute[1]));
+        const dir = path.join(CODE, "connectors", definition.name);
+        const icon = path.resolve(dir, definition.icon);
+        if (!icon.startsWith(dir + path.sep)) throw new Error("invalid icon");
+        const body = fs.readFileSync(icon);
+        res.writeHead(200, { "content-type": TYPES[path.extname(icon)] || "application/octet-stream", "cache-control": "private, max-age=2592000" });
+        return res.end(body);
+      } catch { return json(res, 404, { error: "没有这个连接器图标" }); }
     }
     const accountRoute = p.match(/^\/api\/connectors\/([^/]+)\/accounts(?:\/([^/]+))?(?:\/(test))?$/);
     if (accountRoute) {
@@ -306,7 +318,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
   function onApp(ws) {
     apps.add(ws);
     ws.on("close", () => apps.delete(ws));
-    ws.send(JSON.stringify({ t: "hello", busy: harness.busy, tasks: harness.backgroundTasks?.() || [], devices: hub.online(), history: tailJsonl(config.chatLog, 100) }));
+    ws.send(JSON.stringify({ t: "hello", busy: harness.busy, tasks: harness.backgroundTasks?.() || [], devices: hub.online(), history: tailJsonl(config.chatLog, 100), queued: harness.queuedMessages?.() || [] }));
     ws.on("message", (raw) => {
       let msg;
       try {
@@ -318,6 +330,18 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         harness.send((msg.text || "").trim(), "app", msg.attachments || []).catch((e) => log("send failed:", e.message));
       }
       if (msg.t === "interrupt") harness.interrupt();
+      if (["unqueue", "edit_queued"].includes(msg.t)) {
+        if (typeof msg.id !== "string" || !msg.id || (msg.t === "edit_queued" && typeof msg.text !== "string")) {
+          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "error", error: "请提供消息 id 和有效的修改文本" }));
+          return;
+        }
+        try {
+          const update = harness.updateQueued(msg.id, msg.t === "edit_queued" ? msg.text : undefined);
+          if (update.state === "too_late" && ws.readyState === 1) ws.send(JSON.stringify(update));
+        } catch (e) {
+          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "error", error: e.message }));
+        }
+      }
       if (msg.t === "stop_task") {
         harness.stopTask(msg.id).then(() => {
           if (ws.readyState === 1) ws.send(JSON.stringify({ t: "task_stop", id: msg.id, ok: true }));

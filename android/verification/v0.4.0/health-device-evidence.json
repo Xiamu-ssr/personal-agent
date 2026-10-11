@@ -1,0 +1,13 @@
+{
+  "sdkStatus": 3,
+  "available": true,
+  "grantedReadPermissions": "[android.permission.health.READ_STEPS, android.permission.health.READ_SLEEP, android.permission.health.READ_HEART_RATE, android.permission.health.READ_HEART_RATE_VARIABILITY]",
+  "stepCounterPresent": false,
+  "result": {
+    "source": "step_counter",
+    "from": "2026-10-11",
+    "days": 1,
+    "items": [],
+    "note": "Health Connect 没有数据；这台设备没有计步传感器"
+  }
+}

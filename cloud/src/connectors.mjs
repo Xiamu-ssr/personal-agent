@@ -42,28 +42,6 @@ function readPrivateJson(file, fallback) {
   }
 }
 
-export function customPlugins(dir = config.customConnectors) {
-  try {
-    return fs.readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && fs.existsSync(path.join(dir, d.name, ".claude-plugin", "plugin.json")))
-      .map((d) => ({ type: "local", path: path.join(dir, d.name) }));
-  } catch { return []; }
-}
-
-// Retain the existing .env mechanism, exclusively for custom plugins. Never scan system/connectors/*.
-export function customConnectorEnv(dir = config.customConnectors) {
-  const env = {};
-  for (const plugin of customPlugins(dir)) {
-    try {
-      for (const line of fs.readFileSync(path.join(plugin.path, ".env"), "utf8").split("\n")) {
-        const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-        if (match) env[match[1]] = match[2].replace(/^["']|["']$/g, "");
-      }
-    } catch {}
-  }
-  return env;
-}
-
 const fingerprint = (values) => crypto.createHash("sha256").update(JSON.stringify(values)).digest("hex");
 const text = (value) => ({ content: [{ type: "text", text: JSON.stringify(value, null, 2) }] });
 const VALUES = z.record(z.string(), z.union([z.string(), z.number()]));
@@ -72,7 +50,6 @@ export class ConnectorManager {
   constructor({ root = config.root, definitions = registry, onChange = () => {} } = {}) {
     this.root = root;
     this.dir = path.join(root, "system", "connectors");
-    this.customDir = path.join(root, "system", "custom-connectors");
     this.definitions = new Map(definitions.map((d) => [d.name, d]));
     this.accounts = new Map();
     this.chains = new Map();
@@ -154,18 +131,12 @@ export class ConnectorManager {
     const installed = [], catalog = [];
     for (const definition of this.definitions.values()) {
       const accounts = this.accounts.get(definition.name) || [];
-      const item = { name: definition.name, title: definition.title, description: definition.description, icon: definition.icon,
+      const item = { name: definition.name, title: definition.title, description: definition.description, icon: `/api/connectors/${definition.name}/icon`,
         fields: definition.fields, multiAccount: definition.multiAccount, status: accounts.length ? "on" : "off" };
       if (accounts.length) installed.push({ ...item, accounts: accounts.map((a) => ({ ...this.publicAccount(a), values: this.maskedValues(definition.name, a.values) })) });
       else catalog.push(item);
     }
-    const custom = customPlugins(this.customDir).map((plugin) => {
-      let manifest = {};
-      try { manifest = JSON.parse(fs.readFileSync(path.join(plugin.path, ".claude-plugin", "plugin.json"), "utf8")); } catch {}
-      return { name: path.basename(plugin.path), title: manifest.displayName || manifest.name || path.basename(plugin.path),
-        description: manifest.description || "", status: "on", custom: true };
-    });
-    return this.redact({ installed, catalog, custom });
+    return this.redact({ installed, catalog });
   }
 
   enqueue(name, fn) {
@@ -241,7 +212,7 @@ export class ConnectorManager {
       await this.check(name, values);
       const record = { ...old, label: this.redact(this.definition(name).label(values), this.secrets(name, [values])), values, status: "ok", checkedAt: Date.now(), error: null };
       // A different mailbox under the same account id must never inherit its previous UID cursor.
-      if (old.values.address !== values.address || old.values.host !== values.host || old.values.port !== values.port || old.values.preset !== values.preset) {
+      if (old.values.address !== values.address || old.values.host !== values.host || old.values.port !== values.port) {
         const state = this.readState(name);
         if (state.accounts) delete state.accounts[id];
         this.writeState(name, state);

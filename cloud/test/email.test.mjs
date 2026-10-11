@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createImapConnector } from "../connectors/_shared/imap.mjs";
 import { ConnectorManager } from "../src/connectors.mjs";
 import { startFakeImap, message, FAKE_PASSWORD } from "./fake-imap.mjs";
 import { callTool, toolResult } from "./tool-call.mjs";
@@ -12,9 +13,9 @@ async function setup(t, count = 1) {
   const imap = await startFakeImap(root);
   t.after(() => imap.close());
   const manager = new ConnectorManager({ root, definitions: [imap.connector] }), accounts = [];
-  for (let i = 0; i < count; i++) accounts.push(await manager.addAccount("email", imap.values("fixture" + i + "@example.test")));
-  const records = manager.accounts.get("email");
-  return { root, imap, manager, accounts, tools: imap.connector.tools(structuredClone(records), manager.context("email", structuredClone(records))) };
+  for (let i = 0; i < count; i++) accounts.push(await manager.addAccount("imap", imap.values("fixture" + i + "@example.test")));
+  const records = manager.accounts.get("imap");
+  return { root, imap, manager, accounts, tools: imap.connector.tools(structuredClone(records), manager.context("imap", structuredClone(records))) };
 }
 
 test("wire IMAP search pagination is by date with stable ties, filters, snapshots and all-account results", async (t) => {
@@ -86,25 +87,25 @@ test("read_since is a UID prefix, uncommitted batches repeat, commit survives qu
   const batch = await callTool(tools, "read_since", { account, limit: 2 });
   assert.deepEqual(batch.items.map((m) => m.uid), [1, 2]);
   assert.equal(batch.more, true);
-  assert.equal(manager.readState("email").accounts, undefined);
+  assert.equal(manager.readState("imap").accounts, undefined);
   const repeat = await callTool(tools, "read_since", { account, limit: 1 });
   assert.deepEqual(repeat.items.map((m) => m.uid), [1]);
   // Reconstructed MCP definitions use the same pending table, so next-turn query reload retains this cursor.
-  const records = structuredClone(manager.accounts.get("email"));
-  const rebuilt = imap.connector.tools(records, manager.context("email", records));
+  const records = structuredClone(manager.accounts.get("imap"));
+  const rebuilt = imap.connector.tools(records, manager.context("imap", records));
   await callTool(rebuilt, "sync_commit", { cursor: batch.cursor });
-  assert.equal(manager.readState("email").accounts[account].uid, 2);
+  assert.equal(manager.readState("imap").accounts[account].uid, 2);
   await callTool(rebuilt, "sync_commit", { cursor: repeat.cursor });
-  assert.equal(manager.readState("email").accounts[account].uid, 2);
+  assert.equal(manager.readState("imap").accounts[account].uid, 2);
   await assert.rejects(callTool(rebuilt, "sync_commit", { cursor: batch.cursor }), /没有这个/);
   const rest = await callTool(rebuilt, "read_since", { account, limit: 2 });
   assert.deepEqual(rest.items.map((m) => m.uid), [3, 4]);
   assert.equal(rest.more, false);
   await callTool(rebuilt, "sync_commit", { cursor: rest.cursor });
-  assert.equal(fs.statSync(path.join(root, "system/connectors/email/state.json")).mode & 0o777, 0o600);
+  assert.equal(fs.statSync(path.join(root, "system/connectors/imap/state.json")).mode & 0o777, 0o600);
   const restarted = new ConnectorManager({ root, definitions: [imap.connector] });
-  const newRecords = structuredClone(restarted.accounts.get("email"));
-  const newTools = imap.connector.tools(newRecords, restarted.context("email", newRecords));
+  const newRecords = structuredClone(restarted.accounts.get("imap"));
+  const newTools = imap.connector.tools(newRecords, restarted.context("imap", newRecords));
   const empty = await callTool(newTools, "read_since", { account });
   assert.deepEqual(empty.items, []);
   assert.equal(empty.cursor, null);
@@ -120,20 +121,20 @@ test("read_since is a UID prefix, uncommitted batches repeat, commit survives qu
   const reset = await callTool(newTools, "read_since", { account });
   assert.equal(reset.items[0].uid, 1);
   await callTool(newTools, "sync_commit", { cursor: reset.cursor });
-  assert.equal(restarted.readState("email").accounts[account].validity, String(imap.validity));
-  assert.equal(restarted.readState("email").accounts[account].uid, 1);
+  assert.equal(restarted.readState("imap").accounts[account].validity, String(imap.validity));
+  assert.equal(restarted.readState("imap").accounts[account].uid, 1);
   await assert.rejects(callTool(newTools, "sync_commit", { cursor: oldEpoch.cursor }), /没有这个/);
-  assert.equal(restarted.readState("email").accounts[account].uid, 1);
+  assert.equal(restarted.readState("imap").accounts[account].uid, 1);
 });
 
 test("account changes invalidate outstanding cursors and authentication/network errors are Chinese", async (t) => {
   const { manager, imap, accounts, tools } = await setup(t), account = accounts[0].id;
   const batch = await callTool(tools, "read_since", { account, limit: 1 });
-  await manager.updateAccount("email", account, { label: "Changed" });
+  await manager.updateAccount("imap", account, { label: "Changed" });
   await assert.rejects(callTool(tools, "sync_commit", { cursor: batch.cursor }), /没有这个/);
   imap.failLogin = true;
   await assert.rejects(imap.connector.test(imap.values()), /授权码不对或没开 IMAP/);
-  const result = await manager.testAccount("email", account);
+  const result = await manager.testAccount("imap", account);
   assert.equal(result.status, "error");
   assert.equal(result.error.includes(FAKE_PASSWORD), false);
   const failedRead = await toolResult(tools, "read", { account, uid: 1 });
@@ -148,7 +149,7 @@ test("163 and 126 send a second ID after login, even when the first ID returned 
   t.after(() => imap.close());
   for (const preset of ["163", "126"]) {
     const start = imap.commands.length;
-    await imap.connector.test({ preset, address: "fixture@" + preset + ".test", password: FAKE_PASSWORD });
+    await createImapConnector({ name: "netease-" + preset, title: preset, host: "imap." + preset + ".com", needsID: true, clientFactory: imap.clientFactory }).test({ address: "fixture@" + preset + ".test", password: FAKE_PASSWORD });
     const commands = imap.commands.slice(start);
     assert.equal(commands.some((c) => c.command === "ID" && !c.authenticated), true);
     assert.equal(commands.some((c) => c.command === "ID" && c.authenticated), true);

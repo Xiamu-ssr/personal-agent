@@ -6,7 +6,7 @@ import SwiftUI
 final class Session {
     static let shared = Session()
 
-    var configured = Prefs.configured
+    var configured = LocalVerification.explicitLoopback || Prefs.configured
     var onboarded = Prefs.onboarded
 
     func signedIn() {
@@ -19,14 +19,17 @@ final class Session {
     func finishOnboarding() {
         Prefs.onboarded = true
         onboarded = true
-        if Prefs.notifyMessages { Task { await Capabilities.requestNotifications() } }
+        if Prefs.notifyMessages, let permit = Capabilities.all.first(where: { $0.name == "notify" })?.permit { Task { _ = await permit() } }
     }
 
+    @MainActor
     func signOut() {
         ChatClient.shared.stop()
         DeviceClient.shared.stop()
         Composer.shared.reset()
         ConnectorStore.shared.reset()
+        ProfileStore.shared.reset()
+        SitePreviewCache.shared.clear()
         Api.clearCache()
         Markdown.clearCache()
         Prefs.signOut()
@@ -131,7 +134,7 @@ struct OnboardingView: View {
                                 .font(.system(size: 13)).foregroundStyle(Theme.sub)
                         }
                     }
-                    Rows(items: Capabilities.all) { CapRow(cap: $0) }.card(radius: 22, padding: 10)
+                    LocalCapabilityList()
                 }
                 .frame(maxWidth: 640)
                 .padding(.horizontal, 36)

@@ -41,6 +41,8 @@ class TaskFixture(context: Context, val scenario: String) {
                 return when (path) {
                     "/ws" -> MockResponse().withWebSocketUpgrade(listener)
                     "/api/jobs" -> json("""{"running":[],"recent":[]}""")
+                    "/api/profile" -> json("""{"avatar":{"shape":"bean","palette":"mist"}}""")
+                    "/api/briefs" -> json("""{"items":[]}""")
                     "/api/history" -> synchronized(lock) { json(JSONObject().put("items", history).toString()) }
                     "/api/state" -> synchronized(lock) {
                         stateRequests.incrementAndGet()

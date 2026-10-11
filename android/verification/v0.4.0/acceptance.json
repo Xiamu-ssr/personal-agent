@@ -1,0 +1,17 @@
+{
+  "versionName": "0.4.0",
+  "versionCode": 6,
+  "unitTests": 24,
+  "instrumentationTests": 47,
+  "instrumentationSeconds": 143.996,
+  "emulator": "pa35",
+  "adbSerial": "emulator-5554",
+  "emulatorClosed": true,
+  "pageScreenshots": 33,
+  "webviewCacheImages": 1,
+  "healthConnectRead": "native_provider_with_locally_seeded_records",
+  "stepCounterHardwarePresent": false,
+  "sensorFallback": "real_empty_path_and_simulated_delta_ledger",
+  "releaseSigned": true,
+  "releaseSha256": "54fd42c4d8e91717e92fd49662e779157137d93b683d82ad63aadca3adff3c6f"
+}

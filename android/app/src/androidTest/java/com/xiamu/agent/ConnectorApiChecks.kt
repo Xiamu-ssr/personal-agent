@@ -58,24 +58,25 @@ class ConnectorApiChecks {
             }
         }
         try {
-            assertFalse(Prefs.configured)
+            // A previous fixture-only run may have been killed before activity teardown.
+            Prefs.token = ""
             Prefs.server = "http://127.0.0.1:${server.localPort}"
             Prefs.token = "fixture-local"
             assertTrue(Api.getJson("/api/connectors").getJSONObject("cloud").getJSONArray("catalog").getJSONObject(0).has("fields"))
-            Api.addConnectorAccount("email", JSONObject().put("address", "fixture@qq.com"))
-            Api.updateConnectorAccount("email", "qq1", JSONObject().put("label", "Work"))
-            Api.testConnectorAccount("email", "qq1")
+            Api.addConnectorAccount("qq-mail", JSONObject().put("address", "fixture@qq.com"))
+            Api.updateConnectorAccount("qq-mail", "qq1", JSONObject().put("label", "Work"))
+            Api.testConnectorAccount("qq-mail", "qq1")
             Api.deleteConnectorAccount("mail /box", "a+b /")
             Api.removeDevice("offline /device")
-            try { Api.addConnectorAccount("email", JSONObject()); fail("应返回校验错误") }
+            try { Api.addConnectorAccount("qq-mail", JSONObject()); fail("应返回校验错误") }
             catch (e: Api.ApiError) { assertEquals(400, e.code); assertEquals("授权码不对", e.message) }
             try { Api.removeDevice("online"); fail("应返回在线冲突") }
             catch (e: Api.ApiError) { assertEquals(409, e.code) }
             serving.await()
             assertEquals(listOf(
-                "GET /api/connectors HTTP/1.1", "POST /api/connectors/email/accounts HTTP/1.1", "PUT /api/connectors/email/accounts/qq1 HTTP/1.1",
-                "POST /api/connectors/email/accounts/qq1/test HTTP/1.1", "DELETE /api/connectors/mail%20%2Fbox/accounts/a%2Bb%20%2F HTTP/1.1",
-                "DELETE /api/devices/offline%20%2Fdevice HTTP/1.1", "POST /api/connectors/email/accounts HTTP/1.1", "DELETE /api/devices/online HTTP/1.1",
+                "GET /api/connectors HTTP/1.1", "POST /api/connectors/qq-mail/accounts HTTP/1.1", "PUT /api/connectors/qq-mail/accounts/qq1 HTTP/1.1",
+                "POST /api/connectors/qq-mail/accounts/qq1/test HTTP/1.1", "DELETE /api/connectors/mail%20%2Fbox/accounts/a%2Bb%20%2F HTTP/1.1",
+                "DELETE /api/devices/offline%20%2Fdevice HTTP/1.1", "POST /api/connectors/qq-mail/accounts HTTP/1.1", "DELETE /api/devices/online HTTP/1.1",
             ), requests.map { it.line })
             assertTrue(requests.all { it.headers["authorization"] == "Bearer fixture-local" })
             assertEquals("fixture@qq.com", JSONObject(requests[1].body).getJSONObject("values").getString("address"))

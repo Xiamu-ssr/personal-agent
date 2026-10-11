@@ -8,14 +8,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
-        if Prefs.configured {
+        MenuController.shared.install()
+        if LocalVerification.explicitLoopback || Prefs.configured {
             ChatClient.shared.start()
-            DeviceClient.shared.start()
+            if !LocalVerification.explicitLoopback { DeviceClient.shared.start() }
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
-            guard Prefs.configured else { return }
+            guard LocalVerification.explicitLoopback || Prefs.configured else { return }
             ChatClient.shared.reconnect()
-            DeviceClient.shared.reregister()
+            if !LocalVerification.explicitLoopback { DeviceClient.shared.reregister() }
+        }
+        if LocalVerification.openMenuOnLaunch {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                // Keep the local acceptance popover as the only visible app surface.
+                for window in NSApp.windows where window.identifier?.rawValue.hasPrefix("main") == true { window.orderOut(nil) }
+                MenuController.shared.button?.performClick(nil)
+            }
         }
     }
 
@@ -59,7 +67,7 @@ struct DoudouApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     init() {
-        Prefs.migrate()
+        if !LocalVerification.explicitLoopback { Prefs.migrate() }
     }
 
     var body: some Scene {
@@ -72,21 +80,7 @@ struct DoudouApp: App {
             CommandGroup(replacing: .newItem) {}
         }
 
-        MenuBarExtra {
-            MenuView()
-        } label: {
-            MenuIcon()
-        }
-        .menuBarExtraStyle(.window)
     }
 }
 
 #endif
-
-struct MenuIcon: View {
-    private var chat: ChatClient { .shared }
-
-    var body: some View {
-        Image(systemName: chat.busy ? "ellipsis.bubble.fill" : (chat.connected ? "bubble.left.fill" : "bubble.left"))
-    }
-}

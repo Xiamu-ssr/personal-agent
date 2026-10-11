@@ -88,6 +88,8 @@ sealed interface Route {
 object Nav {
     val tab = mutableIntStateOf(0)
     val stack = mutableStateListOf<Route>()
+    val briefPath = mutableStateOf<String?>(null)
+    fun brief(path: String) { briefPath.value = path; home(1) }
     fun open(r: Route) { stack.add(r) }
     fun back() { stack.removeLastOrNull() }
     fun home(tab: Int) {

@@ -15,6 +15,14 @@ struct TaskControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
+            if !chat.queueNotice.isEmpty {
+                HStack(spacing: 8) {
+                    Text(chat.queueNotice).font(.system(size: 11.5)).foregroundStyle(Theme.sub)
+                    Spacer()
+                    Button { chat.queueNotice = "" } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(Theme.faint)
+                }.padding(.horizontal, 8)
+            }
             if !chat.backgroundTasks.isEmpty { BackgroundTasksBar(compact: compact) }
             if chat.busy {
                 HStack(spacing: 7) {

@@ -9,11 +9,37 @@ import { config } from "./config.mjs";
 import { readJson, writeJson } from "./store.mjs";
 
 const CALL_TIMEOUT_MS = 60_000;
+// A call may ask for more time (Mac shell allows up to 300s); give the device 15s on top to report back.
+const callTimeout = (args) => {
+  const t = Number(args?.timeout);
+  return Number.isFinite(t) && t > 0 ? Math.min(t, 300) * 1000 + 15_000 : CALL_TIMEOUT_MS;
+};
 const REGISTRY = () => path.join(config.system, "devices.json");
 
 // Devices send every capability they have, each with `enabled` (what the user switched on there).
 // Older clients only sent the enabled ones, without the flag.
 const enabledCaps = (info) => (info.capabilities || []).filter((c) => c.enabled !== false);
+
+export const DEVICE_IMAGE_LIMIT = 5 * 1024 * 1024;
+export function deviceContent(value) {
+  if (Array.isArray(value) && !value.some((item) => item && typeof item === "object" && Object.hasOwn(item, "image"))) {
+    return { content: [{ type: "text", text: JSON.stringify(value) }] };
+  }
+  const content = [];
+  for (const item of Array.isArray(value) ? value : [value]) {
+    if (item && typeof item === "object" && Object.hasOwn(item, "image")) {
+      if (typeof item.image !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(item.image) || item.image.length % 4 !== 0 || !item.image.length) {
+        throw new Error("设备图片的 base64 格式不正确");
+      }
+      if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(item.mime)) throw new Error("设备图片只支持 PNG、JPEG、WebP 或 GIF");
+      if (Buffer.byteLength(item.image, "base64") > DEVICE_IMAGE_LIMIT) throw new Error("设备图片超过 5MB，请降低截图尺寸后重试");
+      content.push({ type: "image", data: item.image, mimeType: item.mime });
+      const { image: _image, mime: _mime, ...rest } = item;
+      if (Object.keys(rest).length) content.push({ type: "text", text: JSON.stringify(rest) });
+    } else content.push({ type: "text", text: typeof item === "string" ? item : JSON.stringify(item) ?? "null" });
+  }
+  return { content };
+}
 
 export class DeviceHub {
   constructor() {
@@ -115,7 +141,7 @@ export class DeviceHub {
       const timer = setTimeout(() => {
         d.pending.delete(id);
         reject(new Error("设备超时"));
-      }, CALL_TIMEOUT_MS);
+      }, callTimeout(args));
       d.pending.set(id, {
         resolve: (v) => (clearTimeout(timer), resolve(v)),
         reject: (e) => (clearTimeout(timer), reject(e)),
@@ -174,7 +200,7 @@ export class DeviceHub {
           { device: z.string(), capability: z.string(), args: z.record(z.string(), z.any()).optional() },
           async ({ device, capability, args }) => {
             try {
-              return text(await this.call(device, capability, args));
+              return deviceContent(await this.call(device, capability, args));
             } catch (e) {
               return fail(e);
             }

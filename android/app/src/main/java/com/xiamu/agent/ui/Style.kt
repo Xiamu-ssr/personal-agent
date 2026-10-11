@@ -214,6 +214,7 @@ fun ListRow(
     subLines: Int = 1,
     dim: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
+    leading: @Composable (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
     Row(
@@ -221,7 +222,10 @@ fun ListRow(
             .padding(vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(14.dp))
+        } else if (icon != null) {
             IconTile(icon, if (dim) Pal.Faint else tint)
             Spacer(Modifier.width(14.dp))
         }
@@ -317,31 +321,6 @@ fun GoldSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
 @Composable
 fun StatusDot(color: Color, size: Dp = 7.dp) {
     Box(Modifier.size(size).background(color, CircleShape).border(1.dp, Color.White, CircleShape))
-}
-
-/** Silver metal sphere: 豆豆's face everywhere. */
-@Composable
-fun Avatar(size: Dp, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(size)) {
-        val r = this.size.minDimension / 2
-        drawCircle(Color(0x22576A84), radius = r, center = center.copy(y = center.y + r * 0.06f))
-        drawCircle(
-            Brush.radialGradient(
-                0f to Color.White, 0.45f to Color(0xFFDCE6F2), 1f to Color(0xFFAFC0D3),
-                center = Offset(r * 0.72f, r * 0.62f), radius = r * 1.5f,
-            ),
-            radius = r * 0.97f,
-        )
-        // rim light along the lower right and a glossy highlight up top
-        drawCircle(
-            Brush.radialGradient(listOf(Color.Transparent, Color(0x55FFFFFF)), center = Offset(r * 0.8f, r * 0.7f), radius = r * 1.35f),
-            radius = r * 0.97f,
-        )
-        drawOval(
-            Brush.verticalGradient(listOf(Color(0xE6FFFFFF), Color(0x00FFFFFF)), startY = r * 0.28f, endY = r * 0.95f),
-            topLeft = Offset(r * 0.45f, r * 0.26f), size = androidx.compose.ui.geometry.Size(r * 0.95f, r * 0.62f),
-        )
-    }
 }
 
 @Composable

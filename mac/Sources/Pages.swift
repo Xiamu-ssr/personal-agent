@@ -183,175 +183,6 @@ struct DocRoute: View {
     }
 }
 
-// MARK: - 今日
-
-struct BriefFile: Identifiable, Hashable {
-    let day: String
-    let name: String
-    let mtime: Date
-    var displayTitle: String? = nil
-    var path: String { "data/briefs/\(day)/\(name)" }
-    var title: String { displayTitle ?? (name as NSString).deletingPathExtension }
-    var id: String { path }
-}
-
-struct TodayPage: View {
-    private var chat: ChatClient { .shared }
-    @State private var briefs: [BriefFile]? = nil
-    @State private var sites: [TreeEntry]? = nil
-    @State private var err = ""
-
-    private var today: String { Fmt.dayKey.string(from: Date()) }
-
-    var body: some View {
-        PageScaffold(title: "今日", subtitle: Fmt.mdw.string(from: Date()), tab: .today) {
-            latest
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 22) { todayList; recent }.frame(minWidth: 420, maxWidth: .infinity)
-                    sitesCard.frame(width: 330)
-                }
-                VStack(alignment: .leading, spacing: 22) { todayList; recent; sitesCard }
-            }
-            if !err.isEmpty { Note(text: err, icon: "wifi.exclamationmark") }
-        }
-        .task(id: chat.filesVersion) { await load() }
-    }
-
-    private func load() async {
-        do {
-            let days = try await Api.tree("data/briefs").filter { $0.dir && Fmt.dayKey.date(from: $0.name) != nil && $0.name <= today }.sorted { $0.name > $1.name }.prefix(8)
-            var out: [BriefFile] = []
-            for d in days {
-                let files = (try? await Api.tree("data/briefs/\(d.name)")) ?? []
-                out += files.filter { !$0.dir && ($0.name.hasSuffix(".html") || $0.name.hasSuffix(".md")) }
-                    .map { BriefFile(day: d.name, name: $0.name, mtime: $0.mtime) }
-            }
-            await withTaskGroup(of: BriefFile.self) { group in
-                for brief in out {
-                    group.addTask {
-                        var brief = brief
-                        if let text = try? await Api.text(brief.path) {
-                            if brief.name.hasSuffix(".md") {
-                                brief.displayTitle = text.components(separatedBy: "\n").first { $0.hasPrefix("# ") }?.dropFirst(2).description
-                            } else if let r = text.range(of: "(?is)<title[^>]*>.*?</title>", options: .regularExpression) {
-                                brief.displayTitle = String(text[r]).replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-                                    .replacingOccurrences(of: "&amp;", with: "&").trimmingCharacters(in: .whitespacesAndNewlines)
-                            }
-                            if brief.displayTitle?.isEmpty == true { brief.displayTitle = nil }
-                        }
-                        return brief
-                    }
-                }
-                var titled: [BriefFile] = []
-                for await brief in group { titled.append(brief) }
-                out = titled.sorted { $0.mtime > $1.mtime }
-            }
-            briefs = out
-            sites = try await Api.tree("data/sites").filter { $0.dir || $0.name.hasSuffix(".html") }
-            err = ""
-        } catch {
-            err = "读不到：\(error.localizedDescription)"
-            if briefs == nil { briefs = [] }
-            if sites == nil { sites = [] }
-        }
-    }
-
-    private var todays: [BriefFile] { (briefs ?? []).filter { $0.day == today }.sorted { $0.mtime > $1.mtime } }
-
-    private var latest: some View {
-        let b = todays.first
-        return Button { if let b { Nav.shared.open(b.path, title: b.title) } } label: {
-            HStack(alignment: .center, spacing: 18) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("最新简报").font(.system(size: 12)).foregroundStyle(Theme.sub)
-                    Text(b?.title ?? (briefs == nil ? "加载中…" : "今天还没有简报"))
-                        .font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.ink)
-                    Text(b.map { "\(Fmt.hm.string(from: $0.mtime)) 生成 · 点开查看" } ?? "晨报 7:30")
-                        .font(.system(size: 13)).foregroundStyle(Theme.sub)
-                }
-                Spacer()
-                if b != nil {
-                    HStack(spacing: 4) {
-                        Text("查看").font(.system(size: 13, weight: .medium))
-                        Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(Theme.goldText)
-                    .padding(.horizontal, 16).frame(height: 34).background(GoldBase())
-                } else {
-                    IconTile(icon: "sun.horizon", tint: Color(hex: 0x527AAA), size: 52)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .card(radius: 24, padding: 24)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(b == nil)
-    }
-
-    @ViewBuilder
-    private var todayList: some View {
-        if todays.count > 1 {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionTitle(text: "今天的简报")
-                Rows(items: todays) { b in
-                    ListRow(icon: "doc.richtext", tint: Color(hex: 0x527AAA), title: b.title, subtitle: Fmt.hm.string(from: b.mtime)) {
-                        Nav.shared.open(b.path, title: b.title)
-                    }
-                }
-                .card(radius: 22, padding: 10)
-            }
-        }
-    }
-
-    private var recent: some View {
-        let older = (briefs ?? []).filter { $0.day != today }
-        let days = Array(Set(older.map(\.day))).sorted(by: >).prefix(7)
-        return VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(text: "最近")
-            if days.isEmpty {
-                Note(text: briefs == nil ? "加载中…" : "前几天的简报会出现在这里").card(radius: 22, padding: 6)
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(days, id: \.self) { day in
-                        Text(dayLabel(day)).font(.system(size: 12)).foregroundStyle(Theme.faint).padding(.horizontal, 8).padding(.top, 6)
-                        Rows(items: older.filter { $0.day == day }) { b in
-                            ListRow(icon: "doc.richtext", tint: Color(hex: 0x527AAA), title: b.title, subtitle: Fmt.hm.string(from: b.mtime)) {
-                                Nav.shared.open(b.path, title: "\(b.title) · \(dayLabel(day))")
-                            }
-                        }
-                    }
-                }
-                .card(radius: 22, padding: 10)
-            }
-        }
-    }
-
-    private func dayLabel(_ day: String) -> String {
-        guard let d = Fmt.dayKey.date(from: day) else { return day }
-        return Calendar.current.isDateInYesterday(d) ? "昨天 · " + Fmt.md.string(from: d) : Fmt.mdShortWeek.string(from: d)
-    }
-
-    private var sitesCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(text: "站点")
-            Group {
-                if let sites, !sites.isEmpty {
-                    Rows(items: sites) { s in
-                        ListRow(icon: "globe", tint: Color(hex: 0x428B94), title: s.name, subtitle: "更新于 " + Fmt.when(s.mtime)) {
-                            Nav.shared.push(.web(title: s.name, path: "data/sites/\(s.name)" + (s.dir ? "/" : "")))
-                        }
-                    }
-                } else {
-                    Note(text: sites == nil ? "加载中…" : "还没有站点。\n让豆豆帮你做个页面试试，比如「做个记账图表」")
-                }
-            }
-            .card(radius: 22, padding: 10)
-        }
-    }
-}
-
 // MARK: - 任务
 
 struct ScheduleJob: Identifiable {
@@ -387,7 +218,6 @@ struct TasksPage: View {
     @Environment(\.interactiveWindow) private var active
     @Environment(\.scenePhase) private var scenePhase
     private var chat: ChatClient { .shared }
-    @State private var seg = 0
     @State private var recent: [ChatItem] = []
     @State private var okFlags: [UUID: Bool] = [:]
     @State private var schedule: [ScheduleJob]? = nil
@@ -397,22 +227,25 @@ struct TasksPage: View {
 
     var body: some View {
         PageScaffold(title: "任务", tab: .tasks) {
-            PillTabs(titles: ["进行中", "已完成", "定时"], selection: $seg)
-            switch seg {
-            case 0: runningCard
-            case 1: recentCard
+            PillTabs(titles: ["任务", "定时"], selection: Binding(get: { Nav.shared.tasksSection }, set: { Nav.shared.tasksSection = $0 }))
+            switch Nav.shared.tasksSection {
+            case 0:
+                if !allRunning.isEmpty { runningCard }
+                recentCard
             default: scheduleCard
             }
             if !err.isEmpty { Note(text: err, icon: "wifi.exclamationmark") }
-            suggestions
+            if !chat.taskError.isEmpty { Note(text: chat.taskError, icon: "exclamationmark.circle") }
         }
-        .task(id: "\(chat.jobsVersion)-\(chat.connected)-\(scenePhase)") { await load() }
+        .task(id: "\(chat.jobsVersion)-\(chat.connected)-\(scenePhase)-\(Nav.shared.tasksSection)") { await load() }
     }
 
     private func load() async {
         let version = chat.jobsVersion
         do {
-            let r = try await Api.json("/api/jobs")
+            async let jobsResponse = Api.json("/api/jobs")
+            async let stateResponse = Api.json("/api/state")
+            let (r, st) = try await (jobsResponse, stateResponse)
             guard version == chat.jobsVersion, !Task.isCancelled else { return }
             chat.applyJobs(r["running"] as? [[String: Any]] ?? [], version: version)
             var flags: [UUID: Bool] = [:]
@@ -422,8 +255,6 @@ struct TasksPage: View {
                 return item
             }
             okFlags = flags
-            let st = try await Api.json("/api/state")
-            guard version == chat.jobsVersion, !Task.isCancelled else { return }
             schedule = (st["schedule"] as? [[String: Any]] ?? []).map {
                 ScheduleJob(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? ($0["id"] as? String ?? ""),
                             cron: $0["cron"] as? String ?? "", kind: $0["kind"] as? String ?? "")
@@ -452,6 +283,11 @@ struct TasksPage: View {
                         ListRow(icon: t.id.hasPrefix("job:") ? "clock" : "arrow.triangle.branch", tint: Color(hex: 0x3F7F87),
                                 title: t.label, subtitle: "\(t.detail) · 已运行 \(Fmt.duration(ctx.date.timeIntervalSince(t.started)))") {
                             ActiveProgress().controlSize(.small)
+                            if t.id.hasPrefix("task:") {
+                                let id = String(t.id.dropFirst(5))
+                                Button(chat.stoppingTasks.contains(id) ? "停止中…" : "停止") { chat.stopTask(id) }
+                                    .buttonStyle(SoftButtonStyle()).disabled(chat.stoppingTasks.contains(id))
+                            }
                         }
                     }
                 }
@@ -461,23 +297,35 @@ struct TasksPage: View {
     }
 
     private var recentCard: some View {
-        Group {
-            if recent.isEmpty {
-                Note(text: loaded ? "还没有完成的任务" : "加载中…", icon: "tray")
+        VStack(alignment: .leading, spacing: 16) {
+            if recent.isEmpty && allRunning.isEmpty {
+                Note(text: loaded ? "还没有任务" : "加载中…", icon: "tray").card(radius: 22, padding: 16)
             } else {
-                Rows(items: recent) { item in
-                    let ok = okFlags[item.id] ?? true
-                    ListRow(icon: ok ? "checkmark.circle" : "exclamationmark.triangle", tint: ok ? Color(hex: 0x3F7F87) : Theme.danger,
-                            title: item.label.isEmpty ? item.text : item.label,
-                            subtitle: [item.ts.map(Fmt.when) ?? "", ok ? (item.text == item.label ? "" : item.text) : "出错：" + item.text.replacingOccurrences(of: "出错：", with: "")]
-                                .filter { !$0.isEmpty }.joined(separator: " · "),
-                            action: item.outputs.isEmpty ? nil : { Nav.shared.open(item.outputs[0], title: item.label) }) {
-                        if ok { GoldTag(text: "完成") } else { Text("出错").font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.danger) }
+                ForEach(["今天", "近 7 天", "更早"], id: \.self) { group in
+                    let entries = recent.filter { Self.completedGroup($0.ts) == group }.sorted { ($0.ts ?? .distantPast) > ($1.ts ?? .distantPast) }
+                    if !entries.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            SectionTitle(text: group)
+                            Rows(items: entries) { item in
+                                let ok = okFlags[item.id] ?? true
+                                ListRow(icon: ok ? "checkmark.circle" : "exclamationmark.triangle", tint: ok ? Color(hex: 0x3F7F87) : Theme.danger,
+                                        title: item.text.isEmpty ? item.label : item.text, subtitle: item.ts.map(Fmt.when) ?? "",
+                                        action: item.outputs.isEmpty ? nil : { Nav.shared.open(item.outputs[0], title: item.label) }) {
+                                    if ok { GoldTag(text: "完成") } else { Text("出错").font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.danger) }
+                                }
+                            }.card(radius: 22, padding: 10)
+                        }
                     }
                 }
             }
         }
-        .card(radius: 22, padding: 10)
+    }
+
+    static func completedGroup(_ date: Date?, now: Date = Date()) -> String {
+        guard let date else { return "更早" }
+        if Calendar.current.isDate(date, inSameDayAs: now) { return "今天" }
+        let start = Calendar.current.date(byAdding: .day, value: -7, to: Calendar.current.startOfDay(for: now)) ?? now
+        return date >= start ? "近 7 天" : "更早"
     }
 
     private var scheduleCard: some View {
@@ -510,43 +358,11 @@ struct TasksPage: View {
             do {
                 _ = try await Api.json("/api/run", method: "POST", body: ["id": j.id])
                 await load()
-                Nav.shared.show("「\(j.name)」开始跑了，好了会出现在聊天和今日里")
+                Nav.shared.show("「\(j.name)」已排队，好了会出现在聊天和今日里")
             } catch {
                 Nav.shared.show("没跑起来：\(error.localizedDescription)")
             }
         }
     }
 
-    private static let picks: [(title: String, detail: String, icon: String, ask: String)] = [
-        ("每日新闻速览", "每天早上挑几条你会关心的新闻", "newspaper", "每天早上 8 点给我一份新闻速览，挑我会关心的几条"),
-        ("每周开销小结", "每周日晚上看看这周花了多少", "yensign.circle", "每周日晚上 9 点给我做一份本周开销小结"),
-        ("生日提醒", "记忆里有人过生日，提前一天提醒", "gift", "每天检查记忆里有没有人明天过生日，有就提前提醒我"),
-    ]
-
-    private var suggestions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(text: "为你推荐")
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14)], spacing: 14) {
-                ForEach(Self.picks, id: \.title) { p in
-                    Button { Nav.shared.ask("帮我加一个定时任务：\(p.ask)") } label: {
-                        HStack(spacing: 12) {
-                            IconTile(icon: p.icon, tint: Color(hex: 0x3F7F87), size: 36)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(p.title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
-                                Text(p.detail).font(.system(size: 12)).foregroundStyle(Theme.sub).lineLimit(2)
-                            }
-                            Spacer(minLength: 4)
-                            Image(systemName: "plus").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.faint)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .card(radius: 20, padding: 14)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("在聊天里让豆豆加上这个定时任务")
-                }
-            }
-        }
-        .padding(.top, 6)
-    }
 }

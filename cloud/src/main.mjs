@@ -17,7 +17,7 @@ if (!config.token) {
 
 // First boot: lay out the three zones and copy seed files that don't exist yet.
 function seed() {
-  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "workspace", "system/connectors", "system/custom-connectors", "system/sync", "system/sessions", ".claude/skills"]) {
+  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "workspace", "system/connectors", "system/sync", "system/sessions", ".claude/skills"]) {
     fs.mkdirSync(path.join(config.root, d), { recursive: true });
   }
   const seedDir = path.join(CODE, "seed");

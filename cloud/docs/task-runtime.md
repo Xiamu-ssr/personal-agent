@@ -1,4 +1,6 @@
-# 第 3 轮云端实现与验收记录（2026-10-11）
+# 云端任务运行层与 v0.4 验收（2026-10-11）
+
+v0.4 默认 CLI 窗口为 **200000**，输出预留 **20000**、摘要预留 **13000**，输入触发点 **167000**。主会话、fork、隔离会话都在 Write/Edit 后校验 JSON 简报；job.done/card 的 path 指向 JSON。排队消息有 id，可撤回、修改，轮到派发时才记历史，hello.queued 恢复当前队列。完整新接口、改动文件和部署命令见 [v04-cloud.md](v04-cloud.md)，客户端格式见 [app-protocol-tasks.md](app-protocol-tasks.md)。以下保留原生任务生命周期及 fork 守卫的实现依据。
 
 基于 `1294812`，依赖仍锁定 Agent SDK **0.3.295**；本机配套 native CLI **2.1.295**。没有修改 App、提交、推送、部署或 SSH。没有真实模型/邮箱调用，付费模型调用 **0 次、0 tokens**。
 
@@ -8,7 +10,7 @@
 2. **结束和队列**：`result` 保存回复/发 `turn_end`；收到结果和原生 idle 后才解除 busy、派发下一条。支持 result 在 idle 前/后两种顺序。restore 控制请求 await 后再次检查 busy，防止该间隙自发回合抢先开始时交错输入。无状态事件的 mock/旧查询保留 result 兜底。自发回合进程异常结束也走中文失败/恢复路径。
 3. **后台任务/停止**：新 `BackgroundTasks` 用原生 `background_tasks_changed` 完整替换运行集合，task edges 负责描述、进度、结果。过滤 ambient，保留 run_id 的新旧检查；进程起止清空列表，不持久化。主查询声明 `perTaskStopAffordance: true`，隔离维护没有 App 按任务控制，不作此声明。WS stop_task 和 HTTP stop 共用 `Harness.stopTask` → `main.q.stopTask(id)`，已结束/不存在/控制失败都返回中文结构化错误。
 4. **简报**：cron、HTTP `/api/run` 共用 `runScheduledTask`，普通任务（含 `kind: brief`）调用 `harness.send(..., "schedule")` 进入同一 turnQueue。闹钟内容为 `[定时] 该出「<名称>」了` 加任务说明。提示词指示主 agent 派出后台 fork、简短确认；原生完成通知负责重新唤醒主会话。没有额外的人造回流消息。
-5. **输出卡片**：主查询的 PostToolUse 传递 `agent_id`，按子任务收集 `data/briefs/` / `data/sites/` 下的 HTML outputs。任务通知结束时写一次 jobs/chat card，发原有 `job.done`；文件访问端点和 outputs 形状不变，只增加可选 `taskId`。失败/停止的已写文件标为未完成。
+5. **输出卡片**：主查询的 PostToolUse 传递 `agent_id`，按子任务收集有效的 `data/briefs/**/*.json` 与站点 HTML outputs。任务通知结束时写一次 jobs/chat card，发 `job.done`；简报卡片带 JSON path 和可选 taskId。失败/停止的已写有效文件标为未完成。
 6. **维护**：compact、cleanup 分支保持原行为。设备重连的补读未改；调度/手动运行中以 `[补读]`、`[夜间整理]` 开头的任务也继续隔离。它们靠持久化数据和游标工作，不需要继承主聊天；避免长读写过程扩大主会话和 fork 的上下文。
 
 ## 必须配套的原生状态开关
@@ -59,11 +61,11 @@
 
 ## 验证及边界
 
-本地 **Node 20.19.4**：`npm run check` 通过；`npm test` **46/46** 通过（包括原有 connector、IMAP、95K 触发/128K 输出、压缩 retry 和 stuck-resume 恢复测试）。所有运行数据位于 `/tmp`，token/key 为测试假值，模型 API 只访问 loopback 的 fake-anthropic。
+v0.4 本地 **Node 26.5.0**：`npm run check` 通过；`npm test` **69/69** 通过（原 50 项回归加 19 项新测试，覆盖 connector、IMAP、167K 触发/128K 输出、压缩 retry 和 stuck-resume 恢复）。所有运行数据位于 `/tmp`，token/key 为测试假值，模型 API 只访问 loopback 的 fake-anthropic。
 
 - 真实 SDK 流式调用：fork 带父历史、后台运行；父回复中 interrupt 后 fork 存活并完成；其完成通知自动产生主回合；该回合期间两条用户消息排队，通知回复先落盘，再按序处理用户。
 - 真实 SDK stopTask：两个 fork 同时运行，只停 A 得到 stopped；B 继续完成；已结束/不存在清晰返回错误。
-- 实际 HTML 由 native fork 的 Write 执行，hook 收到 agent_id，形成一张 card 和一次 job.done，outputs 可对应真实本地文件。
+- 实际 JSON 由 native fork 的 Write/Edit 执行，hook 收到 agent_id，形成一张 card 和一次 job.done，path/outputs 对应真实本地文件；无效 JSON 会反馈中文错误并由假模型修正。
 - mock 覆盖旧 failure/active/reply/toolsUsed 清空、自发上下文恢复不重放、result/idle 两种顺序、等待 restore 时 native turn 抢先开始、SDK 控制失败重试、CLI 进程结束后计数清空。
 - curl/WS 覆盖鉴权、state/hello tasks、400/404/409、手动 alarm/隔离维护、错误后服务仍可用。
 
@@ -74,8 +76,8 @@
 ## Claude 上线后验收
 
 1. 保持 SDK lock 0.3.295，部署后重启服务使新 systemPrompt 生效。不需要修改生产 env；三个开关由 options 注入。
-2. 手动触发一个极短简报（只写一张短 HTML，避免真实长调用），确认 `[定时]` 的 source 为 schedule；主会话简短确认，task started/snapshot 出现，父回复 idle 时 `/api/state` 可为 busy false 且 tasks 非空。
-3. fork 运行时继续聊天并停止当前主回复，确认后台任务仍在；让任务完成，确认出现 task notification、busy task_result、主会话完成回复、chat card，App 能经现有 files 端点打开简报。
+2. 手动触发一个极短简报（只写一张 JSON 卡片），确认 `[定时]` 的 source 为 schedule；主会话简短确认，task started/snapshot 出现，父回复 idle 时 `/api/state` 可为 busy false 且 tasks 非空。
+3. fork 运行时继续聊天并停止当前主回复，确认后台任务仍在；让任务完成，确认出现 task notification、busy task_result、主会话完成回复、chat card，App 按 path 跳到「今日」的原生卡片。
 4. 通知回合正在输出时连发两条短消息，确认不混入该回合，结果顺序正确且 App 显示忙闲。
 5. 同时运行两个小任务，通过 WS 和 HTTP 分别停其中一个，确认只收到该 id 的 stopped、另一个继续；重复停止检查 409，不存在检查 404。
 6. 重启服务/断线重连，确认初始 tasks 为空/当前原生活动快照，不从旧卡片恢复计数；检查补读/夜间整理仍发隔离 job。压缩预算继承上一轮策略；若遇到自发回合压缩失败，确认中文恢复提示、data/记忆/待办保留且不自动重放通知。
@@ -123,7 +125,7 @@
 本地 **Node 20.19.4**：`npm run check` 通过，`npm test` **50/50** 通过。此前 46 项均保留通过，新增 4 项；全部模型流量来自 loopback fake-anthropic，测试数据、会话配置和假凭据只在 `/tmp`。
 
 - 定时主线程先调 Bash：中文拒绝，命令没有执行；随后严格 Agent fork 被放行，父回合先结束，子任务仍在后台。
-- fork 的 Bash 和 Write hook 带原生 agent_id，不消耗拒绝次数；实际 HTML 写入 `data/briefs/`，完成通知原生唤醒主会话，产生一次 `job.done` 和一张带 outputs 的 card。task_result 主回合的 Bash 也正常执行。
+- fork 的 Bash 和 Write hook 带原生 agent_id，不消耗拒绝次数；实际 JSON 写入 `data/briefs/`，完成通知原生唤醒主会话，产生一次 `job.done` 和一张带 path/outputs 的 card。task_result 主回合的 Bash 也正常执行。
 - 连续三次主线程 Bash 都被拒绝，第四次实际执行；fail-open 日志只出现一次，下个 schedule 的状态和计数重置。
 - user 主回合 Bash 实际执行；严格参数、同 id 关联、子任务豁免、隔离 hook 不挂守卫及 user/task_result 的重置另有直接测试。
 - cron、手动运行的名称前缀不变；既有 queue、interrupt/stopTask、压缩阈值、卡死恢复、连接器和假 IMAP 测试没有回退。
@@ -132,7 +134,7 @@
 
 ## 上线后看这些日志
 
-1. 重启服务载入新代码和提示词，手动触发一个只用 Write 生成短 HTML 的简报。闹钟前缀仍为 `[定时] 该出「<名称>」了`，主会话应简短确认，然后后台 task 出现。
+1. 重启服务载入新代码和提示词，手动触发一个只用 Write 生成短 JSON 的简报。闹钟前缀仍为 `[定时] 该出「<名称>」了`，主会话应简短确认，然后后台 task 出现。
 2. 如果模型先尝试自己做，会出现 `[schedule] fork guard denied count=1 tool=Bash`（工具名和次数随实际调用变化）。被拒工具不应执行。正确派发必须随后出现 **`[schedule] fork dispatched task_id=<id> tool_use_id=<id>`**，可按 task id 关联原生任务 started/完成事件和简报 card。
 3. **`[schedule] fork guard fail-open`** 表示本轮已经拒绝三次，后续放开，是兜底信号；正常派发不应出现这行。若频繁出现，保留该轮工具名称/次数及 task 事件供审查，不能把主会话口头确认当成成功派发。
-4. 确认 fork 内的文件/连接器工具正常，完成后主会话转述、卡片打开实际 HTML；继续发普通用户消息，确认没有 schedule 拒绝日志。下一次闹钟的拒绝次数应从 1 重新开始。
+4. 确认 fork 内的文件/连接器工具正常，完成后主会话转述、卡片在「今日」定位 JSON；继续发普通用户消息，确认没有 schedule 拒绝日志。下一次闹钟的拒绝次数应从 1 重新开始。

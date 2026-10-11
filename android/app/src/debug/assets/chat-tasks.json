@@ -20,7 +20,7 @@
     {"t":"hello","busy":false,"tasks":[{"id":"quote","description":"整理报价简报","startedAt":0},{"id":"files","description":"核对资料目录","startedAt":0}],"history":[{"role":"assistant","text":"两项任务正在后台处理，你可以继续聊天。","ts":0}]}
   ],
   "alarm": [
-    {"t":"hello","busy":false,"tasks":[],"history":[{"role":"user","source":"schedule","text":"[定时] 该出「晨报」了\n\n整理今日资讯","ts":0},{"role":"assistant","text":"晨报已送到今日，可以查看简报。","ts":0},{"role":"card","title":"晨报 · 今日资讯","label":"晨报","outputs":["data/briefs/2026-10-11/晨报.html"],"ok":true,"ts":0}]},
+    {"t":"hello","busy":false,"tasks":[],"history":[{"role":"user","source":"schedule","text":"[定时] 该出「晨报」了\n\n整理今日资讯","ts":0},{"role":"assistant","text":"晨报已送到今日，可以查看简报。","ts":0},{"role":"card","title":"晨报 · 今日资讯","label":"晨报","outputs":["data/briefs/2026-10-11/晨报.json"],"ok":true,"ts":0}]},
     {"t":"user","source":"schedule","text":"[定时] 该出「报价简报」了\n\n核对报价","attachments":[]}
   ]
 }

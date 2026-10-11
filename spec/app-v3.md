@@ -138,8 +138,8 @@
 |---|---|---|
 | `shell` | Mac 命令行 | 以用户身份在 zsh 里执行命令。参数 `{command, cwd?, timeout?≤300}`，返回 stdout、stderr、退出码，输出超过 20k 字就截断。电量、剪贴板、打开网页、快捷指令、当前应用、读写文件都用它，不再单独列能力。 |
 | `folder_desktop` / `folder_documents` / `folder_downloads` | Mac 桌面 / Mac 文稿 / Mac 下载 | macOS 对这三个文件夹单独做了隐私保护，命令行默认读不到。打开开关 = 触发系统授权。授权后命令行就能访问这三个文件夹，所以这三项本身没有工具，只是授权开关。 |
-| `computer_use` | 操作电脑 | 截屏 + 鼠标键盘。工具：`screenshot({display?})` 返回图片；`click({x,y,button?,double?})`、`type({text})`、`key({keys})`、`scroll({x,y,dx,dy})`、`drag({from,to})`。需要「屏幕录制」和「辅助功能」两个系统授权。 |
-| `browser` | 浏览器 | 操作用户自己的 Chrome，用的是同一份登录状态和 Cookie。豆豆 Chrome 扩展通过本机 WebSocket 连到豆豆 App，用 `chrome.debugger` 执行操作。工具：`tabs()`、`open({url})`、`snapshot({tab})` 返回带 ref 的页面结构、`click({tab, ref})`、`type({tab, ref, text})`、`screenshot({tab})`、`close({tab})`。扩展第一次需要用户手动安装（开发者模式加载）。 |
+| `computer_use` | 操作电脑 | 截屏 + 鼠标键盘，鼠标沿随机曲线移动、不瞬移。工具：`screenshot({display?})` 返回图片；`click({x,y,button?,double?})`、`type({text})`、`key({keys})`、`scroll({x,y,dx,dy})`、`drag({from,to})`。需要「屏幕录制」和「辅助功能」两个系统授权。 |
+| `browser` | 浏览器 | **内置浏览器**（2026-10-11 决定，学 Codex 内化，零安装）：App 里的「豆豆浏览器」窗口，WKWebView，多标签，登录状态持久、和 Safari / Chrome 隔离，用户可以随时接手。读页面用 Playwright aria snapshot 式的层级无障碍树（节点带 ref，不输出 HTML，≤12k 字）；点击和输入发原生事件，鼠标走带随机抖动的曲线，打字间隔随机。工具：`tabs()`、`open({url, tab?})`、`snapshot({tab})`、`click({tab, ref})`、`type({tab, ref, text, submit?})`、`scroll({tab, dy})`、`screenshot({tab})`、`back({tab})`、`close({tab})`。需要用户真实 Chrome 登录态的事，用 `computer_use` 操作。 |
 | `notify` | 发通知 | 保留原生：通知要显示成「豆豆」发的。 |
 | `calendar_events` | Mac 日历 | 保留原生：日历权限挂在 App 上，命令行读不到。 |
 

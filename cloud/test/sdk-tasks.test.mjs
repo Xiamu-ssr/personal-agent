@@ -64,13 +64,13 @@ function nativeHarness(t, api, release = () => {}) {
 test("real streaming CLI forks from an alarm, interrupt spares it, and its notification wakes a queued main turn with a brief card", { timeout: 60_000 }, async (t) => {
   const child = deferred(), interrupted = deferred(), notification = deferred();
   let childStep = 0, interruptRequest = false, notificationRequest = false;
-  const brief = "data/briefs/2026-10-10/local-fork.html";
+  const brief = "data/briefs/2026-10-10/local-fork.json";
   const api = await fakeAnthropic(async (body) => {
     const last = latestInput(body);
     if (forkDirective(body)) {
       if (++childStep === 1) {
         await child.promise;
-        return tool("local_write", "Write", { file_path: path.join(config.root, brief), content: "<!doctype html><title>本地简报</title><p>本地完成</p>" });
+        return tool("local_write", "Write", { file_path: path.join(config.root, brief), content: JSON.stringify({"v": 1, "name": "\u672c\u5730\u7b80\u62a5", "time": "2026-10-11T07:30:00+08:00", "cards": [{"chip": "2026-10-11", "title": "\u672c\u5730\u5b8c\u6210"}]}) });
       }
       return { content: [{ type: "text", text: "本地简报完成，位置：" + brief }] };
     }
@@ -119,6 +119,7 @@ test("real streaming CLI forks from an alarm, interrupt spares it, and its notif
   const cards = tailJsonl(config.chatLog, 100).filter((e) => e.role === "card" && e.taskId === id);
   assert.equal(cards.length, 1);
   assert.deepEqual(cards[0].outputs, [brief]);
+  assert.equal(cards[0].path, brief);
   assert.equal(cards[0].ok, true);
   assert.ok(fs.existsSync(path.join(config.root, brief)));
   assert.ok(events.some((e) => e.t === "job" && e.phase === "done" && e.taskId === id && e.outputs.includes(brief)));

@@ -27,12 +27,12 @@ test("real SDK MCP initialize/list/call exchange: management is safe and rebuilt
     return JSON.parse(result.content[0].text);
   }
   const initial = manager.mcpServers();
-  assert.equal("email" in initial, false);
+  assert.equal("imap" in initial, false);
   const management = await clientFor(initial.connectors);
   const listing = await management.listTools();
   assert.deepEqual(listing.tools.map((tool) => tool.name), ["list", "add_account", "update_account", "remove_account"]);
-  const added = await call(management, "add_account", { name: "email", values: imap.values() });
-  const servers = manager.mcpServers(), mail = await clientFor(servers.email);
+  const added = await call(management, "add_account", { name: "imap", values: imap.values() });
+  const servers = manager.mcpServers(), mail = await clientFor(servers.imap);
   const emailTools = await mail.listTools();
   assert.deepEqual(emailTools.tools.map((tool) => tool.name), ["list_folders", "search", "read", "save_attachment", "read_since", "sync_commit"]);
   const page = await call(mail, "search", { account: added.id, limit: 2 });
@@ -43,13 +43,13 @@ test("real SDK MCP initialize/list/call exchange: management is safe and rebuilt
   const batch = await call(mail, "read_since", { account: added.id, limit: 1 });
   assert.equal(batch.items[0].uid, 1);
   await call(mail, "sync_commit", { cursor: batch.cursor });
-  assert.equal(manager.readState("email").accounts[added.id].uid, 1);
+  assert.equal(manager.readState("imap").accounts[added.id].uid, 1);
   imap.mailboxes.get("INBOX").push(message(5, { text: "A fake credential in a message: " + FAKE_PASSWORD }));
   const safeMail = await call(mail, "read", { account: added.id, uid: 5 });
   assert.equal(safeMail.text.includes(SECRET_MASK), true);
-  await call(management, "update_account", { name: "email", id: added.id, values: { password: SECRET_MASK, label: "Protocol test" } });
+  await call(management, "update_account", { name: "imap", id: added.id, values: { password: SECRET_MASK, label: "Protocol test" } });
   const safeList = await call(management, "list");
   assert.equal(safeList.installed[0].accounts[0].values.password, SECRET_MASK);
-  await call(management, "remove_account", { name: "email", id: added.id });
-  assert.equal("email" in manager.mcpServers(), false);
+  await call(management, "remove_account", { name: "imap", id: added.id });
+  assert.equal("imap" in manager.mcpServers(), false);
 });

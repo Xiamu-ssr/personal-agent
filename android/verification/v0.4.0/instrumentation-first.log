@@ -1,0 +1,775 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ConnectorApiChecks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.ConnectorApiChecks:
+INSTRUMENTATION_STATUS: test=endpointsUseExpectedMethodsBodiesAndErrors
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ConnectorApiChecks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=endpointsUseExpectedMethodsBodiesAndErrors
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.ContentChecks:
+INSTRUMENTATION_STATUS: test=siteMetadataHandlesAttributeOrderAndEntities
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=siteMetadataHandlesAttributeOrderAndEntities
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=briefsOmitMalformedOrUnknownBlocksWithoutLosingCard
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=briefsOmitMalformedOrUnknownBlocksWithoutLosingCard
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=connectorParserOnlyListsInstalledAndCatalogAndSecretsStayMasked
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=connectorParserOnlyListsInstalledAndCatalogAndSecretsStayMasked
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=avatarIdsMatchV4ProfileContract
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=avatarIdsMatchV4ProfileContract
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=briefInputRejectsHtmlAndUnversionedDocuments
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.ContentChecks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=briefInputRejectsHtmlAndUnversionedDocuments
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.DeviceMediaChecks:
+INSTRUMENTATION_STATUS: test=imageCompressionAndCameraSharing
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=imageCompressionAndCameraSharing
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=recordingIsAdts16kMonoAndCancelCleansUp
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=recordingIsAdts16kMonoAndCancelCleansUp
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=deviceEventsNotifyOnlyInBackgroundAndRespectSwitch
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=deviceEventsNotifyOnlyInBackgroundAndRespectSwitch
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=10
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=scheduleExamplesAreReadable
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=10
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=scheduleExamplesAreReadable
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=11
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=firstChatStateMetadataHandlesNullAndMissing
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=11
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=firstChatStateMetadataHandlesNullAndMissing
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=12
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=approximateLocationCountsAsAuthorized
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=12
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=approximateLocationCountsAsAuthorized
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=13
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=sqliteSmsPagesPast500WithInclusiveDatesAndIncrementalCatchup
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.DeviceMediaChecks
+INSTRUMENTATION_STATUS: current=13
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=sqliteSmsPagesPast500WithInclusiveDatesAndIncrementalCatchup
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=14
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.HealthChecks:
+INSTRUMENTATION_STATUS: test=actualProviderAndSensorAvailabilityAndFallbackAreReported
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=14
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=actualProviderAndSensorAvailabilityAndFallbackAreReported
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=15
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=simulatedStepObservationsPersistOnlyDeltaAndMarkPartial
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=15
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=simulatedStepObservationsPersistOnlyDeltaAndMarkPartial
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=16
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=healthFallbackDiagnosticScreenshot
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=16
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=healthFallbackDiagnosticScreenshot
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=17
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=invalidHealthRangesAreRejectedAndOldCapabilityIsGone
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.HealthChecks
+INSTRUMENTATION_STATUS: current=17
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=invalidHealthRangesAreRejectedAndOldCapabilityIsGone
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=18
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.TaskChecks:
+INSTRUMENTATION_STATUS: test=scheduledTurnHasAlarmLineAndItsOwnBusyLabel
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=18
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=scheduledTurnHasAlarmLineAndItsOwnBusyLabel
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=19
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=spontaneousResultRendersWithoutUserAndBusyWaitsForStatus
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=19
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=spontaneousResultRendersWithoutUserAndBusyWaitsForStatus
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=20
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=interruptLeavesBackgroundTasksRunning
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=20
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=interruptLeavesBackgroundTasksRunning
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=21
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=historyAndLiveScheduleMessagesAreGrayAndCardsRemain
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=21
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=historyAndLiveScheduleMessagesAreGrayAndCardsRemain
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=22
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=reconnectUsesHelloInsteadOfOldBusyOrStoppingState
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=22
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=reconnectUsesHelloInsteadOfOldBusyOrStoppingState
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=23
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=perTaskStopOnlyAffectsTargetAndWaitsForFinalNotification
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=23
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=perTaskStopOnlyAffectsTargetAndWaitsForFinalNotification
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=24
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=busyComposerStillSendsAndQueuedBubblesAdvance
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=24
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=busyComposerStillSendsAndQueuedBubblesAdvance
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=25
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=failedStopRestoresButtonWithChineseReason
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=25
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=failedStopRestoresButtonWithChineseReason
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=26
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=lateStateResponseCannotResurrectCompletedTasks
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=26
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=lateStateResponseCannotResurrectCompletedTasks
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=27
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=taskWireEventsMergeByIdAndIgnoreAmbientWork
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.TaskChecks
+INSTRUMENTATION_STATUS: current=27
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=taskWireEventsMergeByIdAndIgnoreAmbientWork
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=28
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V4Checks:
+INSTRUMENTATION_STATUS: test=tooLateQueueUpdateExplainsAndKeepsMessage
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=28
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=tooLateQueueUpdateExplainsAndKeepsMessage
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=29
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=todayUsesNativeMulticardBriefsAndActionSendsToChat
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=29
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=todayUsesNativeMulticardBriefsAndActionSendsToChat
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=30
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=memoryHasFourHealthMetricsFoldersAndFullProfile
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=30
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=memoryHasFourHealthMetricsFoldersAndFullProfile
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=31
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=connectorFormSelectShowIfAndNumberUseCommonPage
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=31
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=connectorFormSelectShowIfAndNumberUseCommonPage
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=32
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=memoryMissingHealthShowsDashesAndVoiceEmptyHint
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=32
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: Failed to assert count of nodes.
+Reason: Expected '4' nodes but found '1' node that satisfies: (Text + EditableText contains '--' (ignoreCase: false))
+Node found:
+Node #1703 at (l=53.0, t=1094.0, r=1027.0, b=1721.0)px
+Focused = 'false'
+Text = '[健康, 睡眠, --, , 静息心率, --, , 步数, --, , 心率变异性, --, , 还没有健康数据]'
+Actions = [OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution, ClearTextSubstitution, GetTextLayoutResult]
+MergeDescendants = 'true'
+Has 16 siblings
+
+	at androidx.compose.ui.test.AssertionsKt.assertCountEquals(Assertions.kt:286)
+	at com.xiamu.agent.V4Checks.memoryMissingHealthShowsDashesAndVoiceEmptyHint$lambda$32(V4Checks.kt:139)
+	at com.xiamu.agent.V4Checks.$r8$lambda$ElwCoSTobaOUAnLthAM-y_qKzYs(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda17.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.memoryMissingHealthShowsDashesAndVoiceEmptyHint(V4Checks.kt:137)
+
+INSTRUMENTATION_STATUS: stream=
+Error in memoryMissingHealthShowsDashesAndVoiceEmptyHint(com.xiamu.agent.V4Checks):
+java.lang.AssertionError: Failed to assert count of nodes.
+Reason: Expected '4' nodes but found '1' node that satisfies: (Text + EditableText contains '--' (ignoreCase: false))
+Node found:
+Node #1703 at (l=53.0, t=1094.0, r=1027.0, b=1721.0)px
+Focused = 'false'
+Text = '[健康, 睡眠, --, , 静息心率, --, , 步数, --, , 心率变异性, --, , 还没有健康数据]'
+Actions = [OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution, ClearTextSubstitution, GetTextLayoutResult]
+MergeDescendants = 'true'
+Has 16 siblings
+
+	at androidx.compose.ui.test.AssertionsKt.assertCountEquals(Assertions.kt:286)
+	at com.xiamu.agent.V4Checks.memoryMissingHealthShowsDashesAndVoiceEmptyHint$lambda$32(V4Checks.kt:139)
+	at com.xiamu.agent.V4Checks.$r8$lambda$ElwCoSTobaOUAnLthAM-y_qKzYs(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda17.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.memoryMissingHealthShowsDashesAndVoiceEmptyHint(V4Checks.kt:137)
+
+INSTRUMENTATION_STATUS: test=memoryMissingHealthShowsDashesAndVoiceEmptyHint
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=33
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=sitesUseOffscreenViewportCacheAndFailureFallback
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=33
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stack=androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V4Checks.waitText(V4Checks.kt:31)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback$lambda$15(V4Checks.kt:57)
+	at com.xiamu.agent.V4Checks.$r8$lambda$HI3sHtkKlQwpulqvG9wnT0u7gu0(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda34.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback(V4Checks.kt:55)
+
+INSTRUMENTATION_STATUS: stream=
+Error in sitesUseOffscreenViewportCacheAndFailureFallback(com.xiamu.agent.V4Checks):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V4Checks.waitText(V4Checks.kt:31)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback$lambda$15(V4Checks.kt:57)
+	at com.xiamu.agent.V4Checks.$r8$lambda$HI3sHtkKlQwpulqvG9wnT0u7gu0(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda34.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback(V4Checks.kt:55)
+
+INSTRUMENTATION_STATUS: test=sitesUseOffscreenViewportCacheAndFailureFallback
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=34
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=connectorSecretEditKeepsMaskedSecretAndDeleteNeedsConfirmation
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=34
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=connectorSecretEditKeepsMaskedSecretAndDeleteNeedsConfirmation
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=35
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=tasksCombineCurrentAndCompletedAndBriefJumpsToToday
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=35
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: Failed to inject touch input.
+Reason: Expected exactly '1' node but could not find any node that satisfies: (Text + EditableText contains '停下' (ignoreCase: false))
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.ActionsKt.performTouchInput(Actions.kt:394)
+	at androidx.compose.ui.test.Actions_androidKt.performClickImpl(Actions.android.kt:20)
+	at androidx.compose.ui.test.ActionsKt.performClick(Actions.kt:54)
+	at com.xiamu.agent.V4Checks.tasksCombineCurrentAndCompletedAndBriefJumpsToToday$lambda$28(V4Checks.kt:107)
+	at com.xiamu.agent.V4Checks.$r8$lambda$MypKW83AEIGKGO6B4BAQ7uiaCIM(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.tasksCombineCurrentAndCompletedAndBriefJumpsToToday(V4Checks.kt:103)
+
+INSTRUMENTATION_STATUS: stream=
+Error in tasksCombineCurrentAndCompletedAndBriefJumpsToToday(com.xiamu.agent.V4Checks):
+java.lang.AssertionError: Failed to inject touch input.
+Reason: Expected exactly '1' node but could not find any node that satisfies: (Text + EditableText contains '停下' (ignoreCase: false))
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.ActionsKt.performTouchInput(Actions.kt:394)
+	at androidx.compose.ui.test.Actions_androidKt.performClickImpl(Actions.android.kt:20)
+	at androidx.compose.ui.test.ActionsKt.performClick(Actions.kt:54)
+	at com.xiamu.agent.V4Checks.tasksCombineCurrentAndCompletedAndBriefJumpsToToday$lambda$28(V4Checks.kt:107)
+	at com.xiamu.agent.V4Checks.$r8$lambda$MypKW83AEIGKGO6B4BAQ7uiaCIM(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.tasksCombineCurrentAndCompletedAndBriefJumpsToToday(V4Checks.kt:103)
+
+INSTRUMENTATION_STATUS: test=tasksCombineCurrentAndCompletedAndBriefJumpsToToday
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=36
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=connectorCatalogOnlyShowsServicesAndCachesOfficialIcons
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=36
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=connectorCatalogOnlyShowsServicesAndCachesOfficialIcons
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=37
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=tasksScheduleHasTwoSegmentsAndRunsBriefAlarm
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=37
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=tasksScheduleHasTwoSegmentsAndRunsBriefAlarm
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=38
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=devicesOnlyRemoveOfflineAfterConfirmation
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=38
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=devicesOnlyRemoveOfflineAfterConfirmation
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=39
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=localCapabilitiesHaveBatchButtonAndNoOpenUrl
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=39
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=localCapabilitiesHaveBatchButtonAndNoOpenUrl
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=40
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=editQueuePreservesBubbleAndOnlyFinalTextEntersHistory
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=40
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=editQueuePreservesBubbleAndOnlyFinalTextEntersHistory
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=41
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=membershipUsesUserCallAndFirstChatWithoutModelRow
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=41
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=membershipUsesUserCallAndFirstChatWithoutModelRow
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=42
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=connectorFailureKeepsValuesThenSuccessfulAddReturnsToAccounts
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=42
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=connectorFailureKeepsValuesThenSuccessfulAddReturnsToAccounts
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=43
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=todayEmptyGetsTimeFromSchedule
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=43
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=todayEmptyGetsTimeFromSchedule
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=44
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=withdrawQueueUsesIdAndNeverWritesHistory
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=44
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=withdrawQueueUsesIdAndNeverWritesHistory
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=45
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=avatarAllShapesAndPalettesRoundTripThroughProfile
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V4Checks
+INSTRUMENTATION_STATUS: current=45
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=45
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=avatarAllShapesAndPalettesRoundTripThroughProfile
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 137.843
+There were 3 failures:
+1) memoryMissingHealthShowsDashesAndVoiceEmptyHint(com.xiamu.agent.V4Checks)
+java.lang.AssertionError: Failed to assert count of nodes.
+Reason: Expected '4' nodes but found '1' node that satisfies: (Text + EditableText contains '--' (ignoreCase: false))
+Node found:
+Node #1703 at (l=53.0, t=1094.0, r=1027.0, b=1721.0)px
+Focused = 'false'
+Text = '[健康, 睡眠, --, , 静息心率, --, , 步数, --, , 心率变异性, --, , 还没有健康数据]'
+Actions = [OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution, ClearTextSubstitution, GetTextLayoutResult]
+MergeDescendants = 'true'
+Has 16 siblings
+
+	at androidx.compose.ui.test.AssertionsKt.assertCountEquals(Assertions.kt:286)
+	at com.xiamu.agent.V4Checks.memoryMissingHealthShowsDashesAndVoiceEmptyHint$lambda$32(V4Checks.kt:139)
+	at com.xiamu.agent.V4Checks.$r8$lambda$ElwCoSTobaOUAnLthAM-y_qKzYs(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda17.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.memoryMissingHealthShowsDashesAndVoiceEmptyHint(V4Checks.kt:137)
+2) sitesUseOffscreenViewportCacheAndFailureFallback(com.xiamu.agent.V4Checks)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V4Checks.waitText(V4Checks.kt:31)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback$lambda$15(V4Checks.kt:57)
+	at com.xiamu.agent.V4Checks.$r8$lambda$HI3sHtkKlQwpulqvG9wnT0u7gu0(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda34.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.sitesUseOffscreenViewportCacheAndFailureFallback(V4Checks.kt:55)
+3) tasksCombineCurrentAndCompletedAndBriefJumpsToToday(com.xiamu.agent.V4Checks)
+java.lang.AssertionError: Failed to inject touch input.
+Reason: Expected exactly '1' node but could not find any node that satisfies: (Text + EditableText contains '停下' (ignoreCase: false))
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.ActionsKt.performTouchInput(Actions.kt:394)
+	at androidx.compose.ui.test.Actions_androidKt.performClickImpl(Actions.android.kt:20)
+	at androidx.compose.ui.test.ActionsKt.performClick(Actions.kt:54)
+	at com.xiamu.agent.V4Checks.tasksCombineCurrentAndCompletedAndBriefJumpsToToday$lambda$28(V4Checks.kt:107)
+	at com.xiamu.agent.V4Checks.$r8$lambda$MypKW83AEIGKGO6B4BAQ7uiaCIM(Unknown Source:0)
+	at com.xiamu.agent.V4Checks$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V4Checks.review(V4Checks.kt:27)
+	at com.xiamu.agent.V4Checks.tasksCombineCurrentAndCompletedAndBriefJumpsToToday(V4Checks.kt:103)
+
+FAILURES!!!
+Tests run: 45,  Failures: 3
+
+
+INSTRUMENTATION_CODE: -1

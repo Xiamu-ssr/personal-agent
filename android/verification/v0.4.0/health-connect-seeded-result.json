@@ -1,0 +1,14 @@
+{
+  "source": "health_connect",
+  "from": "2026-10-11",
+  "days": 1,
+  "items": [
+    {
+      "date": "2026-10-11",
+      "steps": 1250,
+      "sleep_minutes": 60,
+      "heart_rate_bpm": 72,
+      "hrv_ms": 42
+    }
+  ]
+}

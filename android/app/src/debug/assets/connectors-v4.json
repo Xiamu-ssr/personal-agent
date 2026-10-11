@@ -1,0 +1,222 @@
+{
+  "cloud": {
+    "id": "cloud",
+    "name": "云电脑",
+    "kind": "cloud",
+    "online": true,
+    "installed": [
+      {
+        "name": "qq-mail",
+        "title": "QQ 邮箱",
+        "description": "读取QQ 邮箱里的邮件，只读",
+        "icon": "icon.png",
+        "multiAccount": true,
+        "fields": [
+          {
+            "key": "address",
+            "label": "邮箱地址",
+            "type": "text",
+            "placeholder": "name@example.com"
+          },
+          {
+            "key": "password",
+            "label": "授权码",
+            "type": "secret",
+            "help": "QQ 邮箱网页版 → 设置 → 开启 IMAP → 生成授权码"
+          }
+        ],
+        "accounts": [
+          {
+            "id": "qq1",
+            "label": "个人 QQ 邮箱",
+            "status": "ok",
+            "error": null,
+            "checkedAt": 0,
+            "values": {
+              "address": "fixture@qq.com",
+              "password": "••••"
+            }
+          },
+          {
+            "id": "qq2",
+            "label": "工作 QQ 邮箱",
+            "status": "error",
+            "error": "授权码不对或没开 IMAP",
+            "checkedAt": 0,
+            "values": {
+              "address": "work@qq.com",
+              "password": "••••"
+            }
+          }
+        ]
+      }
+    ],
+    "catalog": [
+      {
+        "name": "netease-163",
+        "title": "163 邮箱",
+        "description": "读取163 邮箱里的邮件，只读",
+        "icon": "icon.png",
+        "multiAccount": true,
+        "fields": [
+          {
+            "key": "address",
+            "label": "邮箱地址",
+            "type": "text",
+            "placeholder": "name@example.com"
+          },
+          {
+            "key": "password",
+            "label": "授权码",
+            "type": "secret",
+            "help": "163 邮箱网页版 → 设置 → 开启 IMAP → 生成授权码"
+          }
+        ]
+      },
+      {
+        "name": "gmail",
+        "title": "Gmail",
+        "description": "读取Gmail里的邮件，只读",
+        "icon": "icon.png",
+        "multiAccount": true,
+        "fields": [
+          {
+            "key": "address",
+            "label": "邮箱地址",
+            "type": "text",
+            "placeholder": "name@example.com"
+          },
+          {
+            "key": "password",
+            "label": "授权码",
+            "type": "secret",
+            "help": "Gmail网页版 → 设置 → 开启 IMAP → 生成授权码"
+          }
+        ]
+      },
+      {
+        "name": "imap",
+        "title": "其他邮箱",
+        "description": "读取其他邮箱里的邮件，只读",
+        "icon": "icon.png",
+        "multiAccount": true,
+        "fields": [
+          {
+            "key": "host",
+            "label": "IMAP 服务器",
+            "type": "text",
+            "placeholder": "imap.example.com"
+          },
+          {
+            "key": "port",
+            "label": "端口",
+            "type": "number",
+            "default": 993
+          },
+          {
+            "key": "address",
+            "label": "邮箱地址",
+            "type": "text",
+            "placeholder": "name@example.com"
+          },
+          {
+            "key": "password",
+            "label": "授权码",
+            "type": "secret",
+            "help": "其他邮箱网页版 → 设置 → 开启 IMAP → 生成授权码"
+          }
+        ]
+      },
+      {
+        "name": "tavily",
+        "title": "Tavily",
+        "description": "深入研究与网页提取",
+        "icon": "icon.png",
+        "multiAccount": false,
+        "fields": [
+          {
+            "key": "api_key",
+            "label": "API Key",
+            "type": "secret",
+            "help": "在 Tavily 控制台生成 API Key"
+          }
+        ]
+      },
+      {
+        "name": "weread",
+        "title": "微信读书",
+        "description": "书架、阅读统计、划线和想法",
+        "icon": "icon.png",
+        "multiAccount": false,
+        "fields": [
+          {
+            "key": "api_key",
+            "label": "API Key",
+            "type": "secret",
+            "help": "微信读书 → 设置 → Agent Gateway → 生成个人 API Key"
+          }
+        ]
+      },
+      {
+        "name": "fixture-options",
+        "title": "表单选项示例",
+        "description": "本地测试 select 和 showIf",
+        "icon": "icon.png",
+        "multiAccount": true,
+        "fields": [
+          {
+            "key": "mode",
+            "label": "读取方式",
+            "type": "select",
+            "default": "default",
+            "options": [
+              {
+                "value": "default",
+                "label": "默认"
+              },
+              {
+                "value": "manual",
+                "label": "手动"
+              }
+            ]
+          },
+          {
+            "key": "host",
+            "label": "服务器",
+            "type": "text",
+            "showIf": {
+              "mode": "manual"
+            }
+          },
+          {
+            "key": "port",
+            "label": "端口",
+            "type": "number",
+            "default": 993,
+            "showIf": {
+              "mode": "manual"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "devices": [
+    {
+      "id": "fixture-offline",
+      "name": "旧笔记本",
+      "kind": "mac",
+      "online": false,
+      "lastSeen": 0,
+      "capabilities": []
+    },
+    {
+      "id": "fixture-online",
+      "name": "工作电脑",
+      "kind": "mac",
+      "online": true,
+      "lastSeen": 0,
+      "capabilities": []
+    }
+  ]
+}

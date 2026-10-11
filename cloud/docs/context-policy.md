@@ -1,8 +1,8 @@
-# 云端上下文与压缩恢复（修订第 2 轮）
+# 云端上下文与压缩恢复（v0.4，200K 窗口）
 
 本轮只修改 cloud，没有提交、部署或访问服务器。本地审计版本是 Agent SDK **0.3.295**，附带 Claude Code **2.1.295**（manifest commit `07e8f67ea3282bf154a9e05673a0942b1b173cef`）。package 和 lock 都已固定 SDK 版本，升级时应重新核对本页的内部算法。
 
-改动文件：`src/agent.mjs`、`src/config.mjs`、`src/context-policy.mjs`、`src/conversation-recovery.mjs`、`scripts/compact-instructions.mjs`、`scripts/probe-model.mjs`、`test/harness.test.mjs`、`test/context-policy.test.mjs`、`test/recovery.test.mjs`、`test/sdk-context.test.mjs`、`test/fake-anthropic.mjs`、`package.json`、`package-lock.json`，以及本报告。spec、Mac、Android 和部署配置均未修改。
+这里保留此前上下文算法的审计依据，默认参数已更新为 v0.4；本次改动文件、协议和验证结果见 [v04-cloud.md](v04-cloud.md)。
 
 ## 32K 的来源与 thinking
 
@@ -33,20 +33,20 @@ T = min(floor(E * P / 100), E - 13000)
 
 | 项目 | 值 |
 | --- | ---: |
-| 总输入价格目标 | 100000 |
+| 输入预算（触发点 + 增长余量） | 172000 |
 | 工具/新消息增长余量 | 5000 |
-| 实际软触发点 T | **95000** |
+| 实际软触发点 T | **167000** |
 | Haiku 5.5 模型窗口 C | 1000000 |
 | 输出上限 O | 128000 |
-| 策略窗口 A | **128000** |
-| 有效窗口 E | 108000 |
+| 策略窗口 A | **200000** |
+| 有效窗口 E | 180000 |
 | 百分比 P | 100 |
 
-因此 `128000 - 20000 - 13000 = 95000`。不是把上下文窗口设为 100K，也不是把 128K 输出全额从策略窗口扣除。较小输出模型用 `min(O,20000)` 重新计算 A，保持 T=95000。
+因此默认 CLI 策略窗口正好 200000，`200000 - 20000 - 13000 = 167000`。输出上限仍为 128000，CLI 只预留 20000。输出上限低于 20000 的模型用 `min(O,20000)` 重新计算 A，保持 T=167000。
 
 输入是 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`，系统提示词和已发送工具定义已经在这些数中，不额外相加。CLI 的 `Pre/FI/dLe/ym` 取最近模型调用的 usage，包含其输出（下一次会重发成历史），然后估算之后新增消息/工具结果的 tokens；有服务端 iterations 时取最后一个模型 message/fallback_message iteration，排除 compaction/advisor，而不是累计所有调用或 SDK result 的累计 usage。清除/裁剪还会有内部修正量。
 
-所以这是 **95000 的下一请求输入估计线**，不是在每次请求前调用精确 token-count API 的硬收费闸门。大工具结果、新用户消息、长模型输出和估算误差可以跨过 100K。CLI 还有 `compact` 本身和 `RNe` 的内部助手源豁免（prompt_suggestion、away_summary、agent_summary、hook_prompt）；普通 SDK 主会话及 Agent tool 子 agent 的触发已实测，不能将配置视为所有内部辅助 HTTP 请求的硬拦截。压缩请求还会附加摘要指令并携带待整理历史；尤其首次恢复线上积累的旧会话时，它本身可能超过 100K，**那一次仍可能按高价档收费**。
+所以这是 **167000 的下一请求输入估计线**，不是在每次请求前调用精确 token-count API 的硬收费闸门。大工具结果、新用户消息、长模型输出和估算误差可以跨过触发点。CLI 还有 `compact` 本身和 `RNe` 的内部助手源豁免（prompt_suggestion、away_summary、agent_summary、hook_prompt）；普通 SDK 主会话及 Agent tool 子 agent 的触发已实测，不能将配置视为所有内部辅助 HTTP 请求的硬拦截。压缩请求还会附加摘要指令并携带待整理历史。按 v0.4 的窗口决定，超过 100K 的请求可能进入 Haiku 高价档，不再以低价档边界作为压缩目标。
 
 ## 精炼摘要与恢复
 
@@ -62,20 +62,20 @@ CLI 有输入过长自救：`zir()` 最多重试 3 次，`men/Sye` 按超限差�
 
 ## 配置与上线核验
 
-新增配置：`AGENT_MAX_OUTPUT_TOKENS`（缺省按模型表）、`AGENT_MODEL_CANONICAL`（自定义网关名的能力映射）、`AGENT_CONTEXT_INPUT_LIMIT=100000`、`AGENT_CONTEXT_HEADROOM=5000`、`AGENT_COMPACT_EFFORT=low`。业务 `AGENT_EFFORT` 保持原值。未知模型必须显式给输出值；已知模型不允许配置超过正常 Messages 上限。
+配置：`AGENT_MAX_OUTPUT_TOKENS`（缺省按模型表）、`AGENT_MODEL_CANONICAL`（自定义网关名的能力映射）、`AGENT_CONTEXT_INPUT_LIMIT=172000`、`AGENT_CONTEXT_HEADROOM=5000`、`AGENT_COMPACT_EFFORT=low`。若生产 env 有旧的 INPUT_LIMIT/HEADROOM 覆盖，更新这两项或删除覆盖以采用新默认值。业务 `AGENT_EFFORT` 保持原值。未知模型必须显式给输出值；已知模型不允许配置超过正常 Messages 上限。
 
-本地已验证真实 SDK 子进程继承 env、普通/隔离/子 agent 发出 128K、93K 缓存合计不触发/95K 以上触发、摘要 low/之后恢复 max、中文摘要指令、输入过长裁剪重试，以及真实 resume → 摘要输出耗尽 → 新 session → 自动继续。原待办内容、其它 state 字段、600 权限和错误翻译都有断言；连接器原有回归也运行。
+本地已验证真实 SDK 子进程继承 env、普通/隔离/子 agent 发出 128K、165K 缓存合计不触发/167K 以上触发、摘要 low/之后恢复 max、中文摘要指令、输入过长裁剪重试，以及真实 resume → 摘要输出耗尽 → 新 session → 自动继续。原待办内容、其它 state 字段、600 权限和错误翻译都有断言；连接器原有回归也运行。
 
-`npm run check` 与 `npm test` 在本地 Node 20.19.4 和 Node 24.16.0 下均通过，38/38 项。本地是 macOS arm64，Linux 生产运行和真实长历史/摘要质量尚未验收。
+v0.4 的 `npm run check` 与 `npm test` 在本地 Node 26.5.0 通过，69/69 项。本地是 macOS arm64，Linux 生产运行和真实长历史/摘要质量尚未验收。
 
 真实 ZenMux 只尝试 **1 次**，短用户消息、128000 输出参数、adaptive + low。返回 **HTTP 400**，未返回 usage 或生成文本；当次请求还包含换行 stop sequence，之后探测脚本已简化去掉它，但没有再发请求。未采集到当次错误说明，因此 **不能确认网关接受 128K，也不能把 400 归因于该上限**。输入文本约数十 tokens，服务端未给出实际 token/费用，不能声称验证了扣费。脚本现在会遮罩并输出错误说明，供 Claude 在相同生产配置下核对。
 
 Claude 上线时需要：
 
-1. 用 lock 安装，确认 SDK 0.3.295/CLI 2.1.295。服务首次启动查看 `[sdk env] max_output=128000 compact_window=128000 compact_pct=100`，不要打印整个环境。
+1. 用 lock 安装，确认 SDK 0.3.295/CLI 2.1.295。服务首次启动查看 `[sdk env] max_output=128000 compact_window=200000 compact_pct=100`，不要打印整个环境。
 2. 用服务同一组模型/网关环境执行 `node scripts/probe-model.mjs`，确认 status=200、accepted=true，检查极短回复的 usage。脚本只请求 OK、effort=low。若仍失败，先按遮罩后的错误说明处理兼容/授权问题，不能把本地 mock 当网关验收。
 3. 对已卡死主会话发送一句短消息，观察成功压缩，或中文恢复提示及新 session；确认能继续聊天并正确读取原记忆/待办。
-4. 随实际使用检查 `[context]` / `[compact]` 元数据与网关该次 usage，确认缓存合计口径、接近 95K 的整理及整理后输入回落。Linux/ZenMux 集成和真实长历史摘要质量仍需上线验收，无需为了验收生成 128K 输出或灌入真实巨量历史。
+4. 随实际使用检查 `[context]` / `[compact]` 元数据与网关该次 usage，确认缓存合计口径、接近 167K 的整理及整理后输入回落。Linux/ZenMux 集成和真实长历史摘要质量仍需上线验收，无需为了验收生成 128K 输出或灌入真实巨量历史。
 
 ## 本地 CLI 定位依据
 

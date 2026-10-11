@@ -1,0 +1,129 @@
+安卓 0.4.0 本地交付报告
+验收日期：2026-10-11
+版本：versionName 0.4.0 / versionCode 6（原为 5）
+范围：仅 personal-agent/android/**。未提交、推送、发布、部署，也未连接真实云端或真机。
+
+已实现
+- 聊天胶囊只显示头像、豆豆、状态点；忙时金色呼吸。排队气泡长按撤回/修改，以服务端 id 和 queue_update 为准；too_late 提示“豆豆已经在看这条了”。本地假服务验证撤回不写历史、修改只在开始处理时写最终文本。按新协议恢复 hello.queued，并防止 /api/history 刷新清掉尚未派发的气泡；补充真实 WS 重连检查。
+- 今日为简报/站点两个分段。GET /api/briefs 一次获取解析好的 JSON，原生绘制 timeline、tiles、metrics、list、note、action；跳过未知/缺失块，不读旧 HTML 简报。卡片消息和任务产出可跳转今日并滚到对应简报；action 发送消息并切换聊天。
+- 站点读取 title、description，按服务器命名空间 + 路径 + mtime 缓存首屏 PNG。WebView 使用手机实际宽高，在不显示的原生层渲染，捕获后销毁；加载失败显示渐变和首字。已实际查看缓存原图和页面截图。
+- 任务/定时两个分段；正在运行的后台任务显示运行时间、单独停止；停止 ACK 不提前移除，等服务端快照。完成项按今天/近7天/更早分组，简报跳今日，其余文件进 WebView。定时任务保留 v2 行为，移除推荐与底部提示。
+- 记忆显示 userCall、总档预览/指针标签/完整总档、四项健康格、语音数量和最近时间、非空分类文件夹。无健康数据显示四个 -- 和缺失说明。
+- 豆豆使用 Canvas 剪影、天空渐变、柔光和云层；4 轮廓 × 4 配色，profile GET/PUT 保存。AvatarArt.kt 注释列出了统一坐标、Bezier、颜色、渐变、柔光和云层参数，供 Mac 复用。陪伴日期取 firstChat；日记为按星期配色且倾斜 ±1.5° 的便签、两列日记网格和 Markdown 详情。
+- 设置顶部会员卡以 userCall/firstChat 显示“Pro”和陪伴天数，无点击动作；移除模型一行。
+- 连接应用云端只解析 installed/catalog，删除 builtin/custom 和旧邮箱 preset 专页。所有连接器同一个详情/表单；支持多账号、四种字段、secret 显隐、help、showIf、验证等待、错误保留内容、重测、编辑和删除。图标经 /api/connectors/<name>/icon 下载并缓存。本地假服务官方图标来源见 debug/assets/connector-icons/SOURCES.txt。离线设备移除需确认。
+- 本机能力图标通过 PackageManager 获取系统/应用真实图标，未安装对应应用时用 Material 图标；不手画图标。删除 open_url；notify 增加可选 http(s) url 的通知点击 Intent。
+- health 优先 Health Connect，读取步数、睡眠、心率、HRV；按日聚合步数/睡眠，心率/HRV 分页读取。不可用、未授权、后台无法读或无数据时进入 TYPE_STEP_COUNTER 兜底。传感器只累计开启后观察到的增量，跨日/重启重置基线，返回 partial 和 observedSince，不将缺失数据写成零。
+- Manifest 包含健康四类读取、可选后台读取、计步权限、Health Connect queries 和授权说明 intent/alias；debug 测试用写入权限不进入 release。一键开启把运行时权限合并成一次 RequestMultiplePermissions，随后打开 Health Connect 授权页；首次引导和本机页均有入口，能力仍可单独开关。
+
+实际检查
+1. ./gradlew testDebugUnitTest assembleDebug assembleRelease assembleDebugAndroidTest：BUILD SUCCESSFUL。
+   JVM 单元测试 24 项，0 失败/错误（ChatState 15、Queue 6、StepLedger 3）。
+2. 唯一 ADB 目标 emulator-5554，emu avd name 确认为 pa35，Android 35。
+   安装隔离的 com.xiamu.agent.checks / .checks.test；测试全部访问 app 内进程 loopback 假服务。
+   am instrument：OK (47 tests)，143.996 秒。覆盖内容解析、排队、任务协议、连接器增改删/失败、媒体/设备回归、页面和健康读取。见 verification/v0.4.0/instrumentation.log。
+3. health 双路径：
+   - pa35 上 Health Connect 实际可用，真实系统接口读取本地写入的四条测试记录：1250 步、60 分钟睡眠、72 bpm、42 ms HRV。
+   - install -g 不会通过授权 UI 将测试数据写入方加入 Activity/Sleep 的聚合优先来源；androidTest 用系统测试 API 暂时加入，finally 恢复原列表。四条记录在 finally 删除。此辅助代码仅在测试 APK，不进入发布 APK。
+   - 无健康记录时，实际 health 调用返回 source=step_counter、items=[]，原因“Health Connect 没有数据；这台设备没有计步传感器”。另以本地观察样本验证重启前后增量累计 135 步并持久化 partial；这是样本输入，不是模拟器硬件产生的步数。
+   - 证据：health-device-evidence.json、health-connect-seeded-result.json、health-connect-seeded-evidence.json、health-fallback.png。
+4. release 使用现有 ~/.personal-agent/signing.properties 配置及现有 keystore，apksigner verify 成功。发布 Manifest 为 com.xiamu.agent，0.4.0 / 6；没有测试 Activity 或健康 WRITE 权限；APK 内没有本地 fixture 资源。
+5. git diff --check -- android 通过；复验 Python 脚本语法检查通过。
+6. 截图导出后已执行 adb -s emulator-5554 emu kill，模拟器已关闭。
+
+截图覆盖（全部在 verification/v0.4.0/）
+- 今日简报、多卡块、空状态、站点：today-brief-overview、today-brief-topic、today-empty、today-sites、site-webview。
+- 排队撤回/修改/来不及：queue-before、queue-menu、queue-removed、queue-edit-dialog、queue-edited、queue-too-late、queue-reconnected-removed。
+- 合并任务、停止等待、定时：tasks-combined、task-stopping、tasks-schedule。
+- 记忆健康有/无、文件夹、完整总档：memory-health、memory-no-health、memory-folders、memory-profile。
+- 四种轮廓同为晨雾蓝、便签日记：dou-bean-mist、dou-girl-mist、dou-boy-mist、dou-cat-mist、diary-grid。
+- 会员卡：settings-membership。
+- 连接器/设备/本机：connectors-cloud、connector-detail、connector-form-failure、connector-account-added、connector-select-form、device-remove-confirmation、connectors-local。
+- 健康兜底：health-fallback。另保留 site-cache-inspection.png，为实际 WebView 首屏缓存原图。
+
+已修复的检查失败
+- Health Connect 1.1.0 的 AAR 要求 compileSdk 36 / AGP >=8.9.1：升级 compileSdk 至 36 和 AGP 至 8.9.1，targetSdk 仍为 35，现有 Gradle 8.11.1 保留。
+- 健康聚合测试初次因测试写入方未进入优先来源而没有步数/睡眠，改为保存/恢复测试优先列表。
+- 排队、简报发送等待异步事件；截图增加原生帧等待；记忆/缩略图节点使用未合并语义树；假服务补充 favicon 响应。最终 47 项全部通过。
+- 中间失败日志保留在同目录，最终结果以 instrumentation.log / build.log 为准。
+
+剩余边界与需要后续验证的内容
+- 未对真实云端做聊天、简报、profile 跨端同步、连接器账号登录或任务集成。新接口已按规格由本地假服务覆盖，待 Claude 集成后复验。
+- pa35 无 TYPE_STEP_COUNTER，无法验证实体传感器事件和长时间后台采样。实际兜底返回和本地增量账本已验证；真机的传感器、后台电量/权限回收、荣耀等厂商向 Health Connect 同步还需用户设备验证。
+- 按 .codex-handoff/v04-common.md 的“不点系统安全或授权弹窗”，本轮未点击系统授权页。install -g 只为隔离的验收 APK 授予测试权限；一键开启的真实连续弹窗及 Health Connect 授权 UI 需用户实际操作验证。未验证真实通知点击打开外部浏览器。
+- 当前协议明确保留隔离补读/夜间整理的 job 协议；/api/jobs running 只有 label/started，没有 SDK task id 或对应停止接口，这类维护项显示进行中。主查询的后台任务以 task id 单独停止，已实测；主查询 interrupt 不代替隔离维护停止。
+- 未安装 release APK 到真机，未发布。签名文件已存在，无需创建新签名配置。
+
+复验入口
+- 构建：./gradlew testDebugUnitTest assembleDebug assembleRelease assembleDebugAndroidTest
+- 仅在 pa35 / emulator-5554 已开启时：python3 scripts/review_v04.py verify
+  会运行本地检查、导出证据并在 finally 关闭模拟器；不启动真机，不接真实服务。
+- 查看单页：python3 scripts/review_v04.py open today（其他场景见 --help 及源码）；截图：python3 scripts/review_v04.py capture <name>。
+- 签名校验：/opt/homebrew/share/android-commandlinetools/build-tools/35.0.0/apksigner verify app/build/outputs/apk/release/app-release.apk
+
+本地产物
+- release：app/build/outputs/apk/release/app-release.apk
+- debug：app/build/outputs/apk/debug/app-debug.apk
+- androidTest：app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+- release SHA256：54fd42c4d8e91717e92fd49662e779157137d93b683d82ad63aadca3adff3c6f
+
+改动文件（M 修改、A 新增、D 删除；路径相对于 android/；保留其他 worker 的文件）
+A .gitignore
+A app/src/androidTest/java/com/xiamu/agent/ContentChecks.kt
+A app/src/androidTest/java/com/xiamu/agent/HealthChecks.kt
+A app/src/androidTest/java/com/xiamu/agent/HealthTestPriority.kt
+A app/src/androidTest/java/com/xiamu/agent/V4Checks.kt
+A app/src/debug/assets/connector-icons/SOURCES.txt
+A app/src/debug/assets/connector-icons/gmail.png
+A app/src/debug/assets/connector-icons/netease-163.png
+A app/src/debug/assets/connector-icons/qq-mail.png
+A app/src/debug/assets/connector-icons/tavily.png
+A app/src/debug/assets/connector-icons/weread.png
+A app/src/debug/assets/connectors-v4.json
+A app/src/debug/java/com/xiamu/agent/V4Fixture.kt
+A app/src/debug/java/com/xiamu/agent/V4ReviewActivity.kt
+A app/src/main/java/com/xiamu/agent/Briefs.kt
+A app/src/main/java/com/xiamu/agent/device/Health.kt
+A app/src/main/java/com/xiamu/agent/device/HealthRationaleActivity.kt
+A app/src/main/java/com/xiamu/agent/device/StepLedger.kt
+A app/src/main/java/com/xiamu/agent/ui/AppIcons.kt
+A app/src/main/java/com/xiamu/agent/ui/AvatarArt.kt
+A app/src/main/java/com/xiamu/agent/ui/CapabilityAuthorization.kt
+A app/src/main/java/com/xiamu/agent/ui/Doudou.kt
+A app/src/main/java/com/xiamu/agent/ui/Membership.kt
+A app/src/main/java/com/xiamu/agent/ui/Memory.kt
+A app/src/main/java/com/xiamu/agent/ui/Sites.kt
+A app/src/main/java/com/xiamu/agent/ui/Today.kt
+A app/src/test/java/com/xiamu/agent/QueueTest.kt
+A app/src/test/java/com/xiamu/agent/device/StepLedgerTest.kt
+A scripts/review_v04.py
+D app/src/androidTest/java/com/xiamu/agent/ConnectorChecks.kt
+D app/src/debug/assets/connector-accounts.json
+D app/src/debug/java/com/xiamu/agent/ConnectorReviewActivity.kt
+D app/src/debug/java/com/xiamu/agent/FixtureConnectors.kt
+M app/build.gradle.kts
+M app/src/androidTest/java/com/xiamu/agent/ConnectorApiChecks.kt
+M app/src/androidTest/java/com/xiamu/agent/TaskChecks.kt
+M app/src/debug/AndroidManifest.xml
+M app/src/debug/assets/chat-tasks.json
+M app/src/debug/assets/connectors.json
+M app/src/debug/java/com/xiamu/agent/TaskFixture.kt
+M app/src/main/AndroidManifest.xml
+M app/src/main/java/com/xiamu/agent/Api.kt
+M app/src/main/java/com/xiamu/agent/Chat.kt
+M app/src/main/java/com/xiamu/agent/ChatState.kt
+M app/src/main/java/com/xiamu/agent/MainActivity.kt
+M app/src/main/java/com/xiamu/agent/connectors/Connectors.kt
+M app/src/main/java/com/xiamu/agent/device/Capabilities.kt
+M app/src/main/java/com/xiamu/agent/device/DeviceService.kt
+M app/src/main/java/com/xiamu/agent/ui/Account.kt
+M app/src/main/java/com/xiamu/agent/ui/ChatScreen.kt
+M app/src/main/java/com/xiamu/agent/ui/Connections.kt
+M app/src/main/java/com/xiamu/agent/ui/ConnectorDetail.kt
+M app/src/main/java/com/xiamu/agent/ui/Pages.kt
+M app/src/main/java/com/xiamu/agent/ui/Style.kt
+M app/src/main/java/com/xiamu/agent/ui/Tabs.kt
+M build.gradle.kts
+M scripts/review_connectors.py
+
+新验收资源：verification/v0.4.0/（33 张页面截图 + 1 张站点缓存原图、3 份健康 JSON、检查日志）。

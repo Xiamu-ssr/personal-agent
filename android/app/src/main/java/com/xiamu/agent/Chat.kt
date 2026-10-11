@@ -110,6 +110,15 @@ object Chat {
         if (ws?.send(JSONObject().put("t", "interrupt").toString()) != true) error.value = "连接断开了，没能停止回复"
     }
 
+    fun unqueue(id: String) = queueRequest("unqueue", id)
+    fun editQueued(id: String, text: String) = queueRequest("edit_queued", id, text)
+    private fun queueRequest(type: String, id: String, text: String? = null) {
+        if (id.isBlank()) return
+        val request = JSONObject().put("t", type).put("id", id)
+        if (text != null) request.put("text", text)
+        if (!connected.value || ws?.send(request.toString()) != true) error.value = "连接断开了，请重新连接后再试"
+    }
+
     fun stopTask(id: String) {
         val previousError = state.background.tasks.firstOrNull { it.id == id }?.error
         if (!state.background.requestStop(id)) return
@@ -125,9 +134,9 @@ object Chat {
     }
 
     private fun parseItem(h: JSONObject): ChatItem? = when (h.optString("role")) {
-        "user" -> incomingUser(h.optString("text"), h.optString("source"), h.optJSONArray("attachments").objects().map(Attachment::from), h.optLong("ts"))
+        "user" -> incomingUser(h.optString("text"), h.optString("source"), h.optJSONArray("attachments").objects().map(Attachment::from), h.optLong("ts"), h.optString("id"))
         "assistant" -> ChatItem.Assistant(h.optString("text"), h.optLong("ts"))
-        "card" -> ChatItem.Card(h.optString("title"), h.optString("label"), h.optJSONArray("outputs").strings().firstOrNull(), h.optLong("ts"))
+        "card" -> ChatItem.Card(h.optString("title"), h.optString("label"), h.optString("path").ifBlank { h.optJSONArray("outputs").strings().firstOrNull() }, h.optLong("ts"))
         else -> null
     }
 
@@ -174,8 +183,7 @@ object Chat {
         io.launch {
             runCatching { Api.getJson("/api/history?n=200") }.onSuccess { j ->
                 if (session != generation || revision != historyRevision) return@onSuccess
-                items.clear()
-                j.optJSONArray("items").objects().mapNotNullTo(items, ::parseItem)
+                state.replaceHistory(j.optJSONArray("items").objects().mapNotNull(::parseItem))
                 historyVersion.intValue++
             }
         }
@@ -187,16 +195,23 @@ object Chat {
                 generation++
                 tasksRevision++
                 historyRevision++
-                state.hello(m.optJSONArray("history").objects().mapNotNull(::parseItem), m.optBoolean("busy"), m.optString("reason"), parseTasks(m.optJSONArray("tasks")))
+                state.hello(m.optJSONArray("history").objects().mapNotNull(::parseItem), m.optBoolean("busy"), m.optString("reason"), parseTasks(m.optJSONArray("tasks")),
+                    m.optJSONArray("queued").objects().map { incomingUser(it.optString("text"),it.optString("source"),it.optJSONArray("attachments").objects().map(Attachment::from),it.optLong("ts"),it.optString("id")) })
                 connected.value = true
                 historyVersion.intValue++
                 running.clear()
                 refreshRunning()
                 refreshHistory()
                 filesVersion.intValue++
+                io.launch { runCatching { Api.profile() }.onSuccess { com.xiamu.agent.ui.Appearance.choice.value = it } }
             }
             "user" -> {
-                state.user(m.optString("text"), m.optString("source"), m.optJSONArray("attachments").objects().map(Attachment::from), m.optLong("ts", System.currentTimeMillis()))
+                state.user(m.optString("text"), m.optString("source"), m.optJSONArray("attachments").objects().map(Attachment::from), m.optLong("ts", System.currentTimeMillis()), m.optString("id"))
+                historyRevision++
+            }
+            "queue_update" -> {
+                val notice = state.queueUpdate(m.optString("id"), m.optString("state"), m.opt("text") as? String)
+                if (notice.isNotBlank()) error.value = notice
                 historyRevision++
             }
             "status" -> {
@@ -241,7 +256,7 @@ object Chat {
                 val label = m.optString("label")
                 running.removeAll { it.id == "job:$label" }
                 if (m.optString("phase") == "done") {
-                    val out = m.optJSONArray("outputs").strings()
+                    val out = listOf(m.optString("path")).filter { it.isNotBlank() } + m.optJSONArray("outputs").strings()
                     if (out.isNotEmpty()) items.add(ChatItem.Card(m.optString("title"), label, out.first(), System.currentTimeMillis()))
                     filesVersion.intValue++
                     historyRevision++
