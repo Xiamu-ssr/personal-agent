@@ -20,8 +20,8 @@ import { tailJsonl, dateIn } from "../src/store.mjs";
 import { runScheduledTask } from "../src/scheduler.mjs";
 import { validateBrief } from "../src/briefs.mjs";
 
-const brief = (title) => ({ v: 1, name: "测试简报", time: "2026-10-11T07:30:00+08:00", cards: [{ chip: "10月11日 周日", title }] });
-const writeBrief = (rel, value) => { const p = path.join(config.root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(value)); };
+const brief = (title) => `<section class="card"><h1 class="title">${title}</h1></section>`;
+const writeBrief = (rel, value) => { const p = path.join(config.root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, typeof value === "string" ? value : "invalid"); };
 async function httpFixture(t, runtime) {
   const server = startServer({ ...runtime, log() {}, listen: { port: 0, host: "127.0.0.1" } });
   await once(server, "listening");
@@ -42,34 +42,34 @@ async function httpFixture(t, runtime) {
   return { url, request, app, headers };
 }
 
-test("real CLI main/fork/isolated Write+Edit get Chinese brief errors, repair JSON and complete with valid path cards", { timeout: 45_000 }, async (t) => {
+test("real CLI main/fork/isolated Write+Edit get Chinese brief errors, repair HTML and complete with valid path cards", { timeout: 45_000 }, async (t) => {
   const states = new Map();
-  const paths = Object.fromEntries(["MAIN", "FORK", "ISOLATED"].map((mode) => [mode, `data/briefs/2026-10-11/native-${mode}.json`]));
+  const paths = Object.fromEntries(["MAIN", "FORK", "ISOLATED"].map((mode) => [mode, `data/briefs/2026-10-11/native-${mode}.html`]));
   const api = await fakeAnthropic((body) => {
-    if (!isFork(body) && hasInput(body, "[定时]") && !hasInput(body, "task-notification")) {
+    if (!isFork(body) && hasInput(body, "FORK_WRITE") && !hasInput(body, "task-notification")) {
       if (!resultFor(body, "v04_fork")) return toolReply("v04_fork", "Agent", { subagent_type: "fork", run_in_background: true, description: "测试简报", prompt: "FORK_WRITE: write and fix the brief." });
       return textReply("已派到后台");
     }
-    if (hasInput(body, "task-notification")) return textReply("后台 JSON 完成");
+    if (hasInput(body, "task-notification")) return textReply("后台 HTML 完成");
     const mode = isFork(body) ? "FORK" : hasInput(body, "ISOLATED_WRITE") ? "ISOLATED" : "MAIN";
     const step = (states.get(mode) || 0) + 1; states.set(mode, step);
-    if (step === 1) return toolReply(`bad_${mode}`, "Write", { file_path: path.join(config.root, paths[mode]), content: JSON.stringify(brief("文".repeat(29))) });
+    if (step === 1) return toolReply(`bad_${mode}`, "Write", { file_path: path.join(config.root, paths[mode]), content: brief("文".repeat(500)) });
     if (step === 2) {
-      assert.match(JSON.stringify(body.messages), /简报校验失败.*title 超过 28 字/);
-      return toolReply(`fix_${mode}`, "Edit", { file_path: path.join(config.root, paths[mode]), old_string: "文".repeat(29), new_string: "修正后的结论" });
+      assert.match(JSON.stringify(body.messages), /简报校验失败.*内容过高/);
+      return toolReply(`fix_${mode}`, "Edit", { file_path: path.join(config.root, paths[mode]), old_string: "文".repeat(500), new_string: "修正后的结论" });
     }
-    return textReply(mode + " JSON 完成");
+    return textReply(mode + " HTML 完成");
   });
   const runtime = nativeHarness(t, api), { harness, events, until } = runtime;
   await harness.send("MAIN_WRITE");
-  await until(() => events.some((e) => e.t === "turn_end" && e.text === "MAIN JSON 完成") && !harness.busy);
+  await until(() => events.some((e) => e.t === "turn_end" && e.text === "MAIN HTML 完成") && !harness.busy);
   await runScheduledTask(harness, { id: "native-json-brief", name: "测试简报", prompt: "FORK_WRITE" });
-  await until(() => events.some((e) => e.t === "turn_end" && e.text === "后台 JSON 完成") && !harness.busy && !harness.backgroundTasks().length);
-  const job = await harness.runIsolated("隔离 JSON 简报", "ISOLATED_WRITE");
+  await until(() => events.some((e) => e.t === "turn_end" && e.text === "后台 HTML 完成") && !harness.busy && !harness.backgroundTasks().length);
+  const job = await harness.runIsolated("隔离 HTML 简报", "ISOLATED_WRITE");
   assert.equal(job.ok, true);
   for (const mode of Object.keys(paths)) {
     assert.equal(states.get(mode), 3);
-    assert.equal(validateBrief(JSON.parse(fs.readFileSync(path.join(config.root, paths[mode])))).error, undefined);
+    assert.equal(validateBrief(fs.readFileSync(path.join(config.root, paths[mode]), "utf8")).error, undefined);
   }
   for (const mode of ["FORK", "ISOLATED"]) {
     const card = events.find((e) => e.t === "job" && e.phase === "done" && e.path === paths[mode]);
@@ -122,7 +122,7 @@ test("real SDK queue can edit/remove via WS across Apps, reconnect restores pend
   assert.deepEqual(harness.updateQueued(id, "too late"), { t: "queue_update", id, state: "too_late" });
 });
 
-test("authenticated HTTP profile round-trips all 16 avatars privately, state exposes names and briefs are parsed JSON with bounded days", async (t) => {
+test("authenticated HTTP profile round-trips all 16 avatars privately, state exposes names and briefs are independent HTML documents with bounded days", async (t) => {
   const api = await fakeAnthropic();
   const runtime = nativeHarness(t, api), http = await httpFixture(t, runtime);
   assert.equal((await http.request("/api/profile", "GET", undefined, false)).status, 401);
@@ -142,13 +142,13 @@ test("authenticated HTTP profile round-trips all 16 avatars privately, state exp
   assert.equal(fs.statSync(path.join(config.system, "app-profile.json")).uid, process.getuid());
   const state = (await http.request("/api/state")).data;
   assert.equal(state.userCall, config.userCall); assert.equal(state.agentName, config.agentName); assert.equal("model" in state, false);
-  const today = dateIn(config.timezone), rel = `data/briefs/${today}/api-fixture.json`;
+  const today = dateIn(config.timezone), rel = `data/briefs/${today}/api-fixture.html`;
   writeBrief(rel, brief("HTTP 卡片"));
-  writeBrief(`data/briefs/${today}/invalid.json`, { invalid: true });
+  writeBrief(`data/briefs/${today}/invalid.html`, { invalid: true });
   const oneDay = await http.request("/api/briefs?days=1");
   assert.equal(oneDay.status, 200);
-  assert.ok(oneDay.data.items.some((i) => i.path === rel && i.brief.cards[0].title === "HTTP 卡片"));
-  assert.equal(oneDay.data.items.some((i) => i.path.endsWith("invalid.json")), false);
+  assert.ok(oneDay.data.items.some((i) => i.path === rel && i.cards[0].html.includes("HTTP 卡片")));
+  assert.equal(oneDay.data.items.some((i) => i.path.endsWith("invalid.html")), false);
   assert.ok(oneDay.data.items.every((i) => i.date === today));
   for (const value of ["0", "-1", "1.5", "NaN", "366"]) assert.equal((await http.request("/api/briefs?days=" + value)).status, 400);
   const catalog = (await http.request("/api/connectors")).data.cloud;

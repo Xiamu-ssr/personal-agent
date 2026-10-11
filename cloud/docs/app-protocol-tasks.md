@@ -1,6 +1,6 @@
-# 后台任务、排队消息与结构化简报（v0.4）
+# 豆豆云端协议（v0.5）：后台任务、HTML 简报与设置
 
-接口沿用现有 Bearer / cookie 鉴权。下面路径是云端服务路径；反向代理对外仍可加 `/agent`。现有字段保留，客户端忽略不认识的新增字段。
+接口沿用现有 Bearer / cookie 鉴权。下面路径是云端服务路径；反向代理对外仍可加 `/agent`。本文是当前协议；简报只认 HTML，设置只接受以下三个模型和两种权限。
 
 ## 主会话忙闲与输入
 
@@ -98,43 +98,79 @@ WebSocket `status`：
 
 成功响应表示 SDK 已接受停止控制。最终停止及计数更新以 `task.notification`（`status: "stopped"`）和 snapshot 为准，不根据按钮点击预先删除别的任务。已结束 id 的详细状态只保留最近 256 个，更早的可能返回 404。输入流关闭的一次性 SDK 调用不具有 interrupt 保留后台任务的保证；App 的控制对象是长期保持打开的主查询。
 
-## 简报闹钟与卡片
+## 定时任务与 HTML 简报
 
-cron 和 `POST /api/run`（body 沿用 `{"id":"schedule-id"}`）对普通任务/`kind: "brief"` 都调用主会话 send：
+cron 和 `POST /api/run {id}` 对普通任务和 `kind: "brief"` 都向主会话提交 schedule.json 中的 prompt 原文，`source: "schedule"`。晨报、晚报、健康周报在原文后面追加「简报写法」；其他任务不包装、不追加技术说明。
 
-```text
-[定时] 该出「报价简报」了
+HTTP 手动运行返回 202 `{"ok":true,"mode":"alarm"}`，表示已经排队。`[补读]`、`[夜间整理]` 使用隔离 query，返回 `mode: "isolated"`。compact/cleanup 是运行层维护操作。
 
-任务说明
-```
+运行层通过 UserPromptSubmit 的短系统说明和现有 fork 守卫，要求定时任务派到后台。主会话仍可在完成通知后润色简报。
 
-记录与事件沿用 user 形状，新增/使用 `source: "schedule"`：
+`GET /api/briefs?days=7`：
 
 ```json
-{"role":"user","id":"message-uuid","source":"schedule","text":"[定时] 该出「报价简报」了\n\n任务说明","ts":1791580800000}
-{"t":"user","id":"message-uuid","source":"schedule","text":"[定时] 该出「报价简报」了\n\n任务说明","ts":1791580800000,"attachments":[]}
+{"items":[{"date":"2026-10-11","name":"晨报","time":"2026-10-11T07:30:00+08:00","path":"data/briefs/2026-10-11/晨报.html","cards":[{"html":"<!doctype html>..."}]}]}
 ```
 
-App 可隐藏 schedule 的用户气泡，仍接收随后 assistant 的确认和完成回复。HTTP 手动运行返回 202，保留 `ok: true`，增加 `mode: "alarm"`（维护为 `"isolated"`）；表示已经排队，不表示简报完成。
+- items 按 time 倒序；默认近 7 个本地自然日（含今天），days 是 1–365 的整数，错误 400；无简报是空 items。
+- 只读 `data/briefs/<日期>/**/*.html`；JSON、无效 HTML、符号链接不列出。可选 `meta name="brief-name"` / `brief-time` 提供名称和 ISO 时间；未写时用文件名 / mtime。
+- 每个 html 都是独立完整文档：基础 CSS、原文件公共 style、一张顶层 section.card，以及云端按钮脚本。客户端直接加载。
+- 四套配色：silver（默认银蓝 + 香槟金）、mist、mint、dusk，在 section 上用 data-palette 选。
+- 按钮用 `<button data-prompt="用户消息">文案</button>`。脚本点击后跳到 `doudou://prompt?text=<urlencoded>`；App 拦截、解码，发送用户消息并切到聊天。
+- App 拦掉其他一切跳转和网络请求。云端也注入离线 CSP；不执行模型提供的 script / 事件属性，不允许外部资源。
+- 加载后 App 读取 document.documentElement.scrollHeight，高度上限为屏幕的 75%，超出部分在卡片内部滚动。
 
-提示词让主 agent 用 Agent `subagent_type: "fork", run_in_background: true` 派出任务，简短确认；fork 完成的原生通知再次唤醒主会话转述结果并给路径。Write/Edit 写简报 JSON 后，主会话、fork、隔离会话共用 PostToolUse 校验；中文错误返回模型修正。按 `agent_id` 收集有效 JSON outputs，站点继续收集 HTML。完成时发送卡片：
+主会话、fork、隔离任务共用 Write/Edit 的 PostToolUse 校验：1–6 个顶层 section.card、80KB 上限、无外部资源/导入，依据文字量和元素粗估每卡 ≤560px。错误用中文反馈模型；无效文件不计 outputs。Bash 等绕过文件 hook 的写入不会自动生成卡片。
+
+完成事件与聊天历史：
 
 ```json
-{"role":"card","label":"报价简报","title":"报价简报","path":"data/briefs/2026-10-10/报价简报.json","outputs":["data/briefs/2026-10-10/报价简报.json"],"ok":true,"ts":1791580800000,"taskId":"task-id"}
-{"t":"job","phase":"done","role":"card","label":"报价简报","title":"报价简报","path":"data/briefs/2026-10-10/报价简报.json","outputs":["data/briefs/2026-10-10/报价简报.json"],"ok":true,"ts":1791580800000,"taskId":"task-id"}
+{"t":"job","phase":"done","role":"card","id":"task-id","taskId":"task-id","label":"晨报","title":"晨报","name":"晨报","time":"2026-10-11T07:30:00+08:00","path":"data/briefs/2026-10-11/晨报.html","outputs":["data/briefs/2026-10-11/晨报.html"],"ok":true,"ts":1791675000000}
 ```
 
-历史回看用 card，实时用 `job.done`；`taskId` 是可选关联字段，`path` 指向这次任务的第一份有效简报 JSON。只产出站点时没有 path。App 用 path 在「今日」定位简报，从 `/api/briefs` 或鉴权 `/files/<path>` 取得 JSON，聊天卡片画第一张卡的 chip/title/summary。失败/停止但有有效产出时 `ok: false`，标题标“未完成”；无有效产出时 fork 不发空卡片。主会话文字回复仍保存/显示，完成通知之后可以继续改简报。
+id 是任务 id。path 是该次运行第一份有效 HTML 简报；name/time 来自这份简报。失败/停止且有有效产出时 ok=false，标题标「未完成」。没有有效文件的任务仍进入任务记录并发完成事件，不在聊天里插空卡片。聊天卡片显示简报名和时间，点击切到今日并滚到 path 对应简报。站点仍用 HTML，只有简报才提供 path。
 
-卡片自动收集覆盖 Write/Edit/MultiEdit/NotebookEdit 的文件 hook；Bash 等绕过这些 hook 的写入不会自动产生卡片，所以提示词明确要求简报用 Write。`compact`、`cleanup` 保持原行为；`[补读]`、`[夜间整理]` 保持隔离执行，包括维护任务的手动运行。
+## 模型与权限
 
-## v0.4 HTTP 与设备图片格式
+`GET /api/settings` 与 `PUT /api/settings {model?,permissionMode?}` 返回同一结构：
+
+```json
+{"model":"anthropic/claude-haiku-5.5","permissionMode":"auto","models":[{"id":"anthropic/claude-haiku-5.5","label":"Claude Haiku 5.5","note":"消耗约 1×；输入超过 100K 后约 5×"},{"id":"xiaomi/mimo-v2.6-pro","label":"MiMo V2.6 Pro","note":"输入约 4.35×，输出约 1.74×；缓存读约 0.36×"},{"id":"z-ai/glm-5.3-flashx","label":"GLM 5.3 FlashX","note":"输入约 3.75×，输出约 2.5×；缓存读约 7.5×"}],"permissionModes":[{"id":"auto","label":"自动","note":"不问用户，自动拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}
+```
+
+- 原子保存 system/app-settings.json，权限 600。默认 Haiku 5.5 + auto。model/permissionMode 之外的字段及未知值 400，不修改原设置；JSON 格式错误 400。
+- 从下一轮生效，当前回复继续完成；两端共享同一份设置。所有 query 都 max effort、200K 窗口，约 167K 压缩。
+- 权限用 setPermissionMode。模型切换会在空闲时先 setModel，再以原 mainSessionId resume 新 query，以刷新 CLI 的分类器与子任务模型配置。正在跑的 fork 以原 id 恢复，不复制成新任务。
+- 主、fork、独立会话用 claude_code preset + 同一份稳定业务 append。压缩使用内置模板，仅保留压缩时临时 low、结束恢复 max。
+- auto 的判断模型与后台分类器通过 CLI 独立配置项指定为选中的模型。两种模式都不向 App 发权限弹窗。
+
+## 任务记录与续聊
+
+`GET /api/tasks/<URL 编码 id>/history`：
+
+```json
+{"id":"task-id","title":"报价简报","status":"running","items":[{"kind":"prompt","text":"整理今天的报价","time":"2026-10-11T07:30:00Z"},{"kind":"tool","tool":"Read","text":"读取 data/memory/work/报价.md","time":"2026-10-11T07:30:01Z"},{"kind":"text","text":"已找到两份报价。","time":"2026-10-11T07:30:02Z"}]}
+```
+
+status 只有 running/done/error/stopped；items.kind 只有 prompt/text/tool/result。记录取子任务 transcript（隔离维护取自己的 session transcript）；过滤 thinking 和原始工具输出。工具只返回一行摘要，所有文本走 redact。运行中 SendMessage 可能被 CLI 合并到工具回合，运行层保留用户提交原文的脱敏副本，补齐记录中的 prompt；不据此生成模型步骤或结果。
+
+`POST /api/tasks/<id>/send {text}` 成功 200 `{"ok":true,"id":"task-id"}`，表示已经接受续聊；text 去首尾空白，不能为空，UTF-8 上限 32KB。
+
+- 原生后台任务使用 SendMessage，to=原任务 id，message=用户原文。运行中交给同一 agent；已结束任务由 CLI 自动恢复原 transcript，保持 task_id、产生新的 run_id，继续在后台执行并照常原生通知主会话。
+- 运行层守卫只允许对指定任务发送原文，防止新建任务或由主会话代做。
+- 独立维护任务以原 sessionId resume 自己的 query，沿原上下文执行；进行中的独立维护任务续聊会排在其当前回合之后。
+- 任务元数据与 id 持久化在 system/task-index.json，600 权限。`/api/state.tasks` 是当前原生后台任务；`/api/jobs` 返回 `{running:[{id,label,started}],recent:[{id,label,title,status,ok,ts,outputs,path?}]}`，每项均有可查记录的 id。recent 最多 50 项，history 可按仍保存的 id 查更早记录。
+- App 打开的任务若 status=running，每 3 秒刷新 history；结束后停止轮询。
+- 查询进程重建时先清当前活动列表；未结束的记录标 stopped，恢复后的原生活动更新回 running，避免显示幽灵任务。
+
+错误使用 `{error:"中文原因",code:"..."}`：id 格式错误 400，消息格式错误 400，不存在 404，原主会话暂不可用 503，其他 SDK 操作失败 502。若上下文故障恢复已经创建全新的主 session，原子任务仍可查记录；续聊需要原父 session，目前返回 503，不擅自复制成新任务。
+
+## 其他 HTTP 与设备图片格式
 
 所有路径使用现有 Bearer/cookie 鉴权；外部地址可能有 `/agent` 前缀。新接口的校验错误为 `{error:"中文原因"}`。
 
 | 接口 | 格式 |
 | --- | --- |
-| `GET /api/briefs?days=7` | `{items:[{date,name,time,path,brief}]}`；date 是 YYYY-MM-DD，time 是 JSON 的 ISO 时间，brief 是完整结构化简报。按 time 倒序，默认近 7 个本地自然日（含今天），days 为 1–365 的整数；无简报返回空 items。无效 JSON/不合 schema 的文件、符号链接不列出。 |
 | `GET /api/profile` | `{avatar:{shape:"bean",palette:"mist"}}`；无配置时返回默认值。 |
 | `PUT /api/profile` | body 和成功回包都是 `{avatar:{shape,palette}}`。shape: bean/girl/boy/cat；palette: mist/dusk/mint/sakura。两项同时提供；无效值 400，不覆盖原设置。原子保存 `system/app-profile.json`，权限 600。 |
 | `GET /api/state` | `{busy,devices,tasks,schedule,firstChat,userCall,agentName}`；删除 model，firstChat 仍为毫秒或 null。 |

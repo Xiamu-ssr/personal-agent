@@ -77,13 +77,6 @@ async function nativeFixture(t, api, { baseline = false, isolated = false } = {}
   };
 }
 
-test("bundled CLI reproduces the dotted gateway model's 32K fallback", { timeout: 45_000 }, async (t) => {
-  const api = await fakeAnthropic();
-  const f = await nativeFixture(t, api, { baseline: true });
-  assert.equal((await f.turn("Reply OK.")).subtype, "success");
-  assert.equal(api.requests[0].max_tokens, 32000);
-});
-
 test("actual SDK child inherits 128K; cached total below 167K stays; above 167K compacts at low effort", { timeout: 60_000 }, async (t) => {
   let normal = 0;
   const api = await fakeAnthropic((body) => {
@@ -101,7 +94,7 @@ test("actual SDK child inherits 128K; cached total below 167K stays; above 167K 
   const compact = api.requests.find(compactRequest);
   assert.ok(compact, "a 95001 cache-inclusive API input causes compaction before the next request");
   assert.equal(compact.output_config?.effort, "low");
-  assert.match(JSON.stringify(compact.messages), /1500 tokens/);
+  assert.doesNotMatch(JSON.stringify(compact.messages), /1500 tokens/);
   assert.ok(f.messages.some((m) => m.type === "system" && m.subtype === "compact_boundary"));
   assert.equal(api.requests.at(-1).output_config?.effort, config.effort);
 });
@@ -140,7 +133,7 @@ test("native subagent inherits 128K and compacts after cached input crosses 167K
   assert.ok(api.requests.every((r) => r.max_tokens === 128000));
   assert.ok(api.requests.find(compactRequest), "the child's cached total triggers compaction in its own loop");
   assert.equal(api.requests.find(compactRequest).output_config?.effort, "low");
-  assert.match(JSON.stringify(api.requests.find(compactRequest).messages), /1500 tokens/);
+  assert.doesNotMatch(JSON.stringify(api.requests.find(compactRequest).messages), /1500 tokens/);
   assert.equal(api.requests.at(-1).output_config?.effort, config.effort, "child compaction restores the parent's effort before hand-back");
 });
 

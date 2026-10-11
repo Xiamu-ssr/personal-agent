@@ -12,6 +12,7 @@ import { ConnectorManager } from "./connectors.mjs";
 import { runScheduledTask } from "./scheduler.mjs";
 import { listBriefs } from "./briefs.mjs";
 import { getProfile, putProfile } from "./profile.mjs";
+import { getAppSettings, putAppSettings } from "./app-settings.mjs";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8", ".json": "application/json",
@@ -142,6 +143,19 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         return json(res, 200, putProfile(config.root, value));
       } catch (e) { return json(res, 400, { error: e instanceof SyntaxError ? "请提交有效的 JSON 头像设置" : e.message }); }
     }
+    if (p === "/api/settings") {
+      if (req.method === "GET") {
+        try { return json(res,200,getAppSettings(config.root)); }
+        catch (e) { return json(res,500,{error:e.message}); }
+      }
+      if (req.method !== "PUT") return json(res,405,{error:"只支持 GET / PUT"});
+      try {
+        const body=JSON.parse((await readRaw(req,4096)).toString("utf8"));
+        const value=putAppSettings(config.root,body);
+        harness.settingsChanged?.();
+        return json(res,200,value);
+      } catch (e) { return json(res,400,{error:e instanceof SyntaxError?"请提交有效的 JSON 设置":e.message}); }
+    }
     if (p === "/api/pair/new" && req.method === "POST") return json(res, 200, { code: issuePairCode() });
     if (p === "/api/history") {
       return json(res, 200, { items: tailJsonl(config.chatLog, Number(url.searchParams.get("n") || 200)) });
@@ -162,6 +176,25 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         if (e instanceof URIError) return json(res, 400, { error: "任务 id 格式不对", code: "invalid_task_id" });
         if (!e.status) log("task stop failed:", connectors.redact(e.message));
         return json(res, e.status || 502, { error: e.status ? e.message : "停止任务失败，请稍后再试", code: e.code || "task_stop_failed" });
+      }
+    }
+    const taskRoute=p.match(/^\/api\/tasks\/([^/]+)\/(history|send)$/);
+    if (taskRoute) {
+      try {
+        const id=decodeURIComponent(taskRoute[1]);
+        if (taskRoute[2]==="history"&&req.method==="GET") return json(res,200,await harness.taskHistory(id));
+        if (taskRoute[2]==="send"&&req.method==="POST") {
+          let body;
+          try { body=JSON.parse((await readRaw(req,40*1024)).toString("utf8")); }
+          catch { return json(res,400,{error:"请提交有效的 JSON 续聊消息",code:"invalid_task_text"}); }
+          await harness.sendTask(id,body?.text);
+          return json(res,200,{ok:true,id});
+        }
+        return json(res,405,{error:"不支持这个任务操作"});
+      } catch (e) {
+        if (e instanceof URIError) return json(res,400,{error:"任务 id 格式不对",code:"invalid_task_id"});
+        if (!e.status) log("task history/send failed:",connectors.redact(e.message));
+        return json(res,e.status||502,{error:e.status?e.message:"任务操作失败，请稍后再试",code:e.code||"task_failed"});
       }
     }
     if (p === "/api/connectors") {
@@ -211,8 +244,8 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
     if (p === "/api/jobs") {
       return json(res, 200, {
-        running: [...harness.running].map(([label, started]) => ({ label, started })),
-        recent: tailJsonl(path.join(config.system, "jobs.jsonl"), 50).reverse(),
+        running: harness.runningJobs?.() || [],
+        recent: harness.recentJobs?.() || [],
       });
     }
     if (p === "/api/skills") return json(res, 200, { skills: skills() });
@@ -285,6 +318,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     if (p.startsWith("/files/")) {
       const abs = dataPath(decodeURIComponent(p.slice("/files/".length)));
       if (!abs) return json(res, 400, { error: "outside data/" });
+      if (abs.startsWith(path.join(config.data,"briefs")+path.sep) && path.extname(abs)===".json") return json(res,404,{error:"简报只提供 HTML"});
       let file = abs;
       try {
         if (fs.statSync(file).isDirectory()) file = path.join(file, "index.html");

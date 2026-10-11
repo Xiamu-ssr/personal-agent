@@ -4,12 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { contextPolicy } from "../src/context-policy.mjs";
+import { readAppSettings } from "../src/app-settings.mjs";
 
 const local = process.argv.includes("--local-settings")
   ? JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude/settings.json"), "utf8")).env || {} : {};
 const env = { ...local, ...process.env };
-const model = env.AGENT_MODEL || "anthropic/claude-haiku-5.5";
-const policy = contextPolicy(model, env);
+const model = readAppSettings(env.AGENT_ROOT || "/srv/agent").model;
+const policy = contextPolicy(model);
 const base = new URL(env.ANTHROPIC_BASE_URL || "http://missing.invalid");
 if (base.hostname !== "zenmux.ai" || base.protocol !== "https:" || !(env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY)) {
   throw new Error("需要本地可用的 ZenMux 地址和凭据；不会回退到其他服务");

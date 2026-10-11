@@ -56,7 +56,7 @@ test("schedule guard denies main Bash in Chinese, permits fork's Bash/Write, and
   const blockedFile = path.join(config.root, "schedule-main-must-not-run.txt");
   const childFile = path.join(config.root, "schedule-child-bash.txt");
   const notificationFile = path.join(config.root, "schedule-notification-bash.txt");
-  const brief = "data/briefs/2026-10-11/guard-brief.json";
+  const brief = "data/briefs/2026-10-11/guard-brief.html";
   let rootStep = 0, childStep = 0, releaseChild;
   const childGate = new Promise((r) => { releaseChild = r; });
   const api = await fakeAnthropic(async (body) => {
@@ -68,7 +68,7 @@ test("schedule guard denies main Bash in Chinese, permits fork's Bash/Write, and
       if (childStep === 2) {
         assert.ok(resultFor(body, "guard_child_bash"));
         assert.notEqual(resultFor(body, "guard_child_bash").is_error, true);
-        return tool("guard_child_write", "Write", { file_path: path.join(config.root, brief), content: JSON.stringify({"v": 1, "name": "\u5b88\u536b\u7b80\u62a5", "time": "2026-10-11T07:30:00+08:00", "cards": [{"chip": "2026-10-11", "title": "\u5b8c\u6210"}]}) });
+        return tool("guard_child_write", "Write", { file_path: path.join(config.root, brief), content: '<section class="card"><h1 class="title">本地完成</h1></section>' });
       }
       return textReply("守卫简报完成：" + brief);
     }
@@ -158,13 +158,14 @@ test("guard validates exact fork/background values, excludes child and isolated 
     { tool_name: "Agent", tool_input: { subagent_type: "fork" } },
     { tool_name: "Agent", tool_input: { subagent_type: "fork", run_in_background: false } },
     { tool_name: "Agent", tool_input: { subagent_type: "fork", run_in_background: "true" } },
+    { tool_name: "Task", tool_input: { subagent_type: "fork", run_in_background: true } },
     { tool_name: "TaskCreate", tool_input: { subagent_type: "fork", run_in_background: true } }]) {
     h.beginMainTurn(main, null, "schedule");
     assert.equal(h.checkScheduleFork(input).hookSpecificOutput.permissionDecision, "deny");
     assert.deepEqual(h.checkScheduleFork({ ...input, agent_id: "child" }), {});
     assert.equal(main.scheduleFork.denials, 1, "child calls never consume the fail-open count");
   }
-  for (const name of ["Agent", "Task"]) {
+  for (const name of ["Agent"]) {
     h.beginMainTurn(main, null, "schedule");
     assert.deepEqual(h.checkScheduleFork({ tool_name: name, tool_input: { subagent_type: "fork", run_in_background: true } }), {});
     assert.equal(main.scheduleFork.dispatched, true);

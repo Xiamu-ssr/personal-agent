@@ -4,12 +4,14 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { config, CODE, MEMORY_CATEGORIES } from "./config.mjs";
+import { config, MEMORY_CATEGORIES } from "./config.mjs";
 import { readJson, appendJsonl, nowIn } from "./store.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
 import { ConnectorManager, writePrivateJson } from "./connectors.mjs";
 import { checkConnectorAccess, CONNECTOR_GUARD_TOOLS } from "./connector-guard.mjs";
-import { COMPACT_INSTRUCTIONS, inputUsage } from "./context-policy.mjs";
+import { inputUsage, contextPolicy, CLI_MODEL_PROFILE } from "./context-policy.mjs";
+import { readAppSettings, MODELS, modelEnvironment } from "./app-settings.mjs";
+import { TaskHistory } from "./task-history.mjs";
 import { contextFailure, humanError, recoveryContext, withRecovery, RECOVERY_NOTICE } from "./conversation-recovery.mjs";
 import { BackgroundTasks, TaskError } from "./background-tasks.mjs";
 import { isBriefPath, isOutputPath, readBrief } from "./briefs.mjs";
@@ -18,7 +20,6 @@ const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const SCHEDULE_FORK_REASON = '定时简报请先用 Agent（subagent_type: "fork"，run_in_background: true）派到后台，再简短回复用户';
 const IMAGE_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
 const KIND_LABEL = { image: "图片", file: "文件", voice: "语音笔记" };
-const shellQuote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 
 // An async iterable the SDK reads user messages from (streaming input mode).
 class Inbox {
@@ -106,7 +107,8 @@ export class Harness {
     };
     this.jobChain = Promise.resolve();
     this.busy = false;
-    this.running = new Map(); // label -> started (isolated jobs, queued or running)
+    this.running = new Map(); // id -> { label, started } (isolated jobs, queued or running)
+    this.history = new TaskHistory({ root: config.root, sessions: config.sessions, redact: (s) => connectors.redact(s) });
   }
 
   compactionControl(getQuery = () => undefined) {
@@ -138,12 +140,14 @@ export class Harness {
   }
 
   options({ isolated, onWrite, compaction = this.compactionControl() }) {
-    const m = config.model;
+    const selected = readAppSettings(config.root), m = selected.model, context = contextPolicy(m);
+    const inheritedEnv = { ...process.env };
+    for (const key of ["AGENT_MODEL", "AGENT_PERMISSION_MODE", "AGENT_EFFORT", "AGENT_MODEL_CANONICAL", "AGENT_MAX_OUTPUT_TOKENS", "AGENT_CONTEXT_INPUT_LIMIT", "AGENT_CONTEXT_HEADROOM", "CLAUDE_CODE_CURRIED_TRINKET"]) delete inheritedEnv[key];
     return {
       model: m,
       cwd: config.root,
-      systemPrompt: systemPrompt(),
-      permissionMode: config.permissionMode,
+      systemPrompt: { type: "preset", preset: "claude_code", append: systemPrompt() },
+      permissionMode: selected.permissionMode,
       // The user grants device capabilities on the device itself; asking the classifier again only adds cost and false refusals.
       allowedTools: [
         "mcp__devices__list_devices", "mcp__devices__call_device", "mcp__devices__read_since", "mcp__devices__sync_commit",
@@ -152,17 +156,14 @@ export class Harness {
       ],
       thinking: { type: "adaptive" },
       effort: config.effort,
-      allowDangerouslySkipPermissions: config.permissionMode === "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
       settingSources: ["project"],
       settings: {
-        availableModels: [m],
-        // Teach the CLI that a gateway's dotted/provider ID has the canonical model's capabilities.
-        ...(config.context.canonical && { modelOverrides: { [config.context.canonical]: m } }),
+        availableModels: MODELS.map((row) => row.id),
+        modelPicker: { replaceBuiltInOptions: true, options: MODELS.map((row) => ({ model: row.id, label: row.label, behavesAs: CLI_MODEL_PROFILE })) },
         autoCompactEnabled: true,
         precomputeCompactionEnabled: false,
         idleCompaction: false,
-        hooks: { PreCompact: [{ hooks: [{ type: "command", timeout: 10,
-          command: `${shellQuote(process.execPath)} ${shellQuote(path.join(CODE, "scripts/compact-instructions.mjs"))}` }] }] },
       },
       mcpServers: { devices: this.hub.mcpServer(), ...this.connectors.mcpServers() },
       includePartialMessages: !isolated,
@@ -174,13 +175,10 @@ export class Harness {
         return spawn(o.command, o.args, { cwd: o.cwd, env: o.env, signal: o.signal, stdio: ["pipe", "pipe", "pipe"] });
       },
       env: {
-        ...process.env,
+        ...inheritedEnv,
         CLAUDE_CONFIG_DIR: config.sessions,
         CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: m,
-        ANTHROPIC_DEFAULT_SONNET_MODEL: m,
-        ANTHROPIC_DEFAULT_OPUS_MODEL: m,
-        CLAUDE_CODE_SUBAGENT_MODEL: m,
+        ...modelEnvironment(m),
         CLAUDE_CODE_FORK_SUBAGENT: "1",
         // SDK_READS_SESSION_STATE alone marks frames sdk_host_only; sdk.mjs consumes those internally.
         // Explicit emission makes the native lifecycle visible to this harness as SDKMessage frames.
@@ -189,17 +187,17 @@ export class Harness {
         // We expose their separate activity list, so idle must describe the main thread alone.
         CLAUDE_CODE_BG_TASKS_REPORT_RUNNING: "0",
         // Last in the env overlay: inherited values cannot disable the 200K policy.
-        ...config.context.env,
+        ...context.env,
       },
       hooks: {
-        UserPromptSubmit: [{ hooks: [async () => this.promptContext()] }],
+        UserPromptSubmit: [{ hooks: [async (input) => this.promptContext({ isolated, agentId: input?.agent_id })] }],
         PreCompact: [{ hooks: [compaction.before] }],
         PostCompact: [{ hooks: [compaction.restore] }],
         SubagentStop: [{ hooks: [compaction.restore] }],
         PreToolUse: [
           { matcher: CONNECTOR_GUARD_TOOLS, hooks: [async (input) => checkConnectorAccess(input)] },
           { matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] },
-          ...(!isolated ? [{ hooks: [async (input) => this.checkScheduleFork(input)] }] : []),
+          ...(!isolated ? [{ hooks: [async (input) => this.checkScheduleFork(input), async (input) => this.checkTaskContinuation(input)] }] : []),
         ],
         PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => {
           const r = rel(input.tool_input?.file_path || input.tool_input?.notebook_path);
@@ -216,19 +214,22 @@ export class Harness {
     };
   }
 
-  promptContext() {
+  promptContext({ isolated = false, agentId } = {}) {
     const devs = this.hub.online();
     const devText = devs.length ? devs.map((d) => `${d.name}（${d.id}）`).join("、") : "无";
     return {
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: `当前时间：${nowIn(config.timezone)}（${config.timezone}）\n在线设备：${devText}`,
+        additionalContext: `当前时间：${nowIn(config.timezone)}（${config.timezone}）\n在线设备：${devText}` +
+          (!isolated && !agentId && this.main?.reason === "schedule" ? "\n这份定时任务请放到后台做，完成后通知用户。" : "") +
+          (!isolated && !agentId && this.main?.active?.taskContinuation ? `\n用户在继续任务 ${this.main.active.taskContinuation.id}。请只用 SendMessage，to 为这个任务 id，message 原样使用用户这条消息；任务继续在后台做，简短确认即可。` : ""),
       },
     };
   }
 
   checkWrite(input) {
-    const err = memoryPathError(rel(input.tool_input?.file_path || input.tool_input?.notebook_path));
+    const r = rel(input.tool_input?.file_path || input.tool_input?.notebook_path);
+    const err = /^data\/briefs\/.+\.json$/.test(r) ? "简报只接受 HTML，请写到 data/briefs/<日期>/<任务名>.html" : memoryPathError(r);
     if (!err) return {};
     return {
       hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: err },
@@ -242,7 +243,7 @@ export class Harness {
     // Match its normalized hook input to the original assistant tool_use by id, never infer intent.
     const background = input.tool_input?.run_in_background === true ||
       (input.tool_input?.run_in_background === undefined && guard.requestedForks.has(input.tool_use_id));
-    if (["Agent", "Task"].includes(input.tool_name) && input.tool_input?.subagent_type === "fork" && background) {
+    if (input.tool_name === "Agent" && input.tool_input?.subagent_type === "fork" && background) {
       guard.dispatched = true; // Once this call passes the guard, the rest of the main turn is unrestricted.
       guard.toolUseId = input.tool_use_id;
       return {};
@@ -255,6 +256,18 @@ export class Harness {
       this.log("[schedule] fork guard fail-open");
     }
     return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: SCHEDULE_FORK_REASON } };
+  }
+
+  checkTaskContinuation(input) {
+    const continuation = this.main?.active?.taskContinuation;
+    if (!continuation || input.agent_id || continuation.dispatched) return {};
+    const i = input.tool_input || {};
+    if (input.tool_name === "SendMessage" && i.to === continuation.id && i.message === continuation.text) {
+      continuation.dispatched = true;
+      return {};
+    }
+    return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny",
+      permissionDecisionReason: `请用 SendMessage 给任务 ${continuation.id} 发送用户原文，不新建任务，也不在主会话执行。` } };
   }
 
   // Shared side effects of any write the agent makes.
@@ -277,11 +290,12 @@ export class Harness {
 
   taskCard(task, notification) {
     const outputs = this.validOutputs(task.outputs);
-    if (!outputs.length) return;
-    const entry = { role: "card", label: task.description, title: task.description + (notification.status === "completed" ? "" : "（未完成）"),
-      outputs, ...this.briefCardFields(outputs), ok: notification.status === "completed", ts: Date.now(), taskId: task.id };
+    const briefFields = this.briefCardFields(outputs);
+    const entry = { role: "card", id: task.id, label: task.description, title: (briefFields.name || task.description) + (notification.status === "completed" ? "" : "（未完成）"),
+      outputs, ...briefFields, ok: notification.status === "completed", ts: Date.now(), taskId: task.id };
     appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - task.startedAt });
-    appendJsonl(config.chatLog, entry);
+    this.history.put(task.id, { outputs, ...this.briefCardFields(outputs) });
+    if (outputs.length) appendJsonl(config.chatLog, entry);
     this.bus.emit({ t: "job", phase: "done", ...entry }); // Same card/files protocol as isolated briefs.
   }
 
@@ -295,7 +309,9 @@ export class Harness {
 
   briefCardFields(outputs) {
     const briefPath = outputs.find(isBriefPath);
-    return briefPath ? { path: briefPath } : {};
+    if (!briefPath) return {};
+    const { brief } = readBrief(config.root, briefPath);
+    return { path: briefPath, name: brief.name, time: brief.time };
   }
 
   // ---------- main thread ----------
@@ -312,7 +328,8 @@ export class Harness {
     const tasks = new BackgroundTasks({ bus: this.bus, log: this.log, redact: (s) => this.connectors.redact(s),
       onComplete: (task, m) => this.taskCard(task, m) });
     tasks.reset(); // Process-local activity: never restore a stale running list from disk.
-    const main = { q, inbox, compaction, tasks, reply: "", recoveryContext: state.mainRecovery?.context,
+    const main = { q, inbox, compaction, tasks, reply: "", settings: { model: opts.model, permissionMode: opts.permissionMode }, sessionId: state.mainSessionId,
+      recoveryContext: state.mainRecovery?.context,
       reloadRevision: this.reloadRevision, connectorRevision: this.connectors.revision };
     this.main = main;
     this.busy = false;
@@ -329,6 +346,9 @@ export class Harness {
           this.recordFailure(main, e.message);
           this.finishMainTurn(main, { subtype: "error_during_execution" });
         }
+      }
+      for (const task of main.tasks.list()) {
+        if (this.history.records.has(task.id)) this.history.put(task.id,{status:"stopped",endedAt:Date.now()});
       }
       main.tasks.reset();
       if (main.intentionalClose || this.main !== main) return;
@@ -349,7 +369,7 @@ export class Harness {
 
   async dispatchNextTurn() {
     if (this.busy) return;
-    if (!this.turnQueue.length && !this.main?.needsFresh) return;
+    if (!this.turnQueue.length && !this.main?.needsFresh && !this.settingsPending) return;
     if (!this.main) this.startMain();
     if (this.main.ended || this.main.needsFresh || this.main.reloadRevision !== this.reloadRevision || this.main.connectorRevision !== this.connectors.revision) {
       const old = this.main;
@@ -360,8 +380,9 @@ export class Harness {
       this.startMain(); // Same session for MCP changes; fresh session only after an explicit context failure.
       this.log("main query rebuilt");
     }
+    let main = this.main;
+    main = await this.applySettings(main);
     if (!this.turnQueue.length) return;
-    const main = this.main;
     await main.compaction.restore();
     // A native task-result turn can start while the control request above is awaiting acknowledgement.
     if (this.busy || this.main !== main || main.ended || !this.turnQueue.length) return;
@@ -370,7 +391,7 @@ export class Harness {
       appendJsonl(config.chatLog, active.entry);
       active.persisted = true;
     }
-    this.beginMainTurn(main, active, active.source === "schedule" ? "schedule" : "user");
+    this.beginMainTurn(main, active, active.source === "schedule" ? "schedule" : active.taskContinuation ? "task_continuation" : "user");
     main.inbox.push(withRecovery(active.input, main.recoveryContext));
   }
 
@@ -398,6 +419,64 @@ export class Harness {
     return this.dispatchChain;
   }
 
+  settingsChanged() {
+    this.settingsPending = true;
+    this.scheduleDispatch().catch((e) => this.log("settings failed:", this.connectors.redact(e.message)));
+  }
+
+  async applySettings(main) {
+    const selected = readAppSettings(config.root);
+    if (main.settings.model === selected.model && main.settings.permissionMode === selected.permissionMode) { this.settingsPending = false; return main; }
+    let rebuild = main.settings.model !== selected.model;
+    try {
+      if (rebuild) await main.q.setModel(selected.model);
+      if (main.settings.permissionMode !== selected.permissionMode) await main.q.setPermissionMode(selected.permissionMode);
+    } catch (e) {
+      rebuild = true;
+      this.log("settings control requires resume:", this.connectors.redact(e.message));
+    }
+    if (this.busy || this.main !== main) { this.settingsPending = true; return main; }
+    if (rebuild) {
+      // 0.3.295 updateSettings refuses env. Refresh classifier/default-subagent models in a new CLI.
+      // Resume, never create a fresh conversation; native SendMessage restores each active agent by id.
+      const active = main.tasks.list().filter((task) => this.history.records.get(task.id)?.kind === "subagent");
+      main.intentionalClose = true; main.inbox.close(); main.q.close(); await main.finished;
+      this.startMain();
+      main = this.main;
+      for (const task of active.reverse()) {
+        if (this.turnQueue.some((turn) => turn.taskContinuation?.id === task.id)) continue;
+        const text = "继续原任务，从已经完成的步骤接着做。";
+        this.turnQueue.unshift({ source: "task", taskContinuation: { id: task.id, text },
+          input: { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } });
+      }
+    }
+    main.settings = selected;
+    this.settingsPending = false;
+    return main;
+  }
+
+  taskHistory(id) { return this.history.history(id); }
+
+  async sendTask(id, text) {
+    const task = this.history.get(id);
+    if (typeof text !== "string" || !text.trim() || Buffer.byteLength(text,"utf8") > 32*1024) throw new TaskError("续聊消息不能为空且不能超过 32KB",400,"invalid_task_text");
+    text = text.trim();
+    if (task.kind === "isolated") {
+      this.history.rememberPrompt(id,text);
+      this.runIsolated(task.title, text, { id, resumeTask: id }).catch((e) => this.log("task continuation failed:", this.connectors.redact(e.message)));
+      return id;
+    }
+    if (!this.main || this.main.ended || task.sessionId !== this.main.sessionId) throw new TaskError("原任务会话暂不可用，请恢复原主会话后再试",503,"session_unavailable");
+    this.history.rememberPrompt(id,text);
+    this.turnQueue.push({ source: "task", taskContinuation: { id, text },
+      input: { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } });
+    await this.scheduleDispatch();
+    return id;
+  }
+
+  runningJobs() { return [...this.running].map(([id,job]) => ({ id, ...job })); }
+  recentJobs() { return this.history.recent(); }
+
   onMainMessage(m, main = this.main) {
     if (this.main !== main || main.intentionalClose) return;
     if (m.type === "system" && m.subtype === "session_state_changed") {
@@ -421,6 +500,7 @@ export class Harness {
       // Init is also native, per-turn metadata. Covers another result inside a still-running bg do-while.
       if (main.hasSessionStateSignal && main.sdkState !== "idle" && !main.turnOpen) this.beginMainTurn(main);
       const state = readJson(config.stateFile, {});
+      main.sessionId = m.session_id;
       if (state.mainSessionId !== m.session_id) writePrivateJson(config.stateFile, { ...state, mainSessionId: m.session_id });
       this.log(`main session ${m.session_id} mode=${m.permissionMode} model=${m.model}`);
       return;
@@ -455,6 +535,7 @@ export class Harness {
         this.log(`[schedule] fork dispatched task_id=${m.task_id} tool_use_id=${m.tool_use_id || guard.toolUseId || "unknown"}`);
       }
     }
+    if (m.type === "system") this.history.handle(m, main.sessionId);
     if (m.type === "system" && main.tasks.handle(m)) return;
     if (m.parent_tool_use_id) return; // subagent internals stay out of the chat
     if (m.type === "stream_event") {
@@ -478,7 +559,7 @@ export class Harness {
       for (const b of m.message?.content || []) {
         if (b.type === "text") main.reply += (main.reply ? "\n\n" : "") + b.text;
         if (b.type === "tool_use") {
-          if (main.reason === "schedule" && ["Agent", "Task"].includes(b.name) && b.input?.subagent_type === "fork" && b.input?.run_in_background === true) {
+          if (main.reason === "schedule" && b.name === "Agent" && b.input?.subagent_type === "fork" && b.input?.run_in_background === true) {
             main.scheduleFork.requestedForks.add(b.id);
           }
           main.toolsUsed = true;
@@ -488,6 +569,7 @@ export class Harness {
       return;
     }
     if (m.type === "result") {
+      if (main.active?.taskContinuation && !main.active.taskContinuation.dispatched) this.recordFailure(main, "任务续聊未送达，请重新发送");
       if (m.subtype !== "success" && !main.failure) this.recordFailure(main, (m.errors || []).join("\n") || m.result || m.subtype);
       this.finishMainTurn(main, m);
     }
@@ -614,29 +696,34 @@ export class Harness {
 
   compactMain() {
     if (this.busy) return false;
-    this.turnQueue.push({ manualCompact: true, input: { type: "user", message: { role: "user", content: `/compact ${COMPACT_INSTRUCTIONS}` }, parent_tool_use_id: null } });
+    this.turnQueue.push({ manualCompact: true, input: { type: "user", message: { role: "user", content: "/compact" }, parent_tool_use_id: null } });
     this.scheduleDispatch().catch((e) => this.log("compact failed:", this.connectors.redact(e.message)));
     return true;
   }
 
   // ---------- isolated sessions (cron, catch-up, night tidy) ----------
 
-  runIsolated(label, prompt) {
-    this.running.set(label, Date.now());
+  runIsolated(label, prompt, { id = crypto.randomUUID(), resumeTask } = {}) {
+    this.history.put(id, { kind: "isolated", title: label, status: "running" });
+    this.running.set(id, { label, started: Date.now() });
     const run = async () => {
       const job = { label, outputs: new Set(), text: "" };
       const started = Date.now();
-      this.running.set(label, started);
-      this.bus.emit({ t: "job", phase: "started", label });
+      this.running.set(id, { label, started });
+      this.history.put(id, { status: "running", startedAt: started });
+      this.bus.emit({ t: "job", phase: "started", id, label });
       this.log(`job start: ${label}`);
       let q;
       const inbox = new Inbox();
       const compaction = this.compactionControl(() => q);
       try {
         // Streaming input permits live effort control in PreCompact, just as in the main session.
-        q = this.queryFactory({ prompt: inbox, options: this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), compaction }) });
+        const resume = resumeTask && this.history.get(resumeTask).sessionId;
+        if (resumeTask && !resume) throw new Error("任务原会话记录暂不可用，无法续聊");
+        q = this.queryFactory({ prompt: inbox, options: { ...this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), compaction }), ...(resume && { resume }) } });
         inbox.push({ type: "user", message: { role: "user", content: prompt }, parent_tool_use_id: null });
         for await (const m of q) {
+          if (m.type === "system" && m.subtype === "init") this.history.put(id, { sessionId: m.session_id });
           if (m.type === "system" && m.subtype === "compact_boundary") job.error = undefined;
           if (m.type === "system" && m.subtype === "status" && m.compact_result === "failed") {
             job.error = `Error during compaction: ${m.compact_error || "unknown"}`;
@@ -665,11 +752,13 @@ export class Harness {
         job.text = humanError(job.error);
       }
       const outputs = this.validOutputs(job.outputs);
-      const entry = { role: "card", label, title: label + (job.ok ? "" : "（未完成）"), outputs, ...this.briefCardFields(outputs), ok: !!job.ok, ts: Date.now() };
+      const briefFields = this.briefCardFields(outputs);
+      const entry = { role: "card", id, label, title: (briefFields.name || label) + (job.ok ? "" : "（未完成）"), outputs, ...briefFields, ok: !!job.ok, ts: Date.now() };
+      this.history.put(id, { status: job.ok ? "done" : "error", endedAt: entry.ts, outputs, ...this.briefCardFields(outputs) });
       appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - started });
       if (outputs.length) appendJsonl(config.chatLog, entry);
       this.bus.emit({ t: "job", phase: "done", ...entry });
-      this.running.delete(label);
+      this.running.delete(id);
       this.log(`job done: ${label} ok=${job.ok} outputs=${outputs.join(",")}`);
       return job;
     };

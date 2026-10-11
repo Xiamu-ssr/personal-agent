@@ -56,7 +56,8 @@ export async function runScheduledTask(harness, job) {
     harness.runIsolated(label, job.prompt).catch((e) => harness.log("scheduled maintenance failed:", harness.connectors.redact(e.message)));
     return "isolated";
   }
-  await harness.send(`[定时] 该出「${label}」了。请用 Agent（subagent_type: "fork"，run_in_background: true）把下面的任务派到后台，你自己只回一句简短确认。\n\n任务说明：\n${job.prompt || ""}`, "schedule");
+  const guide = ["morning", "evening", "health-weekly"].includes(job.id) ? "\n\n" + fs.readFileSync(config.briefGuideFile,"utf8").trim() : "";
+  await harness.send((job.prompt || "") + guide, "schedule");
   return "alarm";
 }
 

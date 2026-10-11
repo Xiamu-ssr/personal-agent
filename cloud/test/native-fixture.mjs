@@ -20,7 +20,7 @@ export function nativeHarness(t, api, { connectors, hub = new DeviceHub(), relea
   fs.mkdirSync(config.root, { recursive: true }); writeJson(config.stateFile, {});
   const harness = new Harness({ hub, bus, log() {}, ...(connectors && { connectors }),
     queryFactory: ({ prompt, options }) => query({ prompt, options: { ...options,
-      systemPrompt: "Local test fixture. Write brief JSON with Write/Edit. Use background Agent fork for scheduled briefs.",
+      systemPrompt: "Local test fixture. Write brief HTML with Write/Edit. Use background Agent fork for scheduled briefs.",
       settingSources: [], agentProgressSummaries: false, permissionMode: "bypassPermissions", allowDangerouslySkipPermissions: true,
       env: { ...options.env, ANTHROPIC_BASE_URL: api.url, ANTHROPIC_API_KEY: "fake-local-only", ANTHROPIC_AUTH_TOKEN: "",
         CLAUDE_CONFIG_DIR: path.join(config.sessions, "v04-" + Math.random().toString(16).slice(2)), CLAUDE_CODE_TMPDIR: path.join(config.root, "native-tmp"),

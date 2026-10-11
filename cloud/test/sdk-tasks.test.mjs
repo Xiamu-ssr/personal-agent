@@ -18,7 +18,7 @@ const forkDirective = (body) => body.messages.map((m) => contentText(m.content))
 const hasAgentCall = (body) => body.messages.some((m) => m.role === "assistant" && m.content.some((b) => b.type === "tool_use" && b.name === "Agent"));
 // UserPromptSubmit appends an additionalContext reminder; inspect the actual fixture input, not that reminder.
 const latestInput = (body) => body.messages.filter((m) => m.role === "user").map((m) => contentText(m.content))
-  .findLast((s) => /USER_DURING_NOTIFICATION|task-notification|INTERRUPT_LOCAL_MAIN|\[定时\]|SPAWN_TWO_FORKS/.test(s)) || "";
+  .findLast((s) => /USER_DURING_NOTIFICATION|task-notification|INTERRUPT_LOCAL_MAIN|\[定时\]|SPAWN_TWO_FORKS|做本地简报/.test(s)) || "";
 const tool = (id, name, input) => ({ content: [{ type: "tool_use", id, name, input }], stop_reason: "tool_use" });
 
 function nativeHarness(t, api, release = () => {}) {
@@ -64,13 +64,13 @@ function nativeHarness(t, api, release = () => {}) {
 test("real streaming CLI forks from an alarm, interrupt spares it, and its notification wakes a queued main turn with a brief card", { timeout: 60_000 }, async (t) => {
   const child = deferred(), interrupted = deferred(), notification = deferred();
   let childStep = 0, interruptRequest = false, notificationRequest = false;
-  const brief = "data/briefs/2026-10-10/local-fork.json";
+  const brief = "data/briefs/2026-10-10/local-fork.html";
   const api = await fakeAnthropic(async (body) => {
     const last = latestInput(body);
     if (forkDirective(body)) {
       if (++childStep === 1) {
         await child.promise;
-        return tool("local_write", "Write", { file_path: path.join(config.root, brief), content: JSON.stringify({"v": 1, "name": "\u672c\u5730\u7b80\u62a5", "time": "2026-10-11T07:30:00+08:00", "cards": [{"chip": "2026-10-11", "title": "\u672c\u5730\u5b8c\u6210"}]}) });
+        return tool("local_write", "Write", { file_path: path.join(config.root, brief), content: '<section class="card"><h1 class="title">本地完成</h1></section>' });
       }
       return { content: [{ type: "text", text: "本地简报完成，位置：" + brief }] };
     }
@@ -82,7 +82,7 @@ test("real streaming CLI forks from an alarm, interrupt spares it, and its notif
     if (last.includes("INTERRUPT_LOCAL_MAIN")) {
       interruptRequest = true; await interrupted.promise; return {};
     }
-    if (last.includes("[定时]") && !hasAgentCall(body)) return tool("local_agent", "Agent", { subagent_type: "fork", run_in_background: true,
+    if (last.includes("做本地简报") && !hasAgentCall(body)) return tool("local_agent", "Agent", { subagent_type: "fork", run_in_background: true,
       description: "本地简报", prompt: "LOCAL_FORK_WORK: write the local brief, then report its path." });
     return { content: [{ type: "text", text: "已安排简报。" }] };
   });
@@ -95,7 +95,7 @@ test("real streaming CLI forks from an alarm, interrupt spares it, and its notif
   assert.deepEqual(spawnedEnv[0], { fork: "1", emitState: "1", backgroundState: "0" });
   const childRequest = api.requests.find(forkDirective);
   assert.ok(childRequest, "fork accepted by the real SDK in open streaming input mode");
-  assert.match(JSON.stringify(childRequest.messages), /该出「本地简报」/); // inherited parent history
+  assert.match(JSON.stringify(childRequest.messages), /做本地简报/); // inherited parent history
   await h.send("INTERRUPT_LOCAL_MAIN");
   await until(() => interruptRequest && h.busy);
   await h.interrupt();

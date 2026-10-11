@@ -30,10 +30,7 @@ test("cron is an alarm for briefs; compact, cleanup, catch-up and night tidy kee
   await tick();
   assert.equal(sent.length, 1);
   assert.equal(sent[0][1], "schedule");
-  assert.equal(sent[0][0].match(/^\[定时\] 该出「([^」]+)」了/)?.[1], "晨间简报", "App's name prefix stays compatible");
-  assert.match(sent[0][0], /Agent（subagent_type: "fork"，run_in_background: true）/);
-  assert.match(sent[0][0], /你自己只回一句简短确认/);
-  assert.ok(sent[0][0].endsWith("\n\n任务说明：\n总结报价"));
+  assert.equal(sent[0][0], "总结报价");
   assert.deepEqual(isolated, [["夜间整理", "[夜间整理]"], ["补读", "[补读] fixture"]]);
   assert.equal(compact.length, 1);
   assert.equal(fs.existsSync(old), false);
@@ -45,6 +42,5 @@ test("cron is an alarm for briefs; compact, cleanup, catch-up and night tidy kee
   assert.equal(sent.length, 2);
   assert.equal(await runScheduledTask(harness, { id: "manual", prompt: "手动简报" }), "alarm");
   assert.equal(sent.at(-1)[1], "schedule");
-  assert.match(sent.at(-1)[0], /^\[定时\] 该出「manual」了/);
-  assert.ok(sent.at(-1)[0].endsWith("\n\n任务说明：\n手动简报"));
+  assert.equal(sent.at(-1)[0], "手动简报");
 });

@@ -161,7 +161,8 @@ test("main, isolated and subagent env share the model cap and the 167K estimated
     assert.equal(o.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000");
     assert.equal(o.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, "100");
     assert.equal(o.env.CLAUDE_CODE_SUBAGENT_MODEL, config.model);
-    assert.deepEqual(o.settings.modelOverrides, { "claude-haiku-5-5": config.model });
+    assert.ok(o.settings.modelPicker.options.every((row) => row.behavesAs === "claude-haiku-5-5"));
+    assert.equal(o.systemPrompt.preset, "claude_code");
   }
   for (const server of Object.values(opts.mcpServers)) await server.instance.close();
   await calls[0].options.hooks.PreCompact[0].hooks[0]();
@@ -234,7 +235,7 @@ test("manual compaction failure opens a fresh session without replaying /compact
   await flush(harness);
   assert.equal(harness.compactMain(), true);
   await flush(harness);
-  assert.match(calls[0].received[0].message.content, /^\/compact .*1500 tokens/);
+  assert.equal(calls[0].received[0].message.content, "/compact");
   calls[0].emit({ type: "system", subtype: "status", status: "compacting", compact_output_chars: 0 });
   calls[0].emit({ type: "system", subtype: "status", status: "compacting", compact_output_chars: 12 });
   calls[0].emit({ type: "system", subtype: "local_command_output", content: "Error during compaction: API Error: exceeded the 32000 output token maximum" });
@@ -377,6 +378,6 @@ test("an alarm joins the same queue, retains its source, and native turn during 
   q.emit({ type: "result", subtype: "success" });
   q.emit({ type: "system", subtype: "session_state_changed", state: "idle" });
   await flush(harness);
-  assert.match(q.received[0].message.content, /^\[定时\] 该出「报价简报」了/);
-  assert.ok(tailJsonl(config.chatLog, 100).some((e) => e.role === "user" && e.source === "schedule" && e.text.includes("报价简报")));
+  assert.equal(q.received[0].message.content, "按最近的报价做简报");
+  assert.ok(tailJsonl(config.chatLog, 100).some((e) => e.role === "user" && e.source === "schedule" && e.text.includes("按最近的报价")));
 });
