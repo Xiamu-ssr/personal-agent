@@ -46,7 +46,8 @@ export function estimateCardHeight(node, width=312) {
   return Math.ceil(Math.max(h,Number(explicit?.[1])||0)+(hasClass(node,"card")?40:0));
 }
 
-export function validateBrief(html) {
+// Height is checked when the agent writes a brief; serving skips it because the App scrolls inside tall cards.
+export function validateBrief(html,{height=true}={}) {
   if (typeof html!=="string") return {error:"简报必须是 HTML 文本"};
   if (Buffer.byteLength(html,"utf8")>BRIEF_MAX_BYTES) return {error:"简报文件超过 80KB，请缩短内容"};
   const doc=parseDocument(html,{decodeEntities:true}), nodes=allNodes(doc);
@@ -67,7 +68,7 @@ export function validateBrief(html) {
   const styles=nodes.filter((n)=>n.name==="style").map((n)=>render(n,{encodeEntities:"utf8"})).join("\n");
   for (let i=0;i<cards.length;i++) {
     const h=estimateCardHeight(cards[i]);
-    if (h>BRIEF_MAX_HEIGHT||allNodes(cards[i]).filter((n)=>n.name).length>120) return {error:`第 ${i+1} 张卡片内容过高（粗估 ${h}px，上限 560px），请精简文字、减少元素或拆成两张卡片`};
+    if (height&&(h>BRIEF_MAX_HEIGHT||allNodes(cards[i]).filter((n)=>n.name).length>120)) return {error:`第 ${i+1} 张卡片内容过高（粗估 ${h}px，上限 560px），请精简文字、减少元素或拆成两张卡片`};
   }
   const meta=(key)=>nodes.find((n)=>n.name==="meta"&&n.attribs?.name===key)?.attribs?.content;
   const time=meta("brief-time");
@@ -82,13 +83,13 @@ function cardDocument(card,styles) {
 
 export const isBriefPath=(rel)=>/^data\/briefs\/\d{4}-\d{2}-\d{2}\/.+\.html$/.test(rel);
 export const isOutputPath=(rel)=>isBriefPath(rel)||/^data\/sites\/.+\.html$/.test(rel);
-export function readBrief(root,rel) {
+export function readBrief(root,rel,options) {
   try {
     if (!isBriefPath(rel)) return {error:"简报路径必须是 data/briefs/<日期>/<任务名>.html"};
     const file=path.resolve(root,rel), dir=path.resolve(root,"data/briefs");
     if (!file.startsWith(dir+path.sep)||fs.lstatSync(file).isSymbolicLink()||!fs.realpathSync(file).startsWith(fs.realpathSync(dir)+path.sep)) return {error:"简报路径越出了 data/briefs/"};
     if (fs.statSync(file).size>BRIEF_MAX_BYTES) return {error:"简报文件超过 80KB，请缩短内容"};
-    const result=validateBrief(fs.readFileSync(file,"utf8"));
+    const result=validateBrief(fs.readFileSync(file,"utf8"),options);
     if (result.brief) { result.brief.name||=path.basename(file,".html"); result.brief.time||=fs.statSync(file).mtime.toISOString(); }
     return result;
   } catch {return {error:"简报 HTML 文件无法读取"};}
@@ -104,7 +105,7 @@ export function listBriefs(root,{days=7,timezone="Asia/Shanghai",now=new Date()}
       else if (entry.isFile()&&entry.name.endsWith(".html")) {
         const rel=path.relative(root,file), date=rel.split("/")[2];
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<cutoff||date>today) continue;
-        const {brief}=readBrief(root,rel);
+        const {brief}=readBrief(root,rel,{height:false});
         if (brief) items.push({date,name:brief.name,time:brief.time,path:rel,cards:brief.cards});
       }
     }
