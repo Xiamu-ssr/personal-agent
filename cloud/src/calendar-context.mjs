@@ -8,6 +8,12 @@ function dayKind(date) {
   if (holiday) return detail.work ? `调休上班（${holiday}）` : `法定节假日（${holiday}）`;
   return detail.work ? "工作日" : "周末";
 }
+const dateLabel=(date)=>`${Number(date.slice(5,7))}月${Number(date.slice(8))}日`;
+function rangeLabel(start,end) {
+  if(start===end)return dateLabel(start);
+  const last=start.slice(0,7)===end.slice(0,7)?`${Number(end.slice(8))}日`:dateLabel(end);
+  return `${dateLabel(start)}–${last}`;
+}
 // Pass local calendar dates to the package, independent of the server's own timezone.
 export function calendarContext({timezone="Asia/Shanghai",now=new Date()}={}) {
   const date=dateIn(timezone,now), lunar=chineseDays.getLunarDate(date);
@@ -15,7 +21,12 @@ export function calendarContext({timezone="Asia/Shanghai",now=new Date()}={}) {
   const upcoming=[];
   for(let n=1;n<=7;n++) {
     const next=shiftDate(date,n), detail=chineseDays.getDayDetail(next);
-    if (holidayName(detail)) upcoming.push(`${Number(next.slice(5,7))}月${Number(next.slice(8))}日${dayKind(next)}`);
+    const holiday=holidayName(detail);
+    if(!holiday)continue;
+    const last=upcoming.at(-1);
+    if(last&&last.holiday===holiday&&last.work===detail.work&&shiftDate(last.end,1)===next)last.end=next;
+    else upcoming.push({start:next,end:next,holiday,work:detail.work});
   }
-  return `农历${lunar.isLeap?"闰":""}${lunar.lunarMonCN}${lunar.lunarDayCN}${term?` · ${term}`:""} · ${dayKind(date)}\n未来7天：${upcoming.join("、")||"无节假日或调休"}`;
+  const upcomingText=upcoming.map(({start,end,holiday,work})=>`${rangeLabel(start,end)} ${work?`调休上班（${holiday}）`:`${holiday}放假`}`).join("、")||"无节假日或调休";
+  return `农历${lunar.isLeap?"闰":""}${lunar.lunarMonCN}${lunar.lunarDayCN}${term?` · ${term}`:""} · ${dayKind(date)}\n未来7天：${upcomingText}`;
 }

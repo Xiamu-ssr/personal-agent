@@ -137,8 +137,18 @@ test("startup migrations delete obsolete health metrics, append only speaking ha
 test("calendar uses package lunar/holiday/shift dates and only mentions the day's solar term",()=> {
   const context=(date)=>calendarContext({now:new Date(date+"T04:00:00Z")});
   const national=context("2026-10-01");assert.match(national,/农历八月廿一/);assert.match(national,/法定节假日（国庆节）/);assert.equal(national.split("\n").length,2);
-  const shifted=context("2026-10-10");assert.equal(chineseDays.getDayDetail("2026-10-10").work,true);assert.match(shifted,/调休上班（国庆节）/);assert.match(context("2026-10-09"),/10月10日调休上班/);
+  const shifted=context("2026-10-10");assert.equal(chineseDays.getDayDetail("2026-10-10").work,true);assert.match(shifted,/调休上班（国庆节）/);assert.match(context("2026-10-09"),/10月10日 调休上班/);
   const term=chineseDays.getSolarTerms("2026-10-01","2026-10-31")[0];assert.match(context(term.date),new RegExp(term.name));assert.ok(!context("2026-10-01").includes(term.name));assert.match(context("2026-10-11"),/周末/);assert.match(context("2026-10-12"),/工作日/);
+});
+
+test("upcoming calendar merges consecutive same-kind holidays, keeps shifted workdays separate and formats single days and cross-month ranges",()=> {
+  const future=(date)=>calendarContext({now:new Date(date+"T04:00:00Z")}).split("\n")[1];
+  assert.equal(future("2026-09-30"),"未来7天：10月1日–7日 国庆节放假");
+  assert.equal(future("2026-10-05"),"未来7天：10月6日–7日 国庆节放假、10月10日 调休上班（国庆节）");
+  assert.equal(future("2026-10-06"),"未来7天：10月7日 国庆节放假、10月10日 调休上班（国庆节）");
+  assert.equal(future("2026-10-09"),"未来7天：10月10日 调休上班（国庆节）");
+  assert.equal(future("2022-01-30"),"未来7天：1月31日–2月6日 春节放假");
+  assert.equal(future("2026-10-12"),"未来7天：无节假日或调休");
 });
 
 test("authenticated brief item, paginated jobs, attachments and health HTTP contracts use local files and mocks",async(t)=> {
