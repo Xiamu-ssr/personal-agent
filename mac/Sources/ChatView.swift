@@ -7,6 +7,7 @@ struct ChatPage: View {
     private var nav: Nav { .shared }
     @Environment(\.interactiveWindow) private var active
     @State private var follower = BottomFollower()
+    @State private var scrollState = ChatScrollState()
     @State private var searching = false
     @State private var query = ""
     @State private var highlight: UUID? = nil
@@ -33,20 +34,20 @@ struct ChatPage: View {
         HStack(spacing: 12) {
             HStack(spacing: 10) {
                 AgentAvatar(size: 30)
-                Text(ProfileStore.shared.agentName).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+                Text(ProfileStore.shared.agentName).font(Theme.font(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
                 AgentStatusDot()
             }
             .padding(.leading, 6)
             .padding(.trailing, 16)
             .frame(height: 46)
             .background(Capsule().fill(Theme.card))
-            .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+            .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
             .shadow(color: Color(hex: 0x253751, alpha: 0.06), radius: 10, y: 4)
             Spacer()
             if searching {
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Theme.faint)
-                    TextField("搜索聊天记录", text: $query).textFieldStyle(.plain).font(.system(size: 13)).focused($searchFocused)
+                    Image(systemName: "magnifyingglass").font(Theme.font(size: 12)).foregroundStyle(Theme.faint)
+                    TextField("搜索聊天记录", text: $query).textFieldStyle(.plain).font(Theme.font(size: 13)).focused($searchFocused)
                         .onExitCommand { closeSearch() }
                     Button { closeSearch() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.faint) }
                         .buttonStyle(.plain)
@@ -54,7 +55,7 @@ struct ChatPage: View {
                 .padding(.horizontal, 12)
                 .frame(width: 260, height: 36)
                 .background(Capsule().fill(Theme.card))
-                .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+                .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
             } else {
                 CircleIconButton(icon: "magnifyingglass", help: "搜索聊天记录") {
                     searching = true
@@ -82,7 +83,7 @@ struct ChatPage: View {
     private var results: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(hits.isEmpty ? "已加载的聊天记录里没有「\(query)」" : "找到 \(hits.count) 条")
-                .font(.system(size: 11.5)).foregroundStyle(Theme.faint).padding(.horizontal, 10).padding(.vertical, 8)
+                .font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint).padding(.horizontal, 10).padding(.vertical, 8)
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(hits.prefix(30)) { item in
@@ -93,11 +94,11 @@ struct ChatPage: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { if highlight == item.id { highlight = nil } }
                         } label: {
                             HStack(alignment: .top, spacing: 10) {
-                                Text(item.kind == .user ? "我" : "豆豆").font(.system(size: 11, weight: .semibold))
+                                Text(item.kind == .user ? "我" : "豆豆").font(Theme.font(size: 11, weight: .semibold))
                                     .foregroundStyle(item.kind == .user ? Theme.accent : Theme.goldText).frame(width: 28, alignment: .leading)
                                 Text(snippet(item.text.isEmpty ? (item.attachments.first?.transcript ?? item.attachments.first?.name ?? "") : item.text))
-                                    .font(.system(size: 12.5)).foregroundStyle(Theme.ink).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
-                                if let ts = item.ts { Text(Fmt.when(ts)).font(.system(size: 11)).foregroundStyle(Theme.faint) }
+                                    .font(Theme.font(size: 12.5)).foregroundStyle(Theme.ink).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                                if let ts = item.ts { Text(Fmt.when(ts)).font(Theme.font(size: 11)).foregroundStyle(Theme.faint) }
                             }
                             .padding(.horizontal, 10).padding(.vertical, 8).contentShape(Rectangle())
                         }
@@ -129,30 +130,40 @@ struct ChatPage: View {
                                 .padding(.top, 80)
                         }
                         ForEach(chat.items) { item in
-                            MessageRow(item: item).equatable()
+                            MessageRow(item: item)
                                 .id(item.id)
-                                .background(RoundedRectangle(cornerRadius: 18).fill(Color(hex: 0xF3DFB0, alpha: highlight == item.id ? 0.45 : 0)).padding(-6))
+                                .background(RoundedRectangle(cornerRadius: 18).fill(Theme.userBubble.opacity(highlight == item.id ? 0.8 : 0)).padding(-6))
                                 .animation(.easeOut(duration: 0.3), value: highlight)
                         }
                     }
                     if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, messageID: chat.streamID).id("streaming") }
+                    if !chat.toolHint.isEmpty { ChatToolRow(name: chat.toolHint, text: chat.toolHint) }
                     if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.replyStatus) }
                     Color.clear.frame(height: 1).id("end")
                 }
+                .background(ChatScrollReader(state: scrollState).frame(width: 0, height: 0))
                 .frame(maxWidth: 820)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity)
             }
             .scrollContentBackground(.hidden)
-            .onAppear { follower.request() }
-            .onChange(of: chat.items.count) { if active { follower.request() } }
-            .onChange(of: chat.streaming) { if active { follower.request() } }
+            .overlay(alignment: .bottomTrailing) { ReturnToBottom(state: scrollState) { scrollState.returnToBottom(); follower.request() } }
+            .onAppear { scrollState.messages(chat.items); follower.request() }
+            .onChange(of: chat.items.map(\.id)) {
+                scrollState.messages(chat.items)
+                if active && scrollState.atBottom { follower.request() }
+            }
+            .onChange(of: chat.sentRevision) { scrollState.returnToBottom(); follower.request() }
+            .onChange(of: chat.streaming) {
+                if !chat.streaming.isEmpty { scrollState.stream(chat.streamID, text: chat.streaming) }
+                if active && scrollState.atBottom { follower.request() }
+            }
             .onChange(of: active) { _, value in
-                if value { follower.request() } else { follower.cancel() }
+                if value && scrollState.atBottom { follower.request() } else { follower.cancel() }
             }
             .onChange(of: follower.revision) {
-                guard active else { return }
+                guard active && scrollState.atBottom else { return }
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { proxy.scrollTo("end", anchor: .bottom) }
@@ -163,6 +174,7 @@ struct ChatPage: View {
             .onDisappear { follower.cancel() }
             .onChange(of: jump) { _, id in
                 guard let id else { return }
+                follower.cancel()
                 withAnimation { proxy.scrollTo(id, anchor: .center) }
                 jump = nil
             }
@@ -182,9 +194,9 @@ struct LiveStrip: View {
                 Button { withAnimation(.easeOut(duration: 0.2)) { open.toggle() } } label: {
                     HStack(spacing: 8) {
                         ActiveProgress().controlSize(.mini)
-                        Text(summary(ctx.date)).font(.system(size: 12)).foregroundStyle(Theme.ink.opacity(0.85)).lineLimit(1)
+                        Text(summary(ctx.date)).font(Theme.font(size: 12)).foregroundStyle(Theme.ink.opacity(0.85)).lineLimit(1)
                         Spacer()
-                        Image(systemName: open ? "chevron.up" : "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
+                        Image(systemName: open ? "chevron.up" : "chevron.down").font(Theme.font(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
                     }
                     .contentShape(Rectangle())
                 }
@@ -192,18 +204,18 @@ struct LiveStrip: View {
                 if open {
                     ForEach(chat.live) { t in
                         HStack {
-                            Text(t.label).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                            Text(t.detail).font(.system(size: 11.5)).foregroundStyle(Theme.sub).lineLimit(1)
+                            Text(t.label).font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                            Text(t.detail).font(Theme.font(size: 11.5)).foregroundStyle(Theme.sub).lineLimit(1)
                             Spacer()
-                            Text("已运行 " + Fmt.duration(ctx.date.timeIntervalSince(t.started))).font(.system(size: 11)).foregroundStyle(Theme.faint)
+                            Text("已运行 " + Fmt.duration(ctx.date.timeIntervalSince(t.started))).font(Theme.font(size: 11)).foregroundStyle(Theme.faint)
                         }
                     }
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.6)))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.line, lineWidth: 0.5))
             .frame(maxWidth: 820)
             .frame(maxWidth: .infinity)
         }
@@ -230,11 +242,11 @@ struct Thinking: View {
                             .opacity(0.35 + 0.65 * max(0, sin(phase + Double(i) * 0.9)))
                     }
                 }
-                Text(hint.isEmpty ? "豆豆在想…" : hint).font(.system(size: 12.5)).foregroundStyle(Theme.sub)
+                Text(hint.isEmpty ? "豆豆在想…" : hint).font(Theme.font(size: 12.5)).foregroundStyle(Theme.sub)
             }
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(Capsule().fill(.white.opacity(0.7)))
+            .background(Capsule().fill(Theme.card))
         }
     }
 }
@@ -248,11 +260,11 @@ struct MessageRow: View, Equatable {
         case .user: UserBubble(item: item, compact: compact)
         case .schedule:
             Label(item.scheduleTitle, systemImage: "alarm")
-                .font(.system(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
+                .font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
                 .padding(.vertical, 3)
         case .assistant: AssistantBubble(text: item.text, compact: compact, messageID: item.id)
         case .note:
-            Text(item.text).font(.system(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
+            Text(item.text).font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
         case .card: CardMessage(item: item)
         }
     }
@@ -271,17 +283,17 @@ struct UserBubble: View {
                 ForEach(item.attachments, id: \.path) { AttachmentView(att: $0) }
                 if !item.text.isEmpty {
                     Text(Markdown.inline(item.text))
-                        .font(.system(size: compact ? 13 : 14))
+                        .font(Theme.font(size: compact ? 13 : Theme.bodySize))
                         .foregroundStyle(Theme.ink)
-                        .lineSpacing(3)
+                        .lineSpacing(6)
                         .textSelection(.enabled)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.userBubble))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.7), lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
                 }
                 if item.queued {
-                    Text("排队中").font(.system(size: 10.5)).foregroundStyle(Theme.sub).padding(.trailing, 10)
+                    Text("排队中").font(Theme.font(size: 10.5)).foregroundStyle(Theme.sub).padding(.trailing, 10)
                 }
             }
             .opacity(item.queued ? 0.55 : item.pending ? 0.7 : 1)
@@ -294,9 +306,9 @@ struct UserBubble: View {
             .disabled(ChatClient.shared.queueOperations.contains(item.serverID))
             .sheet(isPresented: $editing) {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("修改排队消息").font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.ink)
-                    TextEditor(text: $draft).font(.system(size: 14)).frame(height: 130)
-                        .padding(10).background(.white, in: RoundedRectangle(cornerRadius: 12))
+                    Text("修改排队消息").font(Theme.font(size: 20, weight: .semibold)).foregroundStyle(Theme.ink)
+                    TextEditor(text: $draft).font(Theme.font(size: 14)).frame(height: 130)
+                        .padding(10).background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
                     HStack {
                         Spacer()
                         Button("取消") { editing = false }.buttonStyle(SoftButtonStyle())
@@ -305,7 +317,7 @@ struct UserBubble: View {
                             else if !item.queued { editing = false; Nav.shared.show("豆豆已经在看这条了") }
                         }.buttonStyle(GoldButtonStyle(height: 34)).disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                }.padding(24).frame(width: 430).background(Theme.canvas).preferredColorScheme(.light)
+                }.padding(24).frame(width: 430).background(Theme.canvas).preferredColorScheme(Theme.scheme)
             }
         }
     }
@@ -318,9 +330,10 @@ struct AssistantBubble: View, Equatable {
 
     var body: some View {
         HStack {
-            MarkdownView(text: text, size: compact ? 13 : 14, cacheID: messageID)
+            MarkdownView(text: text, size: compact ? 13 : Theme.bodySize, cacheID: messageID)
                 .textSelection(.enabled)
-                .card(radius: compact ? 14 : 20, padding: compact ? 11 : 16)
+                .padding(.horizontal, compact ? 4 : 8)
+                .padding(.vertical, 8)
             Spacer(minLength: compact ? 30 : 80)
         }
     }
@@ -337,15 +350,15 @@ struct CardMessage: View {
                 if let p = item.outputs.first { Nav.shared.open(p, title: item.label.isEmpty ? nil : item.label) }
             } label: {
                 HStack(spacing: 12) {
-                    IconTile(icon: "doc.richtext", tint: Color(hex: 0x527AAA), size: 40)
+                    IconTile(icon: "doc.richtext", tint: Theme.accent, size: 40)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.label.isEmpty ? (item.text.isEmpty ? "简报" : item.text) : item.label)
-                            .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(2).multilineTextAlignment(.leading)
+                            .font(Theme.font(size: 14, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(2).multilineTextAlignment(.leading)
                             Text(item.ts.map(Fmt.when) ?? "")
-                                .font(.system(size: 11.5)).foregroundStyle(Theme.faint)
+                                .font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint)
                     }
                     Spacer(minLength: 8)
-                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
+                    Image(systemName: "chevron.right").font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
                 }
                 .frame(maxWidth: 440)
                 .card(radius: 18, padding: 14)
@@ -372,11 +385,11 @@ struct AttachmentView: View {
             Button { Nav.shared.open(att.path, title: att.name) } label: {
                 HStack(spacing: 10) {
                     IconTile(icon: icon, size: 32)
-                    Text(att.name).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                    Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
+                    Text(att.name).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Image(systemName: "arrow.up.right").font(Theme.font(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.9)))
+                .background(RoundedRectangle(cornerRadius: 14).fill(Theme.card))
                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.line, lineWidth: 1))
                 .contentShape(Rectangle())
             }
@@ -411,13 +424,13 @@ struct RemoteImage: View {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
                     .frame(width: max(40, s.width * k), height: max(40, s.height * k))
             } else {
-                RoundedRectangle(cornerRadius: 14).fill(Color(hex: 0xE8EDF3))
+                RoundedRectangle(cornerRadius: 14).fill(Theme.field)
                     .frame(width: maxSide * 0.7, height: maxSide * 0.5)
                     .overlay(failed ? AnyView(Image(systemName: "photo").foregroundStyle(Theme.faint)) : AnyView(ActiveProgress().controlSize(.small)))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white, lineWidth: 1.5))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
         .contentShape(Rectangle())
         .task(id: path) {
             do { image = NSImage(data: try await Api.cached(path)); failed = image == nil } catch { failed = true }
@@ -441,7 +454,7 @@ struct VoiceNote: View {
                     ZStack {
                         GoldBase()
                         if loading { ActiveProgress().controlSize(.mini) } else {
-                            Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 11)).foregroundStyle(Theme.goldText)
+                            Image(systemName: playing ? "pause.fill" : "play.fill").font(Theme.font(size: 11)).foregroundStyle(Theme.goldText)
                         }
                     }
                     .frame(width: 30, height: 30)
@@ -449,22 +462,22 @@ struct VoiceNote: View {
                 .buttonStyle(.plain)
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color(hex: 0xD5DEE8))
-                        Capsule().fill(Color(hex: 0x6F8BAA)).frame(width: g.size.width * progress)
+                        Capsule().fill(Theme.field)
+                        Capsule().fill(Theme.accent).frame(width: g.size.width * progress)
                     }
                 }
                 .frame(height: 4)
-                Text(duration).font(.system(size: 11).monospacedDigit()).foregroundStyle(Theme.sub)
+                Text(duration).font(Theme.font(size: 11).monospacedDigit()).foregroundStyle(Theme.sub)
             }
             .frame(width: 230)
             Text(att.transcript.map { $0.isEmpty ? "（没有听到内容）" : $0 } ?? "语音笔记 · 转写中…")
-                .font(.system(size: 13)).foregroundStyle(Theme.ink.opacity(0.85)).lineSpacing(2)
+                .font(Theme.font(size: 13)).foregroundStyle(Theme.ink.opacity(0.85)).lineSpacing(2)
                 .frame(maxWidth: 320, alignment: .leading)
                 .textSelection(.enabled)
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.userBubble))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.7), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
         .task(id: playing && active) {
             guard playing && active else { return }
             while !Task.isCancelled, let p = player {

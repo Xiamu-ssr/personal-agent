@@ -6,6 +6,7 @@ struct MenuView: View {
     @State private var focused = false
     @State private var windowActivity = WindowActivity()
     @State private var follower = BottomFollower()
+    @State private var scrollState = ChatScrollState()
     private var chat: ChatClient { .shared }
     private var session: Session { .shared }
 
@@ -20,7 +21,7 @@ struct MenuView: View {
                 VStack(spacing: 14) {
                     Spacer()
                     Orb(size: 56)
-                    Text("还没登录").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text("还没登录").font(Theme.font(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
                     Button("打开豆豆登录", action: openMain).buttonStyle(GoldButtonStyle(height: 34))
                     Spacer()
                 }
@@ -29,7 +30,7 @@ struct MenuView: View {
         }
         .frame(width: 380, height: 540)
         .background(Theme.canvas)
-        .preferredColorScheme(.light)
+        .preferredColorScheme(Theme.scheme)
         .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
         .environment(\.interactiveWindow, windowActivity.active)
         .task { if session.configured { await ProfileStore.shared.load() } }
@@ -44,7 +45,7 @@ struct MenuView: View {
     private var header: some View {
         HStack(spacing: 10) {
             AgentAvatar(size: 28)
-            Text(ProfileStore.shared.agentName).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+            Text(ProfileStore.shared.agentName).font(Theme.font(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
             AgentStatusDot()
             Spacer()
             MenuActionButton(symbol: "macwindow", label: "打开主窗口", action: openMain).frame(width: 20, height: 24)
@@ -60,22 +61,31 @@ struct MenuView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(chat.items.suffix(60)) { MessageRow(item: $0, compact: true).equatable() }
+                        ForEach(chat.items.suffix(60)) { MessageRow(item: $0, compact: true) }
                     }
                     if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, compact: true, messageID: chat.streamID).id("streaming") }
                     if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.replyStatus) }
                     Color.clear.frame(height: 1).id("end")
                 }
+                .background(ChatScrollReader(state: scrollState).frame(width: 0, height: 0))
                 .padding(12)
             }
-            .onAppear { follower.request() }
-            .onChange(of: chat.items.count) { if windowActivity.active { follower.request() } }
-            .onChange(of: chat.streaming) { if windowActivity.active { follower.request() } }
+            .overlay(alignment: .bottomTrailing) { ReturnToBottom(state: scrollState) { scrollState.returnToBottom(); follower.request() } }
+            .onAppear { scrollState.messages(chat.items); follower.request() }
+            .onChange(of: chat.items.map(\.id)) {
+                scrollState.messages(chat.items)
+                if windowActivity.active && scrollState.atBottom { follower.request() }
+            }
+            .onChange(of: chat.sentRevision) { scrollState.returnToBottom(); follower.request() }
+            .onChange(of: chat.streaming) {
+                if !chat.streaming.isEmpty { scrollState.stream(chat.streamID, text: chat.streaming) }
+                if windowActivity.active && scrollState.atBottom { follower.request() }
+            }
             .onChange(of: windowActivity.active) { _, active in
-                if active { follower.request() } else { follower.cancel() }
+                if active && scrollState.atBottom { follower.request() } else { follower.cancel() }
             }
             .onChange(of: follower.revision) {
-                guard windowActivity.active else { return }
+                guard windowActivity.active && scrollState.atBottom else { return }
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { proxy.scrollTo("end", anchor: .bottom) }
@@ -98,7 +108,7 @@ struct MenuView: View {
                 Button(action: send) {
                     ZStack {
                         GoldBase()
-                        Image(systemName: "arrow.up").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.goldText)
+                        Image(systemName: "arrow.up").font(Theme.font(size: 13, weight: .bold)).foregroundStyle(Theme.goldText)
                     }
                     .frame(width: 30, height: 30)
                 }
@@ -107,7 +117,7 @@ struct MenuView: View {
                 .disabled(Composer.shared.sending || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 10).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.85)))
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.card))
         }
         .padding(10)
     }
@@ -144,7 +154,10 @@ private struct MenuActionButton: NSViewRepresentable {
         button.toolTip = label; button.setAccessibilityLabel(label)
         return button
     }
-    func updateNSView(_ button: NSButton, context: Context) { context.coordinator.action = action }
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.action = action
+        button.contentTintColor = NSColor(Theme.ink).withAlphaComponent(0.75)
+    }
     final class Coordinator: NSObject {
         var action: () -> Void
         init(action: @escaping () -> Void) { self.action = action }

@@ -46,7 +46,7 @@ import WebKit
     native.layoutSubtreeIfNeeded()
     if let bitmap = native.bitmapImageRepForCachingDisplay(in: native.bounds) {
         native.cacheDisplay(in: native.bounds, to: bitmap)
-        let output = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("verification/v0.5.0/memory-pressure/pointer-native.png")
+        let output = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("verification/v0.6.0/memory-pressure/pointer-native.png")
         try bitmap.representation(using: .png, properties: [:])?.write(to: output)
     }
 

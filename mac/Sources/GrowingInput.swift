@@ -7,7 +7,7 @@ struct GrowingInput: NSViewRepresentable {
     @Binding var focused: Bool
     let placeholder: String
     var enabled = true
-    var fontSize: CGFloat = 14
+    var fontSize: CGFloat = Theme.bodySize
     var verticalPadding: CGFloat = 10
     let onSubmit: () -> Void
     var onAttachmentPaste: (NSPasteboard) -> Bool = { _ in false }
@@ -25,6 +25,12 @@ struct GrowingInput: NSViewRepresentable {
     }
 
     func updateNSView(_ view: GrowingInputContainer, context: Context) {
+        let color = NSColor(Theme.ink)
+        if view.editor.textColor != color {
+            view.editor.textColor = color; view.editor.insertionPointColor = color; view.editor.needsDisplay = true
+        }
+        let font = NSFont.systemFont(ofSize: fontSize, weight: Theme.skin == .night ? .light : .regular)
+        if view.editor.font != font { view.editor.font = font; view.textChanged(force: true) }
         let coordinator = context.coordinator
         coordinator.owner = self
         if view.editor.placeholder != placeholder {

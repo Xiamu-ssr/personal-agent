@@ -97,10 +97,10 @@ struct AgentSettingPage: View {
                     Button { Task { await store.select(setting, id: option.id) } } label: {
                         HStack(spacing: 16) {
                             Image(systemName: snapshot.selected(setting) == option.id ? "largecircle.fill.circle" : "circle")
-                                .font(.system(size: 20)).foregroundStyle(snapshot.selected(setting) == option.id ? Theme.goldText : Theme.faint)
+                                .font(Theme.font(size: 20)).foregroundStyle(snapshot.selected(setting) == option.id ? Theme.goldText : Theme.faint)
                             VStack(alignment: .leading, spacing: 7) {
-                                Text(option.label).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.ink)
-                                Text(option.note).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
+                                Text(option.label).font(Theme.font(size: 16, weight: .medium)).foregroundStyle(Theme.ink)
+                                Text(option.note).font(Theme.font(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
                             }
                             Spacer()
                         }
@@ -112,9 +112,9 @@ struct AgentSettingPage: View {
                     .accessibilityValue(snapshot.selected(setting) == option.id ? "已选择" : "未选择")
                     .disabled(store.saving || store.loading)
                 }
-                .card(radius: 24, padding: 14)
+                .card(radius: 16, padding: 14)
             } else if store.loading { Note(text: "加载中…").card() }
-            if store.saving { HStack { ActiveProgress().controlSize(.small); Text("正在保存…").font(.system(size: 13)).foregroundStyle(Theme.sub) } }
+            if store.saving { HStack { ActiveProgress().controlSize(.small); Text("正在保存…").font(Theme.font(size: 13)).foregroundStyle(Theme.sub) } }
             if !store.error.isEmpty {
                 Note(text: store.error, icon: "wifi.exclamationmark")
                 Button("重试") { Task { await store.load() } }.buttonStyle(SoftButtonStyle())

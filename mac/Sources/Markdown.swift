@@ -148,16 +148,17 @@ enum Markdown {
 
     /// Inline Markdown (bold, italics, code, links) with a soft background behind code spans.
     static func inline(_ s: String) -> AttributedString {
-        if let cached = inlineCache.object(forKey: s as NSString) { return cached.value }
+        let cacheKey = (Theme.skin.rawValue + ":" + s) as NSString
+        if let cached = inlineCache.object(forKey: cacheKey) { return cached.value }
         #if MAC_PERF
         PerfProbe.shared.record("markdown_inline")
         #endif
         var a = (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
         for run in a.runs where run.inlinePresentationIntent?.contains(.code) == true {
-            a[run.range].backgroundColor = Color(hex: 0xE6ECF3)
-            a[run.range].foregroundColor = Color(hex: 0x3D5470)
+            a[run.range].backgroundColor = Theme.field
+            a[run.range].foregroundColor = Theme.accent
         }
-        inlineCache.setObject(MarkdownInline(a), forKey: s as NSString, cost: s.utf8.count * 4)
+        inlineCache.setObject(MarkdownInline(a), forKey: cacheKey, cost: s.utf8.count * 4)
         return a
     }
 
@@ -193,7 +194,7 @@ struct MarkdownView: View {
         switch b {
         case .heading(let level, let s):
             Text(Markdown.inline(s))
-                .font(.system(size: level == 1 ? size + 6 : level == 2 ? size + 3 : size + 1, weight: level <= 2 ? .bold : .semibold))
+                .font(Theme.titleFont(level == 1 ? 20 : level == 2 ? 17 : 15))
                 .padding(.top, level <= 2 ? 4 : 2)
         case .paragraph(let s):
             if onPointer == nil && s.utf8.count > 1_000 {
@@ -212,15 +213,15 @@ struct MarkdownView: View {
             }
         case .quote(let s):
             HStack(alignment: .top, spacing: 10) {
-                RoundedRectangle(cornerRadius: 1.5).fill(Color(hex: 0xD9C08A)).frame(width: 3)
-                Text(Markdown.inline(s)).font(.system(size: size)).foregroundStyle(Theme.sub).lineSpacing(size * 0.3)
+                RoundedRectangle(cornerRadius: 1.5).fill(Theme.ornament).frame(width: 3)
+                Text(Markdown.inline(s)).font(Theme.font(size: size)).foregroundStyle(Theme.sub).lineSpacing(size * 0.3)
             }
             .fixedSize(horizontal: false, vertical: true)
         case .code(let s):
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(s).font(.system(size: size - 1.5, design: .monospaced)).foregroundStyle(Color(hex: 0x33475E)).padding(12)
+                Text(s).font(Theme.font(size: size - 1.5, design: .monospaced)).foregroundStyle(Theme.accent).padding(12)
             }
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color(hex: 0xEEF2F7)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.field))
         case .table(let rows):
             table(rows)
         case .rule:
@@ -232,7 +233,7 @@ struct MarkdownView: View {
     private func listItem(_ item: MDItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(item.marker)
-                .font(.system(size: item.marker == "•" ? size : size - 1, weight: item.marker == "•" ? .bold : .regular))
+                .font(Theme.font(size: item.marker == "•" ? size : size - 1, weight: item.marker == "•" ? .bold : .regular))
                 .foregroundStyle(Theme.faint)
                 .frame(minWidth: 12, alignment: .trailing)
             pointerLine(item.text)
@@ -251,7 +252,7 @@ struct MarkdownView: View {
                     return (22 - (font.ascender - font.descender)) / 2 + font.ascender
                 }
         } else {
-            Text(Markdown.inline(body)).font(.system(size: size)).lineSpacing(lineHeight.map { max(0, $0 - size * 1.2) } ?? size * 0.3).fixedSize(horizontal: false, vertical: true)
+            Text(Markdown.inline(body)).font(Theme.font(size: size)).lineSpacing(lineHeight.map { max(0, $0 - size * 1.2) } ?? size * 0.3).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -263,7 +264,7 @@ struct MarkdownView: View {
                     GridRow {
                         ForEach(0..<cols, id: \.self) { c in
                             Text(Markdown.inline(c < row.count ? row[c] : ""))
-                                .font(.system(size: size - 1, weight: r == 0 ? .semibold : .regular))
+                                .font(Theme.font(size: size - 1, weight: r == 0 ? .semibold : .regular))
                                 .foregroundStyle(r == 0 ? Theme.ink : Theme.ink.opacity(0.9))
                                 .frame(maxWidth: 280, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -274,7 +275,7 @@ struct MarkdownView: View {
             }
             .padding(12)
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0xF3F6F9, alpha: 0.9)))
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.field))
     }
 }
 
@@ -299,6 +300,7 @@ struct MarkdownParagraph: NSViewRepresentable {
         let key = NativeMarkdownContent(text: text, refs: [], size: size, lineHeight: lineHeight)
         guard context.coordinator.content != key else { return }
         context.coordinator.content = key
+        view.editor.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
         view.editor.textStorage?.setAttributedString(MemoryPointerText.rendered(text: text, refs: [], size: size, lineHeight: lineHeight))
         view.textChanged(force: true)
     }
@@ -317,6 +319,7 @@ struct NativeMarkdownContent: Hashable {
     let refs: [String]
     let size: CGFloat
     let lineHeight: CGFloat?
+    var skin: Skin = Theme.skin
 }
 
 private final class NativeMarkdownCacheKey: NSObject {
@@ -332,7 +335,8 @@ private final class NativeMarkdownCacheKey: NSObject {
         let cache = NSCache<NSString, NSImage>(); cache.countLimit = 128; cache.totalCostLimit = 4 << 20; return cache
     }()
     static func image(path: String) -> NSImage? {
-        if let cached = images.object(forKey: path as NSString) { return cached }
+        let cacheKey = (Theme.skin.rawValue + ":" + path) as NSString
+        if let cached = images.object(forKey: cacheKey) { return cached }
         #if MAC_PERF
         PerfProbe.shared.record("pointer_image")
         #endif
@@ -363,7 +367,7 @@ private final class NativeMarkdownCacheKey: NSObject {
         NSGraphicsContext.restoreGraphicsState()
         guard let cgImage = context.makeImage() else { return nil }
         let image = NSImage(cgImage: cgImage, size: size)
-        images.setObject(image, forKey: path as NSString, cost: width * height * 4)
+        images.setObject(image, forKey: cacheKey, cost: width * height * 4)
         return image
     }
 }
@@ -475,7 +479,7 @@ struct MemoryPointerText: NSViewRepresentable {
         PerfProbe.shared.record("richtext_render")
         #endif
         let result = NSMutableAttributedString()
-        let base = NSFont.systemFont(ofSize: size)
+        let base = NSFont.systemFont(ofSize: size, weight: Theme.skin == .night ? .light : .regular)
         let markdown = Markdown.inline(text)
         for run in markdown.runs {
             var font = base
@@ -483,8 +487,8 @@ struct MemoryPointerText: NSViewRepresentable {
             var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: NSColor(Theme.ink)]
             if intent?.contains(.code) == true {
                 font = .monospacedSystemFont(ofSize: size, weight: .regular)
-                attributes[.backgroundColor] = NSColor(Color(hex: 0xE6ECF3))
-                attributes[.foregroundColor] = NSColor(Color(hex: 0x3D5470))
+                attributes[.backgroundColor] = NSColor(Theme.field)
+                attributes[.foregroundColor] = NSColor(Theme.accent)
             } else {
                 if intent?.contains(.stronglyEmphasized) == true { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
                 if intent?.contains(.emphasized) == true { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
@@ -528,6 +532,7 @@ struct MemoryPointerText: NSViewRepresentable {
         @MainActor @discardableResult func apply(_ content: NativeMarkdownContent, to view: MemoryPointerTextView) -> Bool {
             guard self.content != content else { return false }
             self.content = content
+            view.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
             view.setContent(MemoryPointerText.rendered(text: content.text, refs: content.refs, size: content.size, lineHeight: content.lineHeight))
             return true
         }

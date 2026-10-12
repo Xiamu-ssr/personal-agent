@@ -94,12 +94,12 @@ struct CapRow: View {
         HStack(spacing: 12) {
             Image(nsImage: cap.appIcon).resizable().scaledToFit().frame(width: 36, height: 36)
             VStack(alignment: .leading, spacing: 3) {
-                Text(cap.title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
-                Text(note.isEmpty ? (cap.hint ?? cap.description) : note).font(.system(size: 12)).foregroundStyle(note.isEmpty ? Theme.sub : Theme.danger).lineLimit(2)
+                Text(cap.title).font(Theme.font(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
+                Text(note.isEmpty ? (cap.hint ?? cap.description) : note).font(Theme.font(size: 12)).foregroundStyle(note.isEmpty ? Theme.sub : Theme.danger).lineLimit(2)
             }
             Spacer(minLength: 10)
             if asking { ActiveProgress().controlSize(.small) }
-            Toggle("", isOn: Binding(get: { on }, set: set)).toggleStyle(.switch).labelsHidden().tint(Color(hex: 0xC9A869)).disabled(asking)
+            Toggle("", isOn: Binding(get: { on }, set: set)).toggleStyle(.switch).labelsHidden().tint(Theme.accent).disabled(asking)
                 .accessibilityLabel(cap.title)
         }.padding(.vertical, 10).padding(.horizontal, 6)
     }
@@ -130,11 +130,11 @@ struct LocalCapabilityList: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 Button(enabling ? "正在开启…" : "一键开启") { enable() }.buttonStyle(GoldButtonStyle(height: 36)).disabled(enabling)
-                Text(progress).font(.system(size: 12)).foregroundStyle(Theme.sub)
+                Text(progress).font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
             }
-            Rows(items: Capabilities.all) { CapRow(cap: $0) }.id(revision).disabled(enabling).card(radius: 22, padding: 10)
+            Rows(items: Capabilities.all) { CapRow(cap: $0) }.id(revision).disabled(enabling).card(radius: 16, padding: 10)
             ForEach(Capabilities.all.filter { failures[$0.name] != nil }) { cap in
-                Text("\(cap.title)：\(failures[cap.name] ?? "")").font(.system(size: 12)).foregroundStyle(Theme.danger)
+                Text("\(cap.title)：\(failures[cap.name] ?? "")").font(Theme.font(size: 12)).foregroundStyle(Theme.danger)
             }
         }
     }
@@ -170,11 +170,11 @@ struct PairCodeView: View {
                     .disabled(working)
                 if !code.isEmpty {
                     Text(code.map(String.init).joined(separator: " "))
-                        .font(.system(size: 24, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.ink).textSelection(.enabled)
+                        .font(Theme.font(size: 24, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.ink).textSelection(.enabled)
                 }
             }
             Text(err.isEmpty ? "24 小时内有效，只能用一次，会顶掉之前没用的码" : err)
-                .font(.system(size: 12)).foregroundStyle(err.isEmpty ? Theme.sub : Theme.danger)
+                .font(Theme.font(size: 12)).foregroundStyle(err.isEmpty ? Theme.sub : Theme.danger)
         }
     }
 
@@ -199,8 +199,8 @@ struct CardSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.sub).padding(.horizontal, 6)
-            VStack(alignment: .leading, spacing: 0) { content() }.card(radius: 22, padding: 10)
+            Text(title).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.sub).padding(.horizontal, 6)
+            VStack(alignment: .leading, spacing: 0) { content() }.card(radius: 16, padding: 10)
         }
     }
 }
@@ -225,19 +225,20 @@ struct SettingsPage: View {
 
     var body: some View {
         PageScaffold(title: "设置", tab: .settings) {
+            SkinPicker()
             MembershipCard()
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 18, alignment: .top)], alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 18) {
                     CardSection(title: "模型与权限") {
-                        ListRow(icon: "sparkles", tint: Color(hex: 0x776AA3), title: "模型",
+                        ListRow(icon: "sparkles", tint: Theme.accent, title: "模型",
                                 subtitle: AgentSettingsStore.shared.snapshot?.label(.model) ?? "加载中…") {
                             Nav.shared.push(.agentSetting(.model))
                         }
                         .accessibilityLabel("模型")
                         .verificationAction("模型")
                         RowDivider()
-                        ListRow(icon: "checkmark.shield", tint: Color(hex: 0x3F7F87), title: "权限",
+                        ListRow(icon: "checkmark.shield", tint: Theme.accent, title: "权限",
                                 subtitle: AgentSettingsStore.shared.snapshot?.label(.permissionMode) ?? "加载中…") {
                             Nav.shared.push(.agentSetting(.permissionMode))
                         }
@@ -245,37 +246,37 @@ struct SettingsPage: View {
                         .verificationAction("权限")
                     }
                     CardSection(title: "能力与连接") {
-                        ListRow(icon: "square.grid.2x2", tint: Color(hex: 0x487FA6), title: "连接应用",
+                        ListRow(icon: "square.grid.2x2", tint: Theme.accent, title: "连接应用",
                                 subtitle: "本机 \(Capabilities.enabled.count) 项已开启 · 云端 \(store.connected.count) 项已连接") {
                             Nav.shared.push(.connectors(tab: 0))
                         }
                         RowDivider()
-                        ListRow(icon: "laptopcomputer.and.iphone", tint: Color(hex: 0x527AAA), title: "设备",
+                        ListRow(icon: "laptopcomputer.and.iphone", tint: Theme.accent, title: "设备",
                                 subtitle: store.loaded ? "\((device.online ? 1 : 0) + store.others.filter(\.online).count + (store.cloudOnline ? 1 : 0)) 台在线（含云电脑）" : "本机、云电脑和其他设备") {
                             Nav.shared.push(.devices)
                         }
                         RowDivider()
-                        ListRow(icon: "wand.and.stars", tint: Color(hex: 0x776AA3), title: "技能", subtitle: "豆豆整理出来的常用做法") {
+                        ListRow(icon: "wand.and.stars", tint: Theme.accent, title: "技能", subtitle: "豆豆整理出来的常用做法") {
                             Nav.shared.push(.skills)
                         }
                     }
                     CardSection(title: "通知") {
-                        ListRow(icon: "bell", tint: Color(hex: 0x3F7F87), title: "接收消息通知",
+                        ListRow(icon: "bell", tint: Theme.accent, title: "接收消息通知",
                                 subtitle: notifyNote.isEmpty ? "豆豆回复或任务完成时，豆豆不在前台就弹系统通知" : notifyNote) {
-                            Toggle("", isOn: Binding(get: { notify }, set: setNotify)).toggleStyle(.switch).labelsHidden().tint(Color(hex: 0xC9A869))
+                            Toggle("", isOn: Binding(get: { notify }, set: setNotify)).toggleStyle(.switch).labelsHidden().tint(Theme.accent)
                         }
                     }
                 }
                 VStack(alignment: .leading, spacing: 18) {
                     CardSection(title: "账号") {
-                        ListRow(icon: "cloud", tint: Color(hex: 0x487FA6), title: "云端地址", subtitle: Prefs.server)
+                        ListRow(icon: "cloud", tint: Theme.accent, title: "云端地址", subtitle: Prefs.server)
                         RowDivider()
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 12) {
-                                IconTile(icon: "number", tint: Color(hex: 0x9F7E51), size: 32)
+                                IconTile(icon: "number", tint: Theme.ornament, size: 32)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("给另一台设备配对").font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
-                                    Text("在那台设备的登录页，密码填这个 6 位码").font(.system(size: 12)).foregroundStyle(Theme.sub)
+                                    Text("给另一台设备配对").font(Theme.font(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
+                                    Text("在那台设备的登录页，密码填这个 6 位码").font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
                                 }
                             }
                             PairCodeView().padding(.leading, 44)
@@ -287,7 +288,7 @@ struct SettingsPage: View {
                             confirmSignOut = true
                         }
                     }
-                    Text("版本 \(version)").font(.system(size: 12)).foregroundStyle(Theme.faint).padding(.horizontal, 6)
+                    Text("版本 \(version)").font(Theme.font(size: 12)).foregroundStyle(Theme.faint).padding(.horizontal, 6)
                 }
             }
         }
@@ -364,13 +365,13 @@ struct ConnectorsPage: View {
     private var cloud: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Theme.faint)
-                TextField("搜索应用", text: $query).textFieldStyle(.plain).font(.system(size: 13.5))
+                Image(systemName: "magnifyingglass").font(Theme.font(size: 13)).foregroundStyle(Theme.faint)
+                TextField("搜索应用", text: $query).textFieldStyle(.plain).font(Theme.font(size: 13.5))
             }
             .padding(.horizontal, 16)
             .frame(height: 40)
             .background(Capsule().fill(Theme.card))
-            .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+            .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
 
             let on = store.connected.filter(matches)
             let off = store.catalog.filter(matches)
@@ -383,11 +384,11 @@ struct ConnectorsPage: View {
                         }
                     }
                 }
-                .card(radius: 22, padding: 10)
+                .card(radius: 16, padding: 10)
             }
             VStack(alignment: .leading, spacing: 10) {
                 SectionTitle(text: "可以接入")
-                Text("点「连接」填写账号，验证成功后豆豆就能使用这个服务。").font(.system(size: 12)).foregroundStyle(Theme.sub).padding(.horizontal, 4)
+                Text("点「连接」填写账号，验证成功后豆豆就能使用这个服务。").font(Theme.font(size: 12)).foregroundStyle(Theme.sub).padding(.horizontal, 4)
                 Group {
                     if off.isEmpty { Note(text: store.loaded ? "没有更多可接入的了" : "加载中…") } else {
                         Rows(items: off) { c in
@@ -395,38 +396,38 @@ struct ConnectorsPage: View {
                         }
                     }
                 }
-                .card(radius: 22, padding: 10)
+                .card(radius: 16, padding: 10)
             }
         }
     }
 
     private var others: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("其他设备上的能力在那台设备上开关，这里只能看。").font(.system(size: 12.5)).foregroundStyle(Theme.sub).padding(.horizontal, 6)
+            Text("其他设备上的能力在那台设备上开关，这里只能看。").font(Theme.font(size: 12.5)).foregroundStyle(Theme.sub).padding(.horizontal, 6)
             if store.others.isEmpty {
                 Note(text: store.loaded ? "还没有其他设备。去「设备 → 连接更多设备」接入手机或另一台 Mac" : "加载中…", icon: "iphone")
-                    .card(radius: 22, padding: 6)
+                    .card(radius: 16, padding: 6)
             }
             ForEach(store.others) { d in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         Image(systemName: d.icon).foregroundStyle(Theme.sub)
-                        Text(d.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                        Text(d.name).font(Theme.font(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
                         Dot(on: d.online)
-                        Text(d.status).font(.system(size: 12)).foregroundStyle(Theme.sub)
+                        Text(d.status).font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
                     }
                     .padding(.horizontal, 4)
                     Group {
                         if d.caps.isEmpty { Note(text: "这台设备没有上报能力") } else {
                             Rows(items: d.caps) { c in
-                                ListRow(icon: "circle.grid.2x2", tint: c.enabled ? Color(hex: 0x487FA6) : Theme.faint, title: c.title, subtitle: c.description) {
-                                    Text(c.enabled ? "已开启" : "未开启").font(.system(size: 12, weight: .medium))
+                                ListRow(icon: "circle.grid.2x2", tint: c.enabled ? Theme.accent : Theme.faint, title: c.title, subtitle: c.description) {
+                                    Text(c.enabled ? "已开启" : "未开启").font(Theme.font(size: 12, weight: .medium))
                                         .foregroundStyle(c.enabled ? Theme.online : Theme.faint)
                                 }
                             }
                         }
                     }
-                    .card(radius: 22, padding: 10)
+                    .card(radius: 16, padding: 10)
                 }
                 .opacity(d.online ? 1 : 0.6)
                 .id(d.id)
@@ -472,7 +473,7 @@ struct DevicesPage: View {
                     }
                 }
             }
-            .card(radius: 22, padding: 10)
+            .card(radius: 16, padding: 10)
 
             VStack(alignment: .leading, spacing: 10) {
                 SectionTitle(text: "连接更多设备")
@@ -481,7 +482,7 @@ struct DevicesPage: View {
                     RowDivider()
                     more(id: "android", icon: "iphone", title: "连接安卓手机")
                 }
-                .card(radius: 22, padding: 10)
+                .card(radius: 16, padding: 10)
             }
         }
         .task(id: chat.devicesVersion) { await store.load() }
@@ -502,7 +503,7 @@ struct DevicesPage: View {
     }
 
     private func deviceRow(icon: String, name: String, tag: String?, online: Bool, detail: String, action: @escaping () -> Void) -> some View {
-        ListRow(icon: icon, tint: Color(hex: 0x527AAA), title: name, subtitle: detail, action: action) {
+        ListRow(icon: icon, tint: Theme.accent, title: name, subtitle: detail, action: action) {
             HStack(spacing: 8) {
                 if let tag { GoldTag(text: tag) }
                 Dot(on: online)
@@ -512,8 +513,8 @@ struct DevicesPage: View {
 
     private func more(id: String, icon: String, title: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ListRow(icon: icon, tint: Color(hex: 0x637DA0), title: title, subtitle: "装上豆豆，用配对码登录") {
-                Image(systemName: expanded == id ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
+            ListRow(icon: icon, tint: Theme.accent, title: title, subtitle: "装上豆豆，用配对码登录") {
+                Image(systemName: expanded == id ? "chevron.up" : "chevron.down").font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
             }
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { expanded = expanded == id ? nil : id } }
@@ -522,10 +523,10 @@ struct DevicesPage: View {
                     Text(id == "mac"
                          ? "1. 在那台 Mac 上下载豆豆（.dmg），拖进「应用程序」打开\n2. 登录页「账号」保持默认云端地址，「密码」填下面生成的 6 位配对码"
                          : "1. 在手机上下载豆豆（.apk）并安装\n2. 登录页「账号」保持默认云端地址，「密码」填下面生成的 6 位配对码")
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.ink.opacity(0.85)).lineSpacing(4)
+                        .font(Theme.font(size: 12.5)).foregroundStyle(Theme.ink.opacity(0.85)).lineSpacing(4)
                     Link(destination: URL(string: "https://github.com/Xiamu-ssr/personal-agent/releases")!) {
                         Label("下载地址：github.com/Xiamu-ssr/personal-agent/releases", systemImage: "arrow.down.circle")
-                            .font(.system(size: 12.5, weight: .medium))
+                            .font(Theme.font(size: 12.5, weight: .medium))
                     }
                     .foregroundStyle(Theme.accent)
                     PairCodeView()
@@ -551,14 +552,14 @@ struct SkillsPage: View {
                     VStack(spacing: 0) {
                         ForEach(Array(skills.enumerated()), id: \.offset) { i, s in
                             if i > 0 { RowDivider() }
-                            ListRow(icon: "wand.and.stars", tint: Color(hex: 0x776AA3), title: s.name, subtitle: s.description)
+                            ListRow(icon: "wand.and.stars", tint: Theme.accent, title: s.name, subtitle: s.description)
                         }
                     }
                 } else {
                     Note(text: !err.isEmpty ? err : skills == nil ? "加载中…" : "豆豆把常做的事整理成技能后会出现在这里", icon: "wand.and.stars")
                 }
             }
-            .card(radius: 22, padding: 10)
+            .card(radius: 16, padding: 10)
         }
         .task {
             do {
@@ -585,9 +586,9 @@ struct MembershipCard: View {
                 }
             }.clipShape(RoundedRectangle(cornerRadius: 24)).allowsHitTesting(false)
             VStack(alignment: .leading, spacing: 14) {
-                Text("\(profile.userCall) Pro").font(.system(size: 30, weight: .semibold)).foregroundStyle(Theme.goldText)
+                Text("\(profile.userCall) Pro").font(Theme.font(size: 30, weight: .semibold)).foregroundStyle(Theme.goldText)
                 Text(ProfileStore.companionDays(profile.firstChat).map { "陪伴第 \($0) 天" } ?? "从第一次对话起陪伴你")
-                    .font(.system(size: 14)).foregroundStyle(Theme.goldText.opacity(0.75))
+                    .font(Theme.font(size: 14)).foregroundStyle(Theme.goldText.opacity(0.75))
             }.padding(28)
             VStack {
                 Spacer()
@@ -596,11 +597,11 @@ struct MembershipCard: View {
                     ZStack {
                         Circle().strokeBorder(Theme.goldText.opacity(0.3), lineWidth: 2)
                         Circle().strokeBorder(Theme.goldText.opacity(0.25), lineWidth: 1).padding(5)
-                        VStack(spacing: 1) { Text(profile.agentName).font(.system(size: 13, weight: .semibold)); Text("COMPANION").font(.system(size: 5.5, weight: .semibold)).tracking(1) }
+                        VStack(spacing: 1) { Text(profile.agentName).font(Theme.font(size: 13, weight: .semibold)); Text("COMPANION").font(Theme.font(size: 5.5, weight: .semibold)).tracking(1) }
                             .foregroundStyle(Theme.goldText.opacity(0.6))
                     }.frame(width: 70, height: 70).rotationEffect(.degrees(-12)).padding(18)
                 }
             }
-        }.frame(height: 164).overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.8), lineWidth: 1))
+        }.frame(height: 164).overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Theme.line, lineWidth: 0.5))
     }
 }

@@ -16,9 +16,13 @@ struct Capability: Identifiable {
     var enabled: Bool { Prefs.granted(name) }
 
     var appIcon: NSImage {
+        let key = (FolderPermission.directory(for: name)?.path ?? name) as NSString
+        if let image = CapabilityIcons.cache.object(forKey: key) { return image }
         let workspace = NSWorkspace.shared
         if let folder = FolderPermission.directory(for: name) {
-            return workspace.icon(forFile: folder.path)
+            let image = workspace.icon(forFile: folder.path)
+            CapabilityIcons.cache.setObject(image, forKey: key)
+            return image
         }
         let bundle: String
         let path: String
@@ -36,7 +40,9 @@ struct Capability: Identifiable {
         default:
             bundle = "com.apple.finder"; path = "/System/Library/CoreServices/Finder.app"
         }
-        return workspace.icon(forFile: workspace.urlForApplication(withBundleIdentifier: bundle)?.path ?? path)
+        let image = workspace.icon(forFile: workspace.urlForApplication(withBundleIdentifier: bundle)?.path ?? path)
+        CapabilityIcons.cache.setObject(image, forKey: key)
+        return image
     }
 
     var json: [String: Any] {
@@ -156,4 +162,8 @@ enum Capabilities {
                  "all_day": event.isAllDay, "location": event.location ?? "", "calendar": event.calendar?.title ?? ""]
             }
     }
+}
+
+private enum CapabilityIcons {
+    static let cache: NSCache<NSString, NSImage> = { let cache = NSCache<NSString, NSImage>(); cache.countLimit = 24; return cache }()
 }

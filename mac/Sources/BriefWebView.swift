@@ -24,6 +24,21 @@ enum BriefSandbox {
       (document.head || document.documentElement).prepend(meta);
     })();
     """#
+    static func skinScript(_ skin: Skin) -> String {
+        """
+        (() => {
+          const apply = () => {
+            if (!document.documentElement) return false;
+            document.documentElement.dataset.skin = '\(skin.rawValue)';
+            const style = document.createElement('style');
+            style.textContent = 'html,body{overflow:clip!important;overscroll-behavior:none!important}::-webkit-scrollbar{display:none!important}';
+            document.documentElement.prepend(style);
+            return true;
+          };
+          if (!apply()) { const watch = new MutationObserver(() => { if (apply()) watch.disconnect(); }); watch.observe(document, {childList:true}); }
+        })();
+        """
+    }
     static let measureScript = #"""
     (() => {
       let pending = false;
@@ -68,6 +83,7 @@ enum BriefSandbox {
 /// Load exactly cards[].html, without a server base URL or credentials.
 struct BriefWebView: NSViewRepresentable {
     let html: String
+    var skin: Skin = Theme.skin
     @Binding var documentHeight: CGFloat
     @Binding var loading: Bool
     @Binding var failed: String
@@ -80,14 +96,20 @@ struct BriefWebView: NSViewRepresentable {
         config.processPool = BriefSandbox.pool
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         config.mediaTypesRequiringUserActionForPlayback = .all
+        config.userContentController.addUserScript(WKUserScript(source: BriefSandbox.skinScript(skin), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: BriefSandbox.isolationScript, injectionTime: .atDocumentStart, forMainFrameOnly: false))
         config.userContentController.addUserScript(WKUserScript(source: BriefSandbox.measureScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
         config.userContentController.add(context.coordinator, contentWorld: .defaultClient, name: "briefHeight")
-        let web = WKWebView(frame: .zero, configuration: config)
+        let web = BriefNativeWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
         web.setValue(false, forKey: "drawsBackground")
         web.allowsBackForwardNavigationGestures = false
+        BriefResources.created += 1
+        #if MAC_PERF
+        PerfProbe.shared.record("brief_created")
+        #endif
+        context.coordinator.installWheelMonitor(web)
         context.coordinator.load(web, html: html)
         return web
     }
@@ -95,9 +117,14 @@ struct BriefWebView: NSViewRepresentable {
     func updateNSView(_ web: WKWebView, context: Context) {
         context.coordinator.parent = self
         if context.coordinator.html != html { context.coordinator.load(web, html: html) }
+        context.coordinator.applySkin(web, skin: skin)
     }
 
     static func dismantleNSView(_ web: WKWebView, coordinator: Coordinator) {
+        BriefResources.dismantled += 1
+        #if MAC_PERF
+        PerfProbe.shared.record("brief_dismantled")
+        #endif
         coordinator.invalidate()
         web.stopLoading()
         web.navigationDelegate = nil
@@ -110,6 +137,9 @@ struct BriefWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         var parent: BriefWebView
         var html = ""
+        private var skin: Skin
+        private var wheelMonitor: Any?
+        private var rulesInstalled = false
         var work: Task<Void, Never>?
         private var initialDocument = false
         private var generation = 0
@@ -118,10 +148,11 @@ struct BriefWebView: NSViewRepresentable {
         private var pendingHeight: CGFloat?
         private var pendingLoading: Bool?
         private var pendingFailure: String?
-        init(_ parent: BriefWebView) { self.parent = parent }
+        init(_ parent: BriefWebView) { self.parent = parent; skin = parent.skin }
 
         func invalidate() {
             invalidated = true; generation += 1
+            if let wheelMonitor { NSEvent.removeMonitor(wheelMonitor); self.wheelMonitor = nil }
             work?.cancel(); work = nil
             publication?.cancel(); publication = nil
             pendingHeight = nil; pendingLoading = nil; pendingFailure = nil
@@ -165,16 +196,47 @@ struct BriefWebView: NSViewRepresentable {
                 do {
                     let rules = try await BriefSandbox.ruleList()
                     try Task.checkCancellation()
-                    web.configuration.userContentController.add(rules)
+                    if !rulesInstalled { web.configuration.userContentController.add(rules); rulesInstalled = true }
                     initialDocument = true
                     #if MAC_PERF
                     PerfProbe.shared.record("brief_load")
                     #endif
-                    web.loadHTMLString(html, baseURL: nil)
+                    BriefResources.loads += 1
+                    web.loadHTMLString(Self.document(html, skin: parent.skin), baseURL: nil)
                 } catch is CancellationError {
                 } catch {
                     publish(loading: false, failure: "简报加载失败：\(error.localizedDescription)")
                 }
+            }
+        }
+
+        /// Also put the attribute on the initial root tag, so styles see it on the first parse.
+        static func document(_ html: String, skin: Skin) -> String {
+            guard let root = html.range(of: "<html", options: .caseInsensitive), let end = html[root.upperBound...].firstIndex(of: ">") else { return html }
+            var document = html
+            let tag = String(html[root.lowerBound...end]).replacingOccurrences(of: #"\sdata-skin\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)"#, with: "", options: .regularExpression)
+            document.replaceSubrange(root.lowerBound...end, with: String(tag.dropLast()) + " data-skin=\"\(skin.rawValue)\">")
+            return document
+        }
+        func applySkin(_ web: WKWebView, skin: Skin) {
+            guard self.skin != skin else { return }
+            self.skin = skin
+            web.appearance = Theme.appearance
+            let controller = web.configuration.userContentController
+            controller.removeAllUserScripts()
+            controller.addUserScript(WKUserScript(source: BriefSandbox.skinScript(skin), injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            controller.addUserScript(WKUserScript(source: BriefSandbox.isolationScript, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+            controller.addUserScript(WKUserScript(source: BriefSandbox.measureScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
+            BriefResources.skinUpdates += 1
+            web.evaluateJavaScript("document.documentElement.dataset.skin = '\(skin.rawValue)'", in: nil, in: .defaultClient) { _ in }
+        }
+        func installWheelMonitor(_ web: WKWebView) {
+            wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak web] event in
+                guard let web, event.window === web.window,
+                      web.visibleRect.contains(web.convert(event.locationInWindow, from: nil)),
+                      abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) else { return event }
+                web.enclosingScrollView?.scrollWheel(with: event)
+                return nil
             }
         }
 
@@ -221,4 +283,16 @@ struct BriefWebView: NSViewRepresentable {
             publish(loading: false, failure: "简报暂时加载不了")
         }
     }
+}
+
+/// Native fall-through also covers events forwarded by a WebKit child responder.
+final class BriefNativeWebView: WKWebView {
+    override func scrollWheel(with event: NSEvent) { enclosingScrollView?.scrollWheel(with: event) }
+}
+@MainActor enum BriefResources {
+    static var created = 0
+    static var dismantled = 0
+    static var loads = 0
+    static var skinUpdates = 0
+    static var live: Int { created - dismantled }
 }

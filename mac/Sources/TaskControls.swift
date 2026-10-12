@@ -17,20 +17,20 @@ struct TaskControls: View {
         VStack(alignment: .leading, spacing: 7) {
             if !chat.queueNotice.isEmpty {
                 HStack(spacing: 8) {
-                    Text(chat.queueNotice).font(.system(size: 11.5)).foregroundStyle(Theme.sub)
+                    Text(chat.queueNotice).font(Theme.font(size: 11.5)).foregroundStyle(Theme.sub)
                     Spacer()
                     Button { chat.queueNotice = "" } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(Theme.faint)
+                        .buttonStyle(.plain).font(Theme.font(size: 10)).foregroundStyle(Theme.faint)
                 }.padding(.horizontal, 8)
             }
             if !chat.backgroundTasks.isEmpty { BackgroundTasksBar(compact: compact) }
             if chat.busy {
                 HStack(spacing: 7) {
                     ActiveProgress().controlSize(.mini)
-                    Text(chat.replyStatus).font(.system(size: compact ? 11.5 : 12)).foregroundStyle(Theme.sub)
+                    Text(chat.replyStatus).font(Theme.font(size: compact ? 11.5 : 12)).foregroundStyle(Theme.sub)
                         .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
                     Button { chat.interrupt() } label: { Label("停止", systemImage: "stop.fill") }
-                        .buttonStyle(.plain).font(.system(size: 11.5)).foregroundStyle(Theme.ink.opacity(0.8))
+                        .buttonStyle(.plain).font(Theme.font(size: 11.5)).foregroundStyle(Theme.ink.opacity(0.8))
                         .help("只停止当前回复，后台任务继续")
                 }
                 .padding(.horizontal, 8)
@@ -38,10 +38,10 @@ struct TaskControls: View {
             if !chat.taskError.isEmpty {
                 HStack(alignment: .top, spacing: 5) {
                     Label(chat.taskError, systemImage: "exclamationmark.circle")
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.danger)
+                        .font(Theme.font(size: 11.5)).foregroundStyle(Theme.danger)
                     Spacer(minLength: 0)
                     Button { chat.taskError = "" } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(Theme.faint)
+                        .buttonStyle(.plain).font(Theme.font(size: 10)).foregroundStyle(Theme.faint)
                 }
                 .padding(.horizontal, 8)
             }
@@ -63,7 +63,7 @@ struct BackgroundTasksBar: View {
                     Spacer(minLength: 0)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down").foregroundStyle(Theme.faint)
                 }
-                .font(.system(size: 12)).contentShape(Rectangle())
+                .font(Theme.font(size: 12)).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if expanded {
@@ -72,12 +72,12 @@ struct BackgroundTasksBar: View {
                         ForEach(chat.backgroundTasks) { task in
                             HStack(alignment: .center, spacing: 10) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(task.title).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ink)
+                                    Text(task.title).font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.ink)
                                         .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
                                     TaskElapsed(startedAt: task.startedAt)
                                 }
                                 Button(chat.stoppingTasks.contains(task.id) ? "停止中…" : "停止") { chat.stopTask(task.id) }
-                                    .buttonStyle(SoftButtonStyle()).font(.system(size: 11.5))
+                                    .buttonStyle(SoftButtonStyle()).font(Theme.font(size: 11.5))
                                     .disabled(chat.stoppingTasks.contains(task.id))
                             }
                         }
@@ -88,8 +88,8 @@ struct BackgroundTasksBar: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.65)))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.card))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.line, lineWidth: 0.5))
     }
 }
 
@@ -100,7 +100,7 @@ private struct TaskElapsed: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1, paused: !active)) { context in
             Text("已运行 " + Self.duration(context.date.timeIntervalSince(startedAt)))
-                .font(.system(size: 11).monospacedDigit()).foregroundStyle(Theme.faint)
+                .font(Theme.font(size: 11).monospacedDigit()).foregroundStyle(Theme.faint)
         }
     }
 

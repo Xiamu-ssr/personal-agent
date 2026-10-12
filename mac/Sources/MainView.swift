@@ -11,9 +11,6 @@ struct MainView: View {
         GeometryReader { windowGeometry in
         ZStack {
             Theme.canvas.ignoresSafeArea()
-            // A soft light from the top-right, like the brushed-metal reference.
-            RadialGradient(colors: [.white.opacity(0.55), .clear], center: UnitPoint(x: 0.85, y: 0.0), startRadius: 0, endRadius: 520)
-                .ignoresSafeArea()
             if !session.configured {
                 LoginView()
             } else if !session.onboarded {
@@ -34,9 +31,9 @@ struct MainView: View {
             if !nav.toast.isEmpty {
                 VStack {
                     Spacer()
-                    Text(nav.toast).font(.system(size: 13)).foregroundStyle(.white)
+                    Text(nav.toast).font(Theme.font(size: 13)).foregroundStyle(Theme.ink)
                         .padding(.horizontal, 18).padding(.vertical, 10)
-                        .background(Capsule().fill(Theme.ink.opacity(0.88)))
+                        .background(Capsule().fill(Theme.card))
                         .padding(.bottom, 100)
                 }
                 .transition(.opacity)
@@ -47,7 +44,10 @@ struct MainView: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 920, minHeight: 640)
-        .preferredColorScheme(.light)
+        .preferredColorScheme(Theme.scheme)
+        .tint(Theme.accent)
+        .foregroundStyle(Theme.ink)
+        .font(Theme.font(size: Theme.bodySize))
         .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
         .environment(\.interactiveWindow, windowActivity.active)
         .onAppear { AppDelegate.openMain = { openWindow(id: "main") } }
@@ -80,12 +80,12 @@ struct MainView: View {
     private var dropHint: some View {
         RoundedRectangle(cornerRadius: 26, style: .continuous)
             .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
-            .foregroundStyle(Color(hex: 0xC9A869))
-            .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(.white.opacity(0.55)))
+            .foregroundStyle(Theme.accent)
+            .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.card))
             .overlay {
                 VStack(spacing: 10) {
-                    Image(systemName: "tray.and.arrow.down").font(.system(size: 30, weight: .light))
-                    Text("松开，把文件加到消息里").font(.system(size: 15, weight: .medium))
+                    Image(systemName: "tray.and.arrow.down").font(Theme.font(size: 30, weight: .light))
+                    Text("松开，把文件加到消息里").font(Theme.font(size: 15, weight: .medium))
                 }
                 .foregroundStyle(Theme.goldText)
             }
@@ -103,7 +103,7 @@ struct Sidebar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
                 AgentAvatar(size: 34)
-                Text(ProfileStore.shared.agentName).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                Text(ProfileStore.shared.agentName).font(Theme.font(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
                 AgentStatusDot()
             }
             .padding(.horizontal, 10)
@@ -118,12 +118,12 @@ struct Sidebar: View {
         .padding(.horizontal, 12)
         .frame(width: 208)
         .frame(maxHeight: .infinity)
-        .background(.white.opacity(0.38))
-        .overlay(alignment: .trailing) { Rectangle().fill(.white.opacity(0.8)).frame(width: 1) }
+        .background(Theme.card)
+        .overlay(alignment: .trailing) { Rectangle().fill(Theme.card).frame(width: 1) }
     }
 
     private func item(_ t: Tab) -> some View {
-        SidebarItem(tab: t, selected: nav.tab == t, badge: t == .tasks ? chat.live.count + chat.backgroundTasks.count : 0) { nav.go(t) }
+        SidebarItem(tab: t, selected: nav.tab == t, badge: t == .tasks ? Set(chat.live.map(\.id) + chat.backgroundTasks.map(\.id)).count : 0) { nav.go(t) }
     }
 }
 
@@ -140,17 +140,17 @@ struct SidebarItem: View {
                 ZStack {
                     if selected { GoldBase(radius: 10) }
                     Image(systemName: tab.icon)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(Theme.font(size: 14, weight: .medium))
                         .foregroundStyle(selected ? Theme.goldText : tab.tint)
                 }
                 .frame(width: 32, height: 28)
                 Text(tab.title)
-                    .font(.system(size: 14, weight: selected ? .semibold : .regular))
+                    .font(Theme.font(size: 14, weight: selected ? .semibold : .regular))
                     .foregroundStyle(selected ? Theme.goldText : Theme.ink.opacity(0.82))
                 Spacer()
                 if badge > 0 {
-                    Text("\(badge)").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.goldText)
-                        .padding(.horizontal, 7).frame(height: 18).background(Capsule().fill(Color(hex: 0xF3DFB0)))
+                    Text("\(badge)").font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.goldText)
+                        .padding(.horizontal, 7).frame(height: 18).background(Capsule().fill(Theme.userBubble))
                 }
             }
             .padding(.horizontal, 8)
@@ -158,10 +158,10 @@ struct SidebarItem: View {
             .background {
                 if selected {
                     RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.goldWash)
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 1))
-                        .shadow(color: Color(hex: 0x9C7440, alpha: 0.12), radius: 6, y: 3)
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
+                        .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 3)
                 } else if hover {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.55))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.card)
                 }
             }
             .contentShape(Rectangle())
@@ -186,8 +186,8 @@ struct ImagePreview: View {
                 HStack {
                     Spacer()
                     Button { Nav.shared.preview = nil } label: {
-                        Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                            .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.18)))
+                        Image(systemName: "xmark").font(Theme.font(size: 13, weight: .semibold)).foregroundStyle(.white)
+                            .frame(width: 32, height: 32).background(Circle().fill(Theme.card))
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.cancelAction)

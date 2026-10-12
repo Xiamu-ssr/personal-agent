@@ -52,8 +52,8 @@ struct LoginView: View {
             VStack(spacing: 22) {
                 Orb(size: 84)
                 VStack(spacing: 8) {
-                    Text("登录豆豆").font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
-                    Text("你的个人 agent，住在你自己的云主机上").font(.system(size: 13.5)).foregroundStyle(Theme.sub)
+                    Text("登录豆豆").font(Theme.font(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
+                    Text("你的个人 agent，住在你自己的云主机上").font(Theme.font(size: 13.5)).foregroundStyle(Theme.sub)
                 }
                 VStack(alignment: .leading, spacing: 14) {
                     field("账号", hint: "云端地址") {
@@ -63,7 +63,7 @@ struct LoginView: View {
                         SecureField("配对码或口令", text: $password).textFieldStyle(.plain).onSubmit(login)
                     }
                     if !error.isEmpty {
-                        Label(error, systemImage: "exclamationmark.circle").font(.system(size: 12.5)).foregroundStyle(Theme.danger)
+                        Label(error, systemImage: "exclamationmark.circle").font(Theme.font(size: 12.5)).foregroundStyle(Theme.danger)
                     }
                     Button(action: login) {
                         Text(checking ? "登录中…" : "登录").frame(maxWidth: .infinity)
@@ -75,7 +75,7 @@ struct LoginView: View {
                 }
                 .frame(width: 360)
                 .card(radius: 26, padding: 26)
-                Text("没有密码？在已登录的设备上：设置 → 生成配对码").font(.system(size: 12)).foregroundStyle(Theme.faint)
+                Text("没有密码？在已登录的设备上：设置 → 生成配对码").font(Theme.font(size: 12)).foregroundStyle(Theme.faint)
             }
             Spacer()
         }
@@ -85,16 +85,16 @@ struct LoginView: View {
     private func field<F: View>(_ label: String, hint: String, @ViewBuilder _ f: () -> F) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(label).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink)
+                Text(label).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.ink)
                 Spacer()
-                Text(hint).font(.system(size: 11.5)).foregroundStyle(Theme.faint)
+                Text(hint).font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint)
             }
             f()
-                .font(.system(size: 14))
+                .font(Theme.font(size: 14))
                 .padding(.horizontal, 14)
                 .frame(height: 40)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.field))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(hex: 0xDFE5EC), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.field, lineWidth: 1))
         }
     }
 
@@ -129,9 +129,9 @@ struct OnboardingView: View {
                     HStack(spacing: 14) {
                         Orb(size: 52)
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("开通本机能力").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.ink)
+                            Text("开通本机能力").font(Theme.font(size: 26, weight: .bold)).foregroundStyle(Theme.ink)
                             Text("开了的，豆豆可以随时用；没开的，它碰不到。之后在「设置 → 连接应用」里随时改。")
-                                .font(.system(size: 13)).foregroundStyle(Theme.sub)
+                                .font(Theme.font(size: 13)).foregroundStyle(Theme.sub)
                         }
                     }
                     LocalCapabilityList()

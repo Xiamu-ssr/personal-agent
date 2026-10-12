@@ -67,6 +67,7 @@ final class ChatClient {
     static let shared = ChatClient()
 
     var items: [ChatItem] = []
+    var sentRevision = 0
     var streaming = ""
     var streamID = UUID()
     var busy = false
@@ -215,6 +216,7 @@ final class ChatClient {
         let item = ChatItem(kind: .user, text: text, attachments: attachments, ts: Date(), pending: true,
                             queued: busy || !waitingInputs.isEmpty)
         add(item)
+        sentRevision += 1
         waitingInputs.append((item.id, false))
         error = ""
         return true
@@ -483,7 +485,8 @@ final class ChatClient {
         case "turn_end":
             cancelDeltas()
             let text = Self.str(m["text"])
-            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { add(ChatItem(kind: .assistant, text: text, ts: Date())) }
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { add(ChatItem(id: streamID, kind: .assistant, text: text, ts: Date())) }
+            streamID = UUID()
             if let err = m["error"] as? String { add(ChatItem(kind: .note, text: "这一轮出错了：\(err)")) }
             streaming = ""
             toolHint = ""

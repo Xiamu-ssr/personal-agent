@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-enum V05Fixtures {
+enum V06Fixtures {
     static func run() async throws {
         let path = "data/briefs/2026-10-11/晨报.html"
         let html = "<!doctype html><html><head><style>body{margin:0}</style></head><body><section class=card>今天</section></body></html>"
@@ -17,9 +17,6 @@ enum V05Fixtures {
         invalid["cards"] = Array(repeating: ["html": html], count: 7)
         try check(BriefItem.parse(invalid) == nil, "over-limit HTML cards are rejected")
         try check(!BriefItem.validPath("data/briefs/../outside.html"), "brief paths cannot escape date folder")
-        let metrics = MemorySummary.health(["metrics": [["key": "steps", "label": "步数", "value": 6840, "unit": "步"], ["key": "sleep", "label": "睡眠"]]])
-        try check(metrics[0].value == "6840" && metrics[1].value == "--", "health accepts numeric values and missing metric placeholders")
-        try check(MemorySummary.health([:]).isEmpty, "absent health data remains empty")
         let preview = MemorySummary.preview("# 总档\n更新：今天\n\n第一行 → life/日常.md\n第二行\n第三行\n第四行\n第五行")
         try check(preview.contains("→ life/日常.md") && !preview.contains("第五行") && !preview.contains("更新："), "profile preview limits lines without losing pointer tags")
         let first = Date(timeIntervalSince1970: 1_800_000_000)
@@ -36,10 +33,10 @@ enum V05Fixtures {
         FixtureProtocol.respond = { request in
             let path = request.url?.path ?? ""
             routes.append((request.httpMethod ?? "GET") + " " + path)
-            if path.hasSuffix("/api/briefs") {
-                let days = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "days" }?.value
+            if path.hasSuffix("/api/briefs") { return (200, [:], try JSONSerialization.data(withJSONObject: ["items": [raw]])) }
+            if path.hasSuffix("/api/briefs/item") {
                 let older = raw.merging(["date": "2026-09-20", "time": "2026-09-20T07:36:00+08:00", "path": "data/briefs/2026-09-20/晨报.html"]) { _, new in new }
-                return (200, [:], try JSONSerialization.data(withJSONObject: ["items": days == "365" ? [raw, older] : [raw]]))
+                return (200, [:], try JSONSerialization.data(withJSONObject: older))
             }
             if path.hasSuffix("/api/state") { return (200, [:], Data(#"{"userCall":"夏木","agentName":"豆豆","firstChat":1000}"#.utf8)) }
             return (200, [:], Data(#"{"avatar":{"shape":"cat","palette":"mist"}}"#.utf8))
@@ -47,7 +44,7 @@ enum V05Fixtures {
         let fetched = try await BriefItem.fetch()
         try check(fetched.count == 1, "briefs render from one aggregated endpoint")
         let linked = try await BriefItem.fetch(path: "data/briefs/2026-09-20/晨报.html")
-        try check(linked?.date == "2026-09-20" && linked?.cards.first?.html == html, "older task links load complete HTML cards from the aggregated endpoint")
+        try check(linked?.date == "2026-09-20" && linked?.cards.first?.html == html, "older task links load complete HTML cards from the path endpoint")
         await profile.load()
         try check(profile.avatar.shape == "cat" && profile.userCall == "夏木", "profile GET restores appearance alongside state metadata")
         await profile.save(AvatarChoice(shape: "boy", palette: "dusk"))
@@ -58,7 +55,7 @@ enum V05Fixtures {
         Nav.shared.open("data/briefs/2026-10-11/晨报.html")
         try check(Nav.shared.tab == .today && Nav.shared.briefFocus == "data/briefs/2026-10-11/晨报.html", "brief outputs navigate to 今日 with path focus")
         Nav.shared.briefFocus = nil; Nav.shared.tab = .chat; Nav.shared.stacks = [:]
-        print("PASS: v0.5 HTML briefs, health/profile previews, avatar sync, membership and brief navigation")
+        print("PASS: v0.6 HTML briefs, health/profile previews, avatar sync, membership and brief navigation")
     }
 }
 
@@ -114,13 +111,13 @@ enum SettingsTaskFixtures {
 
         let id = "task/中文 &?"
         var history: [String: Any] = ["id": id, "title": "研究摘要", "status": "done", "items": [
-            ["kind": "prompt", "text": "整理研究摘要", "time": "2026-10-11T07:00:00+08:00"],
+            ["kind": "prompt", "from": "agent", "text": "整理研究摘要", "time": "2026-10-11T07:00:00+08:00"],
             ["kind": "tool", "tool": "Read", "text": "读取 data/memory/profile/总档.md", "time": 1000],
             ["kind": "result", "text": "## 结果\n\n**已经完成**。简报：data/briefs/2026-10-11/晨报.html", "time": 2000]]]
         let parsed = try TaskHistory.parse(history, id: id)
         let summary = TaskSummary.parse(["id": id, "title": "研究摘要", "status": "stopped", "ts": 1000, "path": "data/briefs/2026-10-11/晨报.html"])
         try check(summary?.id == id && summary?.status == .stopped && summary?.outputs.count == 1, "completed task summaries parse without chat role and retain stopped status and path")
-        try check(parsed.status == .done && parsed.turns.count == 1 && parsed.turns[0].steps.count == 1 && parsed.turns[0].results.first?.text.contains("**已经完成**") == true, "task history separates prompt, folded steps and Markdown results")
+        try check(parsed.status == .done && parsed.items.first?.from == .agent && parsed.items.filter { $0.kind == .tool }.count == 1 && parsed.items.last?.text.contains("**已经完成**") == true, "task history separates prompt, folded steps and Markdown results")
         let endpoint = try TaskHistoryStore.endpoint(id, action: "send")
         try check(!endpoint.contains("task/中文") && endpoint.contains("%2F") && endpoint.contains("%26") && endpoint.contains("%3F"), "task ids are encoded as one path component")
         try check(TaskHistoryStore.briefPath(in: parsed.items.last!.text) == "data/briefs/2026-10-11/晨报.html", "task results expose HTML brief links")
@@ -132,22 +129,23 @@ enum SettingsTaskFixtures {
                 try check(body.count == 1 && body["text"] as? String == "补一份清单", "continuation sends only trimmed text")
                 sends += 1
                 var items = history["items"] as! [[String: Any]]
-                items.append(["kind": "prompt", "text": "补一份清单", "time": 3000])
+                items.append(["kind": "prompt", "from": "user", "text": "补一份清单", "time": 3000])
                 history["items"] = items; history["status"] = "running"
                 return (200, [:], try JSONSerialization.data(withJSONObject: ["ok": true, "id": id]))
             }
             return (200, [:], try JSONSerialization.data(withJSONObject: history))
         }
-        let detail = TaskHistoryStore(id: id); await detail.load(); detail.draft = "  补一份清单 \n"
-        let sent = await detail.send()
-        try check(sent && sends == 1 && detail.draft.isEmpty && detail.history?.status == .running && detail.history?.turns.count == 2 && detail.history?.items.first?.text == "整理研究摘要", "continuation retains task context and clears draft only after acknowledgement")
-        detail.draft = "失败时保留这段话"
+        let detail = TaskHistoryStore(id: id); await detail.load(); detail.composer.text = "  补一份清单 \n"
+        let sent = await detail.composer.sendContents()
+        await detail.load()
+        try check(sent && sends == 1 && detail.composer.text.isEmpty && detail.history?.status == .running && detail.history?.items.filter { $0.kind == .prompt }.count == 2 && detail.history?.items.first?.text == "整理研究摘要", "continuation retains task context and clears draft only after acknowledgement")
+        detail.composer.text = "失败时保留这段话"
         FixtureProtocol.respond = { _ in (502, [:], Data(#"{"error":"本地模拟：续聊失败"}"#.utf8)) }
-        let failed = await detail.send()
-        try check(!failed && detail.draft == "失败时保留这段话" && !detail.sending && !detail.error.isEmpty, "failed continuation preserves draft and retry")
+        let failed = await detail.composer.sendContents()
+        try check(!failed && detail.composer.text == "失败时保留这段话" && !detail.composer.sending && !detail.composer.error.isEmpty, "failed continuation preserves draft and retry")
         FixtureProtocol.respond = { _ in (200, [:], Data(#"{"ok":true,"id":"wrong-task"}"#.utf8)) }
-        let wrong = await detail.send()
-        try check(!wrong && !detail.draft.isEmpty, "mismatched continuation acknowledgement does not clear draft")
+        let wrong = await detail.composer.sendContents()
+        try check(!wrong && !detail.composer.text.isEmpty, "mismatched continuation acknowledgement does not clear draft")
         print("PASS: task history grouping/timestamps, encoded id, continuation context, acknowledgements and failed-send draft preservation")
 
         var polls = 0

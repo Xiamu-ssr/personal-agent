@@ -28,16 +28,7 @@ enum Tab: String, CaseIterable {
     }
 
     /// Each tab's own cool tint when not selected (spec §四).
-    var tint: Color {
-        switch self {
-        case .chat: Color(hex: 0x487FA6)
-        case .today: Color(hex: 0x527AAA)
-        case .tasks: Color(hex: 0x3F7F87)
-        case .memory: Color(hex: 0x776AA3)
-        case .home: Color(hex: 0x637DA0)
-        case .settings: Color(hex: 0x6B7C90)
-        }
-    }
+    var tint: Color { Theme.accent }
 
     /// Composer placeholder on the pages that have one.
     var prompt: String? {
@@ -57,6 +48,8 @@ enum Route: Hashable {
     /// A Markdown/text file rendered natively.
     case doc(title: String, path: String)
     case memoryCategory(String)
+    case health
+    case healthBrief(path: String, title: String)
     case diaries
     case connectors(tab: Int, focus: String? = nil)
     case connector(String)

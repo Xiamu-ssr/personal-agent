@@ -18,6 +18,9 @@ struct Draft: Identifiable {
 @Observable
 final class Composer {
     static let shared = Composer()
+    let taskID: String?
+    var sentRevision = 0
+    init(taskID: String? = nil) { self.taskID = taskID }
 
     enum Recording { case hold, note }
 
@@ -55,6 +58,7 @@ final class Composer {
     }
 
     private func toChat() {
+        guard taskID == nil else { return }
         Nav.shared.go(.chat)
         Nav.shared.stacks[.chat] = []
     }
@@ -149,36 +153,47 @@ final class Composer {
     // MARK: sending
 
     func send() {
-        guard !sending, !transcribing, recording == nil, !preparing, hasContent else { return }
+        operation = Task { @MainActor in _ = await sendContents() }
+    }
+
+    /// The same upload/retry path serves main chat and task continuations.
+    @MainActor @discardableResult func sendContents() async -> Bool {
+        guard !sending, !transcribing, recording == nil, !preparing, hasContent else { return false }
         let text = self.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let drafts = self.drafts
-        guard ChatClient.shared.connected else { return fail("还没连上，稍等再发") }
+        if taskID == nil && !ChatClient.shared.connected { fail("还没连上，稍等再发"); return false }
         sending = true
-        operation = Task { @MainActor in
-            do {
-                var atts: [Attachment] = []
-                for d in drafts {
-                    let att: Attachment
-                    if let uploaded = d.uploaded { att = uploaded } else { att = try await Api.upload(d.data, name: d.name, kind: d.kind) }
-                    try Task.checkCancellation()
-                    if let i = self.drafts.firstIndex(where: { $0.id == d.id }) { self.drafts[i].uploaded = att }
-                    atts.append(att)
-                }
-                if ChatClient.shared.send(text, attachments: atts) {
-                    if self.text.trimmingCharacters(in: .whitespacesAndNewlines) == text { self.text = "" }
-                    self.drafts.removeAll { d in drafts.contains { $0.id == d.id } }
-                    toChat()
-                } else {
-                    fail(ChatClient.shared.error)
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                if Task.isCancelled { return }
-                fail("发送失败：\(error.localizedDescription)")
+        defer { sending = false }
+        do {
+            var atts: [Attachment] = []
+            for d in drafts {
+                let att: Attachment
+                if let uploaded = d.uploaded { att = uploaded } else { att = try await Api.upload(d.data, name: d.name, kind: d.kind) }
+                try Task.checkCancellation()
+                if let i = self.drafts.firstIndex(where: { $0.id == d.id }) { self.drafts[i].uploaded = att }
+                atts.append(att)
             }
-            sending = false
+            try await deliver(text, attachments: atts)
+            if self.text.trimmingCharacters(in: .whitespacesAndNewlines) == text { self.text = "" }
+            self.drafts.removeAll { d in drafts.contains { $0.id == d.id } }
+            toChat()
+            return true
+        } catch is CancellationError { return false }
+        catch { if !Task.isCancelled { fail("发送失败：\(error.localizedDescription)") }; return false }
+    }
+
+    @MainActor private func deliver(_ text: String, attachments: [Attachment] = []) async throws {
+        if let taskID {
+            var body: [String: Any] = ["text": text]
+            if !attachments.isEmpty { body["attachments"] = attachments.map(\.json) }
+            let response = try await Api.json(TaskHistoryStore.endpoint(taskID, action: "send"), method: "POST", body: body)
+            guard response["ok"] as? Bool == true, response["id"] as? String == taskID else {
+                throw ApiError(code: 0, message: "续聊没有发出去，请重试")
+            }
+        } else if !ChatClient.shared.send(text, attachments: attachments) {
+            throw ApiError(code: 0, message: ChatClient.shared.error)
         }
+        sentRevision += 1
     }
 
     // MARK: voice
@@ -232,7 +247,7 @@ final class Composer {
 
     func retryTranscribe() {
         guard let data = retryAudio, !transcribing, !sending else { return }
-        guard ChatClient.shared.connected else { return fail("豆豆还没准备好，录音已保留，稍后再试") }
+        guard taskID != nil || ChatClient.shared.connected else { return fail("豆豆还没准备好，录音已保留，稍后再试") }
         transcribing = true
         operation = Task { @MainActor in
             do {
@@ -241,12 +256,15 @@ final class Composer {
                 retryAudio = nil
                 if text.isEmpty {
                     fail("没听清，再说一次")
-                } else if ChatClient.shared.send(text) {
-                    toChat()
                 } else {
-                    self.text = self.text.isEmpty ? text : self.text + "\n" + text
-                    voiceMode = false
-                    fail(ChatClient.shared.error)
+                    do {
+                        try await deliver(text)
+                        toChat()
+                    } catch {
+                        self.text = self.text.isEmpty ? text : self.text + "\n" + text
+                        voiceMode = false
+                        throw error
+                    }
                 }
             } catch is CancellationError {
                 return
@@ -270,18 +288,16 @@ final class Composer {
         guard let (data, _) = recorder.finish() else { return fail("没录到声音") }
         let name = "语音笔记-\(Fmt.hm.string(from: Date()).replacingOccurrences(of: ":", with: "")).m4a"
         let draft = Draft(data: data, name: name, kind: "voice")
-        guard ChatClient.shared.connected else { drafts.append(draft); return fail("还没连上，录音已保留在输入框") }
+        guard taskID != nil || ChatClient.shared.connected else { drafts.append(draft); return fail("还没连上，录音已保留在输入框") }
         sending = true
         operation = Task { @MainActor in
             var att: Attachment?
             do {
                 att = try await Api.upload(data, name: name, kind: "voice")
                 try Task.checkCancellation()
-                if let att, ChatClient.shared.send("", attachments: [att]) {
+                if let att {
+                    try await deliver("", attachments: [att])
                     toChat()
-                } else {
-                    var retry = draft; retry.uploaded = att; drafts.append(retry)
-                    fail(ChatClient.shared.error)
                 }
             } catch is CancellationError {
                 return
@@ -307,25 +323,25 @@ final class Composer {
 
 struct ComposerBar: View {
     let placeholder: String
-    @Bindable private var c = Composer.shared
+    @Bindable var c: Composer = .shared
     private var chat: ChatClient { .shared }
     @State private var focused = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TaskControls()
-            if c.recording != nil || c.transcribing { RecordingPanel() }
+            if c.taskID == nil { TaskControls() }
+            if c.recording != nil || c.transcribing { RecordingPanel(c: c) }
             if !c.drafts.isEmpty { drafts }
             if !c.error.isEmpty {
-                Label(c.error, systemImage: "exclamationmark.circle").font(.system(size: 12)).foregroundStyle(Theme.danger)
+                Label(c.error, systemImage: "exclamationmark.circle").font(Theme.font(size: 12)).foregroundStyle(Theme.danger)
                     .padding(.horizontal, 8)
             }
             if c.retryAudio != nil && !c.transcribing {
                 HStack(spacing: 10) {
-                    Text("录音已保留，可稍后重新转写").font(.system(size: 12)).foregroundStyle(Theme.sub)
+                    Text("录音已保留，可稍后重新转写").font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
                     Spacer()
                     Button("清除") { c.retryAudio = nil }.buttonStyle(SoftButtonStyle())
-                    Button("重新转写") { c.retryTranscribe() }.buttonStyle(SoftButtonStyle()).disabled(!chat.connected)
+                    Button("重新转写") { c.retryTranscribe() }.buttonStyle(SoftButtonStyle()).disabled(c.taskID == nil && !chat.connected)
                 }
                 .padding(.horizontal, 8)
             }
@@ -336,12 +352,15 @@ struct ComposerBar: View {
             }
             .padding(5)
             .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.field.opacity(0.95)))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color(hex: 0xDFE5EC), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.line, lineWidth: 1))
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.white.opacity(0.78)))
-        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white, lineWidth: 1))
-        .shadow(color: Color(hex: 0x253751, alpha: 0.08), radius: 20, y: 8)
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Theme.card))
+        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
+        .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 2)
+        #if MAC_VERIFY
+        .onAppear { if c.taskID != nil { ComposerVerification.currentTask = c } }
+        #endif
     }
 
     private var plus: some View {
@@ -350,7 +369,7 @@ struct ComposerBar: View {
             Button { c.pick(images: true) } label: { Label("图片", systemImage: "photo") }
             Button { c.startNote() } label: { Label("录制语音笔记", systemImage: "waveform") }
         } label: {
-            Image(systemName: "plus").font(.system(size: 16, weight: .regular)).foregroundStyle(Theme.ink.opacity(0.7))
+            Image(systemName: "plus").font(Theme.font(size: 16, weight: .regular)).foregroundStyle(Theme.ink.opacity(0.7))
                 .frame(width: 38, height: 38).contentShape(Circle())
         }
         .disabled(c.sending || c.transcribing || c.preparing || c.recording != nil)
@@ -369,11 +388,11 @@ struct ComposerBar: View {
 
     private var holdButton: some View {
         Text(c.holding ? (c.holdCancel ? "松开 取消" : "松开 发送") : "按住 说话")
-            .font(.system(size: 14, weight: .medium))
+            .font(Theme.font(size: 14, weight: .medium))
             .foregroundStyle(c.holding ? Theme.goldText : Theme.ink)
             .frame(maxWidth: .infinity, minHeight: 38)
-            .background { if c.holding { GoldBase() } else { Capsule().fill(.white) } }
-            .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+            .background { if c.holding { GoldBase() } else { Capsule().fill(Theme.card) } }
+            .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
             .contentShape(Capsule())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { v in
@@ -397,7 +416,7 @@ struct ComposerBar: View {
                 ZStack {
                     GoldBase()
                     if c.sending { ActiveProgress().controlSize(.small) } else {
-                        Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.goldText)
+                        Image(systemName: "arrow.up").font(Theme.font(size: 15, weight: .bold)).foregroundStyle(Theme.goldText)
                     }
                 }
                 .frame(width: 38, height: 38)
@@ -405,6 +424,8 @@ struct ComposerBar: View {
             .buttonStyle(.plain)
             .disabled(c.sending)
             .help("发送（↩︎）· ⌥↩︎ 换行")
+            .accessibilityLabel(c.taskID == nil ? "发送" : "发送续聊")
+            .verificationAction(c.taskID == nil ? "发送" : "发送续聊")
         } else {
             roundButton("mic", help: "按住说话") { c.voiceMode = true }
         }
@@ -412,7 +433,7 @@ struct ComposerBar: View {
 
     private func roundButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.ink.opacity(0.75))
+            Image(systemName: icon).font(Theme.font(size: 15, weight: .medium)).foregroundStyle(Theme.ink.opacity(0.75))
                 .frame(width: 38, height: 38).contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -431,12 +452,12 @@ struct ComposerBar: View {
                             IconTile(icon: d.kind == "voice" ? "waveform" : "doc.text", size: 34)
                         }
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(d.name).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).frame(maxWidth: 140, alignment: .leading)
+                            Text(d.name).font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).frame(maxWidth: 140, alignment: .leading)
                             Text((d.kind == "image" ? "图片 · " : d.kind == "voice" ? "语音笔记 · " : "") + Fmt.size(d.data.count))
-                                .font(.system(size: 10.5)).foregroundStyle(Theme.faint)
+                                .font(Theme.font(size: 10.5)).foregroundStyle(Theme.faint)
                         }
                         Button { c.drafts.removeAll { $0.id == d.id } } label: {
-                            Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundStyle(Theme.faint)
+                            Image(systemName: "xmark.circle.fill").font(Theme.font(size: 14)).foregroundStyle(Theme.faint)
                         }
                         .buttonStyle(.plain)
                         .help("移除")
@@ -444,7 +465,7 @@ struct ComposerBar: View {
                     }
                     .padding(6)
                     .padding(.trailing, 2)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(.white))
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
                 }
             }
@@ -455,31 +476,31 @@ struct ComposerBar: View {
 
 /// Recording overlay: waveform + timer; hold-to-talk hints, or 完成 / 取消 for a voice note.
 struct RecordingPanel: View {
-    private var c: Composer { .shared }
+    var c: Composer = .shared
 
     var body: some View {
         HStack(spacing: 14) {
             if c.transcribing {
                 ActiveProgress().controlSize(.small)
-                Text("正在转写…").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                Text("正在转写…").font(Theme.font(size: 13)).foregroundStyle(Theme.sub)
                 Spacer()
             } else {
-                Circle().fill(Color(hex: 0xD0605E)).frame(width: 8, height: 8)
+                Circle().fill(Theme.danger).frame(width: 8, height: 8)
                 Text(c.recording == .note ? "正在录音 \(clock)" : clock)
-                    .font(.system(size: 13, weight: .medium).monospacedDigit()).foregroundStyle(Theme.ink)
+                    .font(Theme.font(size: 13, weight: .medium).monospacedDigit()).foregroundStyle(Theme.ink)
                 Wave(levels: c.recorder.levels).frame(height: 26)
                 if c.recording == .note {
                     Button("取消") { c.cancelRecording() }.buttonStyle(SoftButtonStyle())
                     Button("完成") { c.finishNote() }.buttonStyle(GoldButtonStyle(height: 28))
                 } else {
                     Text(c.holdCancel ? "松开取消" : "松开发送 · 上滑取消")
-                        .font(.system(size: 12)).foregroundStyle(c.holdCancel ? Theme.danger : Theme.sub)
+                        .font(Theme.font(size: 12)).foregroundStyle(c.holdCancel ? Theme.danger : Theme.sub)
                 }
             }
         }
         .padding(.horizontal, 14)
         .frame(height: 46)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Color(hex: 0xF7F9FB)))
+        .background(RoundedRectangle(cornerRadius: 18).fill(Theme.field))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Theme.line, lineWidth: 1))
     }
 
@@ -495,7 +516,7 @@ struct Wave: View {
     var body: some View {
         HStack(alignment: .center, spacing: 2.5) {
             ForEach(levels.indices, id: \.self) { i in
-                Capsule().fill(Color(hex: 0x6F8BAA).opacity(0.75))
+                Capsule().fill(Theme.accent.opacity(0.75))
                     .frame(width: 2.5, height: max(3, CGFloat(levels[i]) * 26))
             }
         }
@@ -503,3 +524,7 @@ struct Wave: View {
         .animation(.linear(duration: 0.06), value: levels)
     }
 }
+
+#if MAC_VERIFY
+enum ComposerVerification { static weak var currentTask: Composer? }
+#endif

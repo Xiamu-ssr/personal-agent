@@ -51,7 +51,7 @@ struct Verify {
                 } else if CommandLine.arguments.contains("--input-review") {
                     try await inputFixtures()
                 } else if CommandLine.arguments.contains("--local-review") {
-                    try await V05Review.run()
+                    try await V06Review.run()
                 } else {
                     try await fixtures()
                 }
@@ -389,9 +389,10 @@ struct Verify {
         print("PASS: failed transcription retains audio without uploading or sending")
         try await TaskProtocolFixtures.run()
         try await ConnectorFixtures.run()
-        try await V05Fixtures.run()
+        try await V06Fixtures.run()
         try await SettingsTaskFixtures.run()
         try await memoryFixtures()
+        try await V06LogicFixtures.run()
         try await memoryPressureFixtures()
         try await inputFixtures()
     }

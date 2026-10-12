@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LABEL=${1:-after}
-OUT="$PWD/verification/v0.5.0/memory-pressure"
+OUT="$PWD/verification/v0.6.0/memory-pressure"
 mkdir -p "$OUT"
 SRC=Sources
 if [[ "$LABEL" == before* ]]; then SRC="$OUT/before-sources"; fi

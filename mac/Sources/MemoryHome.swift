@@ -1,32 +1,18 @@
 import SwiftUI
 
-struct HealthMetric {
-    let key: String
-    let label: String
-    let value: String
-    let unit: String
-}
-
 enum MemorySummary {
     static func preview(_ text: String) -> String {
         text.components(separatedBy: "\n").filter { !$0.hasPrefix("更新：") && !$0.hasPrefix("# ") && !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .prefix(4).joined(separator: "\n\n")
     }
-    static func health(_ json: [String: Any]) -> [HealthMetric] {
-        (json["metrics"] as? [[String: Any]] ?? []).compactMap { item in
-            guard let key = item["key"] as? String else { return nil }
-            let value = ConnectorField.string(item["value"])
-            return HealthMetric(key: key, label: item["label"] as? String ?? "", value: value.isEmpty ? "--" : value, unit: item["unit"] as? String ?? "")
-        }
-    }
+
 }
 
 struct MemoryPage: View {
     private var chat: ChatClient { .shared }
     @State private var profile: String?
     @State private var categories: [(dir: String, files: [TreeEntry])]?
-    @State private var health: [HealthMetric] = []
-    @State private var healthUpdated = ""
+    @State private var health: HealthSnapshot?
     @State private var error = ""
 
     var body: some View {
@@ -51,13 +37,9 @@ struct MemoryPage: View {
 
     private func load() async {
         async let profileText = try? Api.text("data/memory/profile/总档.md")
-        async let latest = try? Api.text("data/memory/health/latest.json")
+        async let healthJSON = try? Api.json("/api/health")
         profile = await profileText ?? ""
-        health = []
-        if let data = await latest?.data(using: .utf8), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            health = MemorySummary.health(json)
-            healthUpdated = json["updated"] as? String ?? ""
-        } else { healthUpdated = "" }
+        if let json = await healthJSON { health = try? HealthSnapshot.parse(json) }
         do {
             let dirs = try await Api.tree("data/memory").filter { $0.dir && Theme.categories.map(\.dir).contains($0.name) }
             var byDir: [String: [TreeEntry]] = [:]
@@ -81,9 +63,9 @@ struct MemoryPage: View {
     private var profileCard: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
-                Text("我对 \(ProfileStore.shared.userCall) 的了解").font(.system(size: 22, weight: .bold)).foregroundStyle(Theme.ink)
+                Text("我对 \(ProfileStore.shared.userCall) 的了解").font(Theme.titleFont(20)).foregroundStyle(Theme.ink)
                 Spacer()
-                Image(systemName: "sparkle").font(.system(size: 22)).foregroundStyle(Theme.goldText)
+                Image(systemName: "sparkle").font(Theme.font(size: 22)).foregroundStyle(Theme.goldText)
                     .frame(width: 34, height: 34).background(GoldBase(radius: 12)).rotationEffect(.degrees(8))
             }
             if profile == nil { Note(text: "加载中…") }
@@ -95,32 +77,27 @@ struct MemoryPage: View {
             }
             Button("查看全部") { Nav.shared.push(.doc(title: "我对 \(ProfileStore.shared.userCall) 的了解", path: "data/memory/profile/总档.md")) }
                 .buttonStyle(SoftButtonStyle())
-        }.card(radius: 24, padding: 24)
+        }.card(radius: 16, padding: 24)
     }
 
     private var healthCard: some View {
-        let defaults = [("sleep", "睡眠", "小时"), ("resting_heart_rate", "静息心率", "次/分"), ("steps", "步数", "步"), ("hrv", "心率变异性", "ms")]
-        return VStack(alignment: .leading, spacing: 18) {
-            Button { Nav.shared.push(.memoryCategory("health")) } label: {
-                HStack { Text("健康").font(.system(size: 16, weight: .semibold)); Spacer(); Image(systemName: "chevron.right").font(.system(size: 11)) }
-                    .foregroundStyle(Theme.ink).contentShape(Rectangle())
-            }.buttonStyle(.plain)
-            HStack(alignment: .top, spacing: 14) {
-                ForEach(defaults.indices, id: \.self) { i in
-                    let d = defaults[i]
-                    let m = health.first { $0.key == d.0 || $0.label == d.1 }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(d.1).font(.system(size: 12)).foregroundStyle(Theme.sub)
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text(m?.value ?? "--").font(.system(size: 24, weight: .bold)).foregroundStyle(Theme.ink)
-                            Text(m?.unit ?? d.2).font(.system(size: 10.5)).foregroundStyle(Theme.sub)
-                        }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
+        Button { Nav.shared.push(.health) } label: {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("健康").font(Theme.titleFont(17)); Spacer()
+                    if health?.weekly.contains(where: { MemoryReadState.shared.isNew($0.path, updated: Fmt.dayKey.date(from: $0.date)) }) == true { NewMark() }
+                    Image(systemName: "chevron.right").font(Theme.font(size: 11))
                 }
-            }
-            if health.isEmpty { Text("还没有健康数据").font(.system(size: 11.5)).foregroundStyle(Theme.faint) }
-            else if !healthUpdated.isEmpty { Text("更新于 " + healthUpdated.prefix(10)).font(.system(size: 11.5)).foregroundStyle(Theme.faint) }
-        }.card(radius: 22, padding: 22)
+                HStack(alignment: .top, spacing: 14) {
+                    ForEach(HealthKind.allCases) { kind in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(kind.title).font(Theme.font(size: 13)).foregroundStyle(Theme.sub)
+                            Text(kind.formatted(health?.today()?.value(kind))).font(Theme.font(size: 24, weight: .semibold))
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }.foregroundStyle(Theme.ink).card(padding: 22).contentShape(Rectangle())
+        }.buttonStyle(.plain).verificationAction("健康")
     }
 
     private var voiceCard: some View {
@@ -129,12 +106,12 @@ struct MemoryPage: View {
             HStack(spacing: 16) {
                 IconTile(icon: "waveform", size: 40)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("语音笔记").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text("语音笔记").font(Theme.font(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
                     Text(files.isEmpty ? "按住说话发的语音笔记会出现在这里" : "\(files.count) 条 · 最近一条 " + Fmt.when(files[0].mtime))
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.sub)
+                        .font(Theme.font(size: 12.5)).foregroundStyle(Theme.sub)
                 }
-                Spacer(); Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Theme.faint)
-            }.frame(maxWidth: .infinity, alignment: .leading).card(radius: 22, padding: 22).contentShape(Rectangle())
+                Spacer(); Image(systemName: "chevron.right").font(Theme.font(size: 11)).foregroundStyle(Theme.faint)
+            }.frame(maxWidth: .infinity, alignment: .leading).card(radius: 16, padding: 22).contentShape(Rectangle())
         }.buttonStyle(.plain)
     }
 }
@@ -147,8 +124,8 @@ struct CategoryCard: View {
         let category = Theme.category(dir)
         Button { Nav.shared.push(.memoryCategory(dir)) } label: {
             VStack(alignment: .leading, spacing: 10) {
-                HStack { Text(category.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink); Spacer(); Text("\(count) 项").font(.system(size: 12)).foregroundStyle(Theme.sub) }
-                Text((latest as NSString).deletingPathExtension).font(.system(size: 12.5)).foregroundStyle(Theme.sub).lineLimit(1)
+                HStack { Text(category.name).font(Theme.titleFont(17)).foregroundStyle(Theme.ink); Spacer(); Text("\(count) 项").font(Theme.font(size: 12)).foregroundStyle(Theme.sub) }
+                Text((latest as NSString).deletingPathExtension).font(Theme.font(size: 12.5)).foregroundStyle(Theme.sub).lineLimit(1)
             }
             .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
             .padding(20).padding(.top, 12)
@@ -157,7 +134,7 @@ struct CategoryCard: View {
                 UnevenRoundedRectangle(topLeadingRadius: 8, topTrailingRadius: 8).fill(category.color.opacity(0.15))
                     .frame(width: 72, height: 10).offset(x: 20, y: -7)
             }
-            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.9), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.line, lineWidth: 0.5))
             .contentShape(Rectangle())
         }.buttonStyle(.plain).padding(.top, 7)
     }
@@ -179,7 +156,7 @@ struct MemoryCategoryPage: View {
                         }
                     }
                 } else { Note(text: !error.isEmpty ? error : files == nil ? "加载中…" : "这里还是空的") }
-            }.card(radius: 22, padding: 10)
+            }.card(radius: 16, padding: 10)
         }
         .task(id: chat.filesVersion) {
             do { files = try await Api.tree("data/memory/\(dir)").filter { !$0.dir && $0.name.hasSuffix(".md") }; error = "" }
@@ -223,15 +200,15 @@ struct HomePage: View {
             VStack(spacing: 10) {
                 Button { choosing = true } label: {
                     DreamAvatar(choice: profile.avatar).frame(width: 272, height: 272)
-                        .frame(maxWidth: .infinity).background(RadialGradient(colors: [.white.opacity(0.65), .clear], center: .center, startRadius: 10, endRadius: 280))
+                        .frame(maxWidth: .infinity).background(RadialGradient(colors: [Theme.userBubble.opacity(0.65), .clear], center: .center, startRadius: 10, endRadius: 280))
                         .contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityLabel("更换头像")
-                Text(profile.agentName).font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
-                Text(Self.intro(firstChat: profile.firstChat, userCall: profile.userCall)).font(.system(size: 14)).foregroundStyle(Theme.sub)
+                Text(profile.agentName).font(Theme.titleFont(28)).foregroundStyle(Theme.ink)
+                Text(Self.intro(firstChat: profile.firstChat, userCall: profile.userCall)).font(Theme.font(size: 14)).foregroundStyle(Theme.sub)
             }.frame(maxWidth: .infinity)
             VStack(alignment: .leading, spacing: 12) {
                 SectionTitle(text: "日记", trailing: AnyView(Button("查看所有日记") { Nav.shared.push(.diaries) }
-                    .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.accent)))
+                    .buttonStyle(.plain).font(Theme.font(size: 12.5)).foregroundStyle(Theme.accent)))
                 if let diaries, !diaries.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 18) { ForEach(diaries.prefix(8)) { DiaryCard(diary: $0) } }.padding(.vertical, 10).padding(.horizontal, 5)
@@ -239,9 +216,9 @@ struct HomePage: View {
                 } else { Note(text: diaries == nil ? "加载中…" : "豆豆每晚 22:30 写一篇日记").card(padding: 12) }
             }
             if !error.isEmpty { Note(text: error) }
-            ListRow(icon: "person.crop.circle", tint: Color(hex: 0x637DA0), title: "豆豆的设定") {
+            ListRow(icon: "person.crop.circle", tint: Theme.accent, title: "豆豆的设定") {
                 Nav.shared.push(.doc(title: "豆豆的设定", path: "data/memory/role/角色.md"))
-            }.card(radius: 22, padding: 10)
+            }.card(radius: 16, padding: 10)
         }
         .task(id: chat.filesVersion) {
             await profile.load()
@@ -263,12 +240,12 @@ struct AvatarPicker: View {
     private var profile: ProfileStore { .shared }
     var body: some View {
         VStack(spacing: 22) {
-            Text("更换头像").font(.system(size: 22, weight: .bold)).foregroundStyle(Theme.ink)
+            Text("更换头像").font(Theme.titleFont(20)).foregroundStyle(Theme.ink)
             DreamAvatar(choice: choice).frame(width: 190, height: 180)
             HStack(spacing: 12) {
                 ForEach(AvatarChoice.shapes.indices, id: \.self) { i in
                     Button { choice.shape = AvatarChoice.shapes[i] } label: {
-                        VStack(spacing: 4) { DreamAvatar(choice: AvatarChoice(shape: AvatarChoice.shapes[i], palette: choice.palette)).frame(width: 66, height: 66); Text(AvatarChoice.shapeTitles[i]).font(.system(size: 12)) }
+                        VStack(spacing: 4) { DreamAvatar(choice: AvatarChoice(shape: AvatarChoice.shapes[i], palette: choice.palette)).frame(width: 66, height: 66); Text(AvatarChoice.shapeTitles[i]).font(Theme.font(size: 12)) }
                             .padding(8).background(choice.shape == AvatarChoice.shapes[i] ? Theme.goldText.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 16))
                     }.buttonStyle(.plain).accessibilityLabel(AvatarChoice.shapeTitles[i])
                 }
@@ -278,20 +255,20 @@ struct AvatarPicker: View {
                     Button { choice.palette = AvatarChoice.palettes[i] } label: {
                         VStack(spacing: 6) {
                             Circle().fill(LinearGradient(colors: Array(DreamAvatar.colors(AvatarChoice.palettes[i]).prefix(2)), startPoint: .top, endPoint: .bottom))
-                                .frame(width: 26, height: 26).overlay(Circle().strokeBorder(choice.palette == AvatarChoice.palettes[i] ? Theme.goldText : .white, lineWidth: 2))
-                            Text(AvatarChoice.paletteTitles[i]).font(.system(size: 11.5)).foregroundStyle(Theme.sub)
+                                .frame(width: 26, height: 26).overlay(Circle().strokeBorder(choice.palette == AvatarChoice.palettes[i] ? Theme.goldText : Theme.line, lineWidth: 2))
+                            Text(AvatarChoice.paletteTitles[i]).font(Theme.font(size: 11.5)).foregroundStyle(Theme.sub)
                         }.frame(width: 76)
                     }.buttonStyle(.plain)
                 }
             }
-            if !profile.error.isEmpty { Text(profile.error).font(.system(size: 12)).foregroundStyle(Theme.danger) }
+            if !profile.error.isEmpty { Text(profile.error).font(Theme.font(size: 12)).foregroundStyle(Theme.danger) }
             HStack(spacing: 14) {
                 Button("取消") { dismiss() }.buttonStyle(SoftButtonStyle())
                 Button(profile.saving ? "保存中…" : "保存") {
                     Task { @MainActor in await profile.save(choice); if profile.error.isEmpty { dismiss() } }
                 }.buttonStyle(GoldButtonStyle(height: 36)).disabled(profile.saving)
             }
-        }.padding(28).frame(width: 440).background(Theme.canvas).preferredColorScheme(.light)
+        }.padding(28).frame(width: 440).background(Theme.canvas).preferredColorScheme(Theme.scheme)
     }
 }
 
@@ -303,17 +280,17 @@ struct DiaryCard: View {
         Button { Nav.shared.push(.doc(title: diary.title.isEmpty ? diary.dateLabel : diary.title, path: diary.path)) } label: {
             VStack(alignment: .leading, spacing: 13) {
                 VStack(spacing: 0) {
-                    Text(["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][diary.weekday]).font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.goldText)
-                        .frame(width: 42, height: 18).background(.white.opacity(0.45))
-                    Text(diary.date.map { String(Calendar.current.component(.day, from: $0)) } ?? "—").font(.system(size: 25, weight: .bold)).foregroundStyle(Theme.ink).frame(width: 42, height: 34)
-                }.background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 8)).clipShape(RoundedRectangle(cornerRadius: 8))
-                Text(diary.title.isEmpty ? "日记" : diary.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
-                Text(diary.summary).font(.system(size: 12.5)).foregroundStyle(Theme.sub).lineLimit(3).lineSpacing(5)
+                    Text(["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][diary.weekday]).font(Theme.font(size: 9, weight: .semibold)).foregroundStyle(Theme.goldText)
+                        .frame(width: 42, height: 18).background(Theme.card)
+                    Text(diary.date.map { String(Calendar.current.component(.day, from: $0)) } ?? "—").font(Theme.font(size: 25, weight: .bold)).foregroundStyle(Theme.ink).frame(width: 42, height: 34)
+                }.background(Theme.card, in: RoundedRectangle(cornerRadius: 8)).clipShape(RoundedRectangle(cornerRadius: 8))
+                Text(diary.title.isEmpty ? "日记" : diary.title).font(Theme.font(size: 15, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
+                Text(diary.summary).font(Theme.font(size: 12.5)).foregroundStyle(Theme.sub).lineLimit(3).lineSpacing(5)
                 Spacer(minLength: 0)
             }
             .frame(width: fluid ? nil : 220, height: 164, alignment: .topLeading).frame(maxWidth: fluid ? .infinity : nil, alignment: .leading)
-            .padding(20).background(Color(hex: papers[diary.weekday]), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.7), lineWidth: 1))
+            .padding(20).background(Theme.skin == .night ? Theme.card : Color(hex: papers[diary.weekday]), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 0.5))
             .shadow(color: Theme.ink.opacity(0.06), radius: 7, y: 6)
             .rotationEffect(.degrees(diary.weekday % 2 == 0 ? -1.5 : 1.5)).contentShape(Rectangle())
         }.buttonStyle(.plain)

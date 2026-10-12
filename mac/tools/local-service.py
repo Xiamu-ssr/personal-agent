@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Disposable v0.5 HTTP/WS fixture. Loopback only; no credentials or message bodies in logs."""
+"""Disposable v0.6 HTTP/WS fixture. Loopback only; no credentials or message bodies in logs."""
 import argparse
 import base64
 import copy
@@ -29,7 +29,7 @@ reason = ''
 scenario = 'idle'
 scenario_version = 0
 serial = 0
-operations = {k: 0 for k in ['send', 'stop_task', 'interrupt', 'unqueue', 'edit_queued', 'account_save', 'account_test', 'account_delete', 'device_delete', 'profile_save', 'icon', 'site', 'login', 'settings_save', 'task_history', 'task_send', 'blocked']}
+operations = {k: 0 for k in ['send', 'stop_task', 'interrupt', 'unqueue', 'edit_queued', 'account_save', 'account_test', 'account_delete', 'device_delete', 'profile_save', 'icon', 'site', 'login', 'settings_save', 'task_history', 'task_send', 'blocked', 'upload', 'health', 'health_sync', 'brief_item', 'jobs', 'jobs_next']}
 profile = dict(avatar=dict(shape='bean', palette='mist'))
 
 def later(delay, fn):
@@ -37,22 +37,24 @@ def later(delay, fn):
     timer.daemon = True
     timer.start()
 
+# Read the cloud worker's CSS, never modify it.
+brief_base = (Path(__file__).resolve().parents[2]/'cloud'/'src'/'brief-base.css').read_text()
 def card_html(content, style=''):
-    return '<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>' +         'html,body{margin:0;background:transparent}*{box-sizing:border-box}body{font:15px -apple-system;color:#252e38;line-height:1.6}.card{padding:24px;background:#fbfcfed9;border-radius:24px}.chip{display:inline-block;padding:3px 10px;border-radius:20px;background:#f3dfb050;color:#6c4a25;font-size:12px}h1{font-size:24px;line-height:1.4;margin:14px 0 10px}h2{font-size:21px;margin:12px 0}.sub{color:#728093}.row{padding:12px 0;border-bottom:1px solid #dae2ea}.metric{font-size:32px;font-weight:650;color:#527aaa}button{border:1px solid #fff;border-radius:20px;background:linear-gradient(145deg,#fffbed,#f3dfb0);background:#f3dfb080;padding:10px 16px;color:#6c4a25;font:14px -apple-system;margin-top:14px;cursor:pointer}' + style +         '</style></head><body><section class="card">' + content + '</section><script>document.addEventListener("click",e=>{const b=e.target.closest("[data-prompt]");if(b){location.href="doudou://prompt?text="+encodeURIComponent(b.dataset.prompt)}})</script></body></html>'
+    return '<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>' + brief_base + style + '</style></head><body><section class="card" data-palette="silver">' + content + '</section><script>document.addEventListener("click",e=>{const b=e.target.closest("[data-prompt]");if(b){location.href="doudou://prompt?text="+encodeURIComponent(b.dataset.prompt)}})</script></body></html>'
 
 brief_path = f'data/briefs/{day()}/晨报.html'
 brief_title = '把周报收尾，下午留给自己的计划'
 brief_cards = [
-    dict(html=card_html('<span class="chip">今天 · 晨报</span><h1>' + brief_title + '</h1><p class="sub">上午先做最需要专注的事，晚些时候散步。</p><button data-prompt="帮我把今天的事排个顺序">排一下今天的顺序</button>', '.chip{animation:glow 3s ease-in-out infinite}@keyframes glow{50%{background:#f3dfb0a0}}')),
-    dict(html=card_html('<span class="chip">生活 · 收口</span><h2>两件小事顺手做完</h2><div class="sub">取快递 · 给绿植浇水</div>')),
-    dict(html=card_html('<span class="chip">阅读 · 长卡片</span><h2>这周的阅读与整理</h2><p class="sub">这张长卡片在卡片内部滚动。</p>' + ''.join(f'<div class="row"><b>第 {n} 项</b><div class="sub">读一个章节，写下一句自己的理解。</div></div>' for n in range(1, 19)) + '<div id="end">全部 18 项已经看完</div>')),
+    dict(html=card_html('<div class="chip">今天 · 晨报</div><h1 class="title">' + brief_title + '</h1><p class="summary">先收尾需要专注的事，再给生活留一点空白。</p><div class="dates">' + ''.join(f'<div class="day" {"data-today" if n==0 else ""}><span class="dow">{["一","二","三","四","五","六","日"][n]}</span><span class="d">{(today+timedelta(days=n)).day}</span><span class="mark">{"今天" if n==0 else "周末" if n>4 else ""}</span></div>' for n in range(7)) + '</div><div class="tiles"><div class="tile" data-tone="info"><span class="label">天气</span><span class="value">24°</span><span class="desc">晚些时候散步</span></div><div class="tile" data-tone="ok"><span class="label">日程</span><span class="value">1 件</span><span class="desc">下午核对周报</span></div><div class="tile" data-tone="warn"><span class="label">跟进</span><span class="value">2 项</span><span class="desc">清单已经整理好</span></div></div><div class="buttons"><button data-prompt="帮我把今天的事排个顺序">排一下今天的顺序</button></div>')),
+    dict(html=card_html('<div class="chip">采购 · 耳机比价</div><h2 class="title">先选舒适度，通勤更省心</h2><p class="summary">同一个主题放在一张卡片里看完。</p><table class="compare"><tr><th data-pick>方案 A · 推荐</th><th>方案 B</th></tr><tr><td>轻巧、长时间佩戴</td><td>降噪更强</td></tr><tr><td>续航 8 小时</td><td>续航 6 小时</td></tr></table><div class="note">价格是本地示例，仅用于页面验收。</div>')),
+    dict(html=card_html('<div class="chip">最近 · 跟进清单</div><h2 class="title">整理完这一轮，再继续下一步</h2><ol class="steps">' + ''.join(f'<li>第 {n} 项：核对资料里的日期和数字。<span class="state" data-state="done">已完成</span></li>' for n in range(1, 16)) + '</ol><div id="end" class="note">这一轮的 15 项已经整理完。</div>')),
 ]
 brief_items = [dict(date=day(), name='晨报', time=f'{day()}T07:36:00+08:00', path=brief_path, cards=brief_cards),
-    dict(date=day(1), name='晚报', time=f'{day(1)}T21:30:00+08:00', path=f'data/briefs/{day(1)}/晚报.html', cards=[dict(html=card_html('<span class="chip">昨天</span><h2>今天的事已经收好了</h2><p class="sub">把未完成的两项留给明天。</p>'))]),
+    dict(date=day(1), name='晚报', time=f'{day(1)}T21:30:00+08:00', path=f'data/briefs/{day(1)}/晚报.html', cards=[dict(html=card_html('<span class="chip">昨天</span><h2 class="title">今天的事已经收好了</h2><p class="summary">把未完成的两项留给明天。</p>'))]),
     dict(date=day(20), name='健康周报', time=f'{day(20)}T20:00:00+08:00', path=f'data/briefs/{day(20)}/健康周报.html', cards=[dict(html=card_html('<span class="chip">健康周报</span><h2>这一周休息得不错</h2><span class="metric">7.2</span> 小时'))])]
 settings = dict(model='anthropic/claude-haiku-5.5', permissionMode='auto', models=[
     dict(id='anthropic/claude-haiku-5.5', label='Claude Haiku 5.5', note='消耗约 1×；输入超过 100K 后约 5×'),
-    dict(id='xiaomi/mimo-v2.6-pro', label='MiMo V2.6 Pro', note='输入约 4.35×，输出约 1.74×；缓存读约 0.36×'),
+    dict(id='z-ai/glm-5.3-flash', label='GLM 5.3 Flash', note='输入约 1.5×，输出约 1×；缓存读约 3×'),
     dict(id='z-ai/glm-5.3-flashx', label='GLM 5.3 FlashX', note='输入约 3.75×，输出约 2.5×；缓存读约 7.5×')], permissionModes=[
     dict(id='auto', label='自动', note='不问用户，自动拦下危险操作'),
     dict(id='bypassPermissions', label='完全放行', note='什么都不拦')])
@@ -62,8 +64,9 @@ def reset_task_histories():
     task_histories.clear()
     specs = [('report', '整理公开资料，写研究摘要', 'running'), ('table', '校对表格并生成检查清单', 'running'),
         ('morning-1', '晨报', 'done'), ('spending-1', '支出整理', 'done'), ('reading-1', '阅读整理', 'error'), ('stopped-1', '旧资料整理', 'stopped')]
+    specs += [(f'older-{i}', f'历史任务 {i+1}', 'done') for i in range(75)]
     for identity, title, status in specs:
-        entries = [dict(kind='prompt', text='请' + title + '，把结论和需要继续做的事告诉我。', time=anchor-78000),
+        entries = [dict(kind='prompt', **{'from':'agent'}, text='请' + title + '，把结论和需要继续做的事告诉我。', time=anchor-78000),
             dict(kind='text', text='先核对已有资料，再整理主要结论。', time=anchor-72000),
             dict(kind='tool', tool='Read', text='读取 data/memory/profile/总档.md', time=anchor-66000),
             dict(kind='tool', tool='Grep', text='搜索资料里的日期与数字', time=anchor-60000)]
@@ -91,8 +94,17 @@ files = {
     'data/memory/preferences/协作习惯.md': '# 协作习惯\n\n先核实当前状态，再执行。',
     'data/memory/voice-notes/散步时想到的事.md': '# 散步时想到的事\n\n记录一个整理书架的想法。',
     'data/memory/role/角色.md': '# 豆豆的设定\n\n认真、克制，帮你把事情接着做完。',
-    'data/memory/health/latest.json': json.dumps(dict(updated=day(), metrics=[dict(key='sleep', label='睡眠', value=7.2, unit='小时'), dict(key='resting_heart_rate', label='静息心率', value=62, unit='次/分'), dict(key='steps', label='步数', value=6840, unit='步'), dict(key='hrv', label='心率变异性', value=42, unit='ms')]), ensure_ascii=False),
+    'data/memory/health/基线.md': '# 健康基线\n\n最近一周保持稳定的睡眠和散步节奏。\n\n数据是本地验收样例。',
+    'data/memory/health/健康档案.md': '# 健康档案\n\n关注睡眠、步数与恢复情况。\n\n每周把变化整理成健康周报。',
 }
+health_synced = datetime.now(zone).isoformat()
+def health_data():
+    empty = scenario == 'health-empty'
+    return dict(syncedAt=None if empty else health_synced, device=None if empty else '本地测试手机', note='手机不在线，显示已有数据' if scenario=='health-offline' else None,
+        days=[dict(date=day(6-i), sleepMinutes=None if empty or i==2 else [405,420,0,450,390,435,432][i], restingHr=None if empty else [64,62,63,61,65,62,62][i], hrv=None if empty or i==4 else [38,40,44,42,0,45,42][i], steps=None if empty else [6400,7200,8500,5100,7300,8900,6840][i]) for i in range(7)],
+        weekly=[dict(name='健康周报', path=f'data/briefs/{day(n)}/健康周报.html', date=day(n), range=f'{(today-timedelta(days=n+6)).month}月{(today-timedelta(days=n+6)).day}日–{(today-timedelta(days=n)).month}月{(today-timedelta(days=n)).day}日', summary='睡眠节奏稳定，继续给每天留一点散步时间。') for n in (20,30)],
+        records=[dict(path='data/memory/health/'+name+'.md', title=name, updated=day(4), preview=preview) for name,preview in [('基线','最近一周保持稳定的睡眠和散步节奏。\n数据是本地验收样例。'),('健康档案','关注睡眠、步数与恢复情况。\n每周整理变化。')]])
+brief_items.append(dict(date=day(30), name='健康周报', time=f'{day(30)}T20:00:00+08:00', path=f'data/briefs/{day(30)}/健康周报.html', cards=[dict(html=card_html('<div class="chip">健康 · 周报</div><h2 class="title">睡眠节奏保持稳定</h2><div class="metrics"><div class="metric"><span class="value">7.1</span><span class="unit">小时</span><span class="label">平均睡眠</span></div></div>'))]))
 profile_document = files['data/memory/profile/总档.md']
 for n, title in enumerate(['给今天留一点空白', '书架上的小发现', '走慢一点也很好', '收好这一周']):
     files[f'data/diary/{day(n)}.md'] = f'# {title}\n\n今天把几件小事收好了，也给没完成的事留了位置。聊过的内容让我更了解你的节奏。\n\n明天继续。'
@@ -139,8 +151,12 @@ def select(name):
         brief_items[0]['cards'] = brief_cards
         busy = name in ('task-result', 'queue', 'queue-late', 'schedule')
         reason = 'schedule' if name == 'schedule' else 'task_result' if busy else ''
-        if name in ('tasks', 'task-result', 'queue', 'queue-late', 'schedule'):
+        if name in ('tasks', 'task-long', 'task-result', 'queue', 'queue-late', 'schedule'):
             tasks = [dict(id='report', description='整理公开资料，写研究摘要', startedAt=now()-78000), dict(id='table', description='校对表格并生成检查清单', startedAt=now()-23000)]
+        if name=='task-long':
+            task_histories['report']['items'] += [dict(kind='text',text=f'进度 {n+1}：核对已有资料。\n\n把需要继续跟进的事情整理清楚。',time=anchor-30000+n*1000) for n in range(18)]
+        if name=='scroll-review':
+            history=[dict(role='user' if n%3==0 else 'assistant',text=f'第 {n+1} 条本地对话\n\n核对今天的安排，把需要继续做的事整理清楚。',ts=anchor-120000+n*1000) for n in range(36)]
         if name in ('memory-pressure', 'memory-pressure-burst'):
             tasks = [dict(id='report', description='本地压力验证任务，持续轮询', startedAt=now())]
             history = [dict(role='user' if n % 3 == 0 else 'assistant',
@@ -253,6 +269,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(dict(ok=True))
         if path == '/verify/scenario': return self.reply(select(query.get('name', ['idle'])[0]))
         if path == '/verify/stats': return self.reply(dict(operations=operations, scenario=scenario, queued=len(queued), historyUsers=sum(h['role']=='user' for h in history)))
+        if path == '/verify/task-progress':
+            task=task_histories.get(query.get('id',[''])[0])
+            if not task: return self.reply(dict(error='没有这个任务'),404)
+            task['items'].append(dict(kind='text',text='新进度：已经补上最后一份资料，继续核对。',time=now()))
+            return self.reply(dict(ok=True))
+        if path == '/verify/incoming':
+            broadcast(dict(t='status',busy=True,reason='task_result'))
+            broadcast(dict(t='delta',text='一条新的本地消息。'))
+            def incoming_done():
+                history.append(dict(role='assistant',text='一条新的本地消息。',ts=now()))
+                broadcast(dict(t='turn_end',text='一条新的本地消息。')); broadcast(dict(t='status',busy=False))
+            later(1,incoming_done)
+            return self.reply(dict(ok=True))
         if path == '/api/state': return self.reply(dict(busy=busy, tasks=tasks, schedule=schedule, firstChat=int(datetime(2026,9,24,tzinfo=zone).timestamp()*1000), userCall='夏木', agentName='豆豆'))
         if path == '/api/profile': return self.reply(profile)
         if path == '/api/settings': return self.reply(copy.deepcopy(settings))
@@ -264,6 +293,13 @@ class Handler(BaseHTTPRequestHandler):
             operations['task_history'] += 1
             task = task_histories.get(parts[2])
             return self.reply(copy.deepcopy(task) if task else dict(error='没有这个任务'), 200 if task else 404)
+        if path == '/api/health':
+            operations['health'] += 1
+            return self.reply(health_data())
+        if path == '/api/briefs/item':
+            operations['brief_item'] += 1
+            item = next((b for b in brief_items if b['path']==query.get('path',[''])[0]),None)
+            return self.reply(item if item else dict(error='没有这份简报'),200 if item else 404)
         if path == '/api/briefs':
             try: days = int(query.get('days', ['7'])[0])
             except ValueError: return self.reply(dict(error='days 应是整数'),400)
@@ -279,14 +315,24 @@ class Handler(BaseHTTPRequestHandler):
                 if task['status']=='running': continue
                 outputs=[brief_path] if identity=='morning-1' else ['data/sites/本周支出/index.html'] if identity=='spending-1' else []
                 recent.append(dict(id=identity,label=task['title'],title=task['title'],status=task['status'],ok=task['status']=='done',ts=anchor-elapsed,outputs=outputs,**({'path':brief_path} if identity=='morning-1' else {})))
-            return self.reply(dict(running=[],recent=recent))
+            for i in range(75):
+                elapsed = (14+i)*86400000
+                recent.append(dict(id=f'older-{i}',label=f'历史任务 {i+1}',title=f'历史任务 {i+1}',status='done',ok=True,ts=anchor-elapsed,outputs=[]))
+            before = int(query['before'][0]) if 'before' in query else None
+            limit = min(30,max(1,int(query.get('limit',['30'])[0])))
+            remaining = sorted([r for r in recent if before is None or r['ts']<before],key=lambda r:r['ts'],reverse=True)
+            page = remaining[:limit]
+            operations['jobs'] += 1
+            if before is not None: operations['jobs_next'] += 1
+            running = [dict(id=t['id'],label=t['description'],started=t['startedAt']) for t in tasks] if before is None else []
+            return self.reply(dict(running=running,recent=page,next=page[-1]['ts'] if len(remaining)>limit else None))
         if path == '/api/tree':
             directory = query.get('dir',[''])[0].rstrip('/')
             names = {}
             for filename, content in files.items():
                 if not filename.startswith(directory+'/'): continue
                 relative = filename[len(directory)+1:]; first, slash, _ = relative.partition('/')
-                names[first] = dict(name=first, dir=bool(slash), size=0 if slash else len(content.encode()), mtime=anchor-3600000)
+                names[first] = dict(name=first, dir=bool(slash), size=0 if slash else len(content) if isinstance(content,bytes) else len(content.encode()), mtime=anchor-3600000)
             if directory=='data/sites' and scenario!='sites-empty': names['暂时无法加载'] = dict(name='暂时无法加载', dir=True, size=0, mtime=anchor)
             if directory=='data/sites' and scenario=='sites-empty': names={}
             return self.reply(dict(entries=list(names.values())))
@@ -303,21 +349,32 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/files/'):
             filename = unquote(path.removeprefix('/files/'))
             if filename.endswith('/'): filename += 'index.html'
-            if filename=='data/memory/health/latest.json' and scenario=='health-empty': return self.reply(dict(error='还没有健康数据'),404)
             if filename not in files: return self.reply(dict(error='本地样例文件不存在'),404)
             if filename.startswith('data/sites/'): operations['site'] += 1
-            return self.raw_reply(files[filename].encode(), mimetypes.guess_type(filename)[0] or 'text/plain')
+            return self.raw_reply(files[filename] if isinstance(files[filename],bytes) else files[filename].encode(), mimetypes.guess_type(filename)[0] or 'text/plain')
         return self.reply(dict(error='本地假服务没有此接口'),404)
     def do_POST(self): self.mutate()
     def do_PUT(self): self.mutate()
     def do_DELETE(self): self.mutate()
     def mutate(self):
-        global profile
+        global profile, health_synced
         path = urlparse(self.path).path.removeprefix('/agent')
         raw = self.rfile.read(int(self.headers.get('Content-Length',0)))
+        if path=='/api/upload' and self.command=='POST':
+            if len(raw)>20<<20: return self.reply(dict(error='文件太大'),413)
+            operations['upload'] += 1
+            query=parse_qs(urlparse(self.path).query)
+            name=query.get('name',['file'])[0]
+            uploaded=f'data/uploads/{day()}/{operations["upload"]}-{name}'
+            files[uploaded]=raw
+            return self.reply(dict(path=uploaded,name=name,size=len(raw)))
         try: body = json.loads(raw or b'{}')
         except ValueError: return self.reply(dict(error='JSON 格式不对'),400)
         parts = [unquote(p) for p in path.split('/') if p]
+        if path=='/api/health/sync' and self.command=='POST':
+            operations['health_sync'] += 1
+            if scenario!='health-offline': health_synced=datetime.now(zone).isoformat()
+            return self.reply(health_data())
         if path=='/api/login':
             operations['login'] += 1
             return self.reply(dict(ok=True),headers={'Set-Cookie':'pa_token=local-fixture; Path=/agent; HttpOnly; SameSite=Lax'})
@@ -333,12 +390,12 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts)==4 and parts[:2]==['api','tasks'] and parts[3]=='send' and self.command=='POST':
             identity=parts[2]; task=task_histories.get(identity)
             if task is None: return self.reply(dict(error='没有这个任务'),404)
-            text=body.get('text','')
-            if not isinstance(text,str) or not text.strip(): return self.reply(dict(error='续聊不能为空'),400)
+            text=body.get('text',''); attachments=body.get('attachments',[])
+            if not isinstance(text,str) or (not text.strip() and not attachments): return self.reply(dict(error='续聊不能为空'),400)
             if scenario=='task-send-error': return self.reply(dict(error='本地模拟：续聊发送失败'),502)
             with lock:
                 operations['task_send'] += 1
-                task['items'].append(dict(kind='prompt',text=text.strip(),time=now()))
+                task['items'].append(dict(kind='prompt',**{'from':'user'},text=text.strip(),time=now(),attachments=attachments))
                 task['items'].append(dict(kind='tool',tool='Read',text='继续核对这份任务的原始记录',time=now()))
                 task['status']='running'
                 if not any(t['id']==identity for t in tasks): tasks.append(dict(id=identity,description=task['title'],startedAt=now()))

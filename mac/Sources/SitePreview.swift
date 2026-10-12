@@ -138,19 +138,19 @@ struct SiteCard: View {
                             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top).clipped()
                     } else {
                         ZStack {
-                            LinearGradient(colors: [Color(hex: 0xBDCEDE), Color(hex: 0xEAF0F5), Color(hex: 0xE8DABD)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            Text(String((preview?.title ?? entry.name).prefix(1))).font(.system(size: 48, weight: .light)).foregroundStyle(.white.opacity(0.9))
+                            LinearGradient(colors: [Theme.userBubble, Theme.card, Theme.field], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            Text(String((preview?.title ?? entry.name).prefix(1))).font(Theme.font(size: 48, weight: .light)).foregroundStyle(Theme.accent)
                         }
                     }
                 }.frame(height: 190).clipped()
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(preview?.title ?? entry.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
-                    Text(preview?.description.isEmpty == false ? preview!.description : " ").font(.system(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
-                    Text("更新于 " + Fmt.when(entry.mtime)).font(.system(size: 11.5)).foregroundStyle(Theme.faint)
+                    Text(preview?.title ?? entry.name).font(Theme.font(size: 16, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text(preview?.description.isEmpty == false ? preview!.description : " ").font(Theme.font(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
+                    Text("更新于 " + Fmt.when(entry.mtime)).font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint)
                 }.padding(18)
             }
             .background(Theme.card).clipShape(RoundedRectangle(cornerRadius: 22))
-            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.9), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Theme.line, lineWidth: 0.5))
             .contentShape(Rectangle())
         }.buttonStyle(.plain)
         .task(id: SitePreviewCache.key(path: path, mtime: entry.mtime) + "|\(chat.filesVersion)") {

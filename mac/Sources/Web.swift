@@ -15,6 +15,7 @@ struct WebPage: NSViewRepresentable {
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
+        web.appearance = Theme.appearance
         web.setValue(false, forKey: "drawsBackground")
         context.coordinator.load(web, path)
         return web
@@ -22,6 +23,7 @@ struct WebPage: NSViewRepresentable {
 
     func updateNSView(_ web: WKWebView, context: Context) {
         context.coordinator.parent = self
+        web.appearance = Theme.appearance
         if context.coordinator.path != path { context.coordinator.load(web, path) }
     }
 

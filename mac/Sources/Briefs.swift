@@ -40,7 +40,8 @@ struct BriefItem: Identifiable {
     /// The endpoint supplies complete card documents, including for older completion links.
     static func fetch(path: String) async throws -> BriefItem? {
         guard validPath(path) else { return nil }
-        return try await fetch(days: 365).first { $0.path == path }
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+?#"))) ?? ""
+        return BriefItem.parse(try await Api.json("/api/briefs/item?path=\(encoded)"))
     }
 }
 
@@ -80,23 +81,24 @@ struct BriefCardView: View {
     @State private var failed = ""
     @State private var visibilityUpdates = BriefVisibilityUpdates()
 
-    private var height: CGFloat { min(documentHeight > 1 ? documentHeight : 200, max(1, windowHeight * 0.75)) }
+    static func height(document: CGFloat, window: CGFloat) -> CGFloat { min(document > 1 ? document : 200, max(1, window * 2)) }
+    private var height: CGFloat { Self.height(document: documentHeight, window: windowHeight) }
 
     var body: some View {
         ZStack {
             if visible {
-                BriefWebView(html: card.html, documentHeight: $documentHeight, loading: $loading, failed: $failed)
+                BriefWebView(html: card.html, skin: Theme.skin, documentHeight: $documentHeight, loading: $loading, failed: $failed)
                     .frame(height: documentHeight > 1 ? height : 1)
             }
             if loading && visible { ActiveProgress().controlSize(.small) }
             if !failed.isEmpty { Note(text: failed, icon: "exclamationmark.triangle") }
         }
-        .frame(maxWidth: 480)
+        .frame(maxWidth: 440)
         .frame(height: height)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 24))
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.9), lineWidth: 1))
-        .shadow(color: Color(hex: 0x253751, alpha: 0.055), radius: 14, y: 6)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.line, lineWidth: 0.5))
+        .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 2)
         .background {
             GeometryReader { geometry in
                 let frame = geometry.frame(in: .named("briefViewport"))
@@ -139,6 +141,7 @@ struct TodayPage: View {
                 .onChange(of: nav.briefFocus) { Task { await focus(proxy) } }
             }
             .coordinateSpace(name: "briefViewport")
+            .background(TodaySwipeReceiver(selection: Binding(get: { nav.todaySection }, set: { nav.todaySection = $0 })))
         }
     }
 
@@ -178,7 +181,7 @@ struct TodayPage: View {
                     SectionTitle(text: Self.dayLabel(day))
                     ForEach(briefs.filter { $0.date == day }) { brief in
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("\(Fmt.hm.string(from: brief.time)) \(brief.name)").font(.system(size: 12)).foregroundStyle(Theme.sub).padding(.leading, 4)
+                            Text("\(Fmt.hm.string(from: brief.time)) \(brief.name)").font(Theme.font(size: 12)).foregroundStyle(Theme.sub).padding(.leading, 4)
                             ForEach(brief.cards.indices, id: \.self) { i in
                                 BriefCardView(card: brief.cards[i], viewport: viewport)
                             }
@@ -186,11 +189,11 @@ struct TodayPage: View {
                     }
                 }
             }
-            .frame(maxWidth: 480, alignment: .leading)
+            .frame(maxWidth: 440, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
         } else {
             Note(text: briefs == nil ? "加载中…" : "今天还没有简报" + (morningTime.isEmpty ? "" : " · 晨报 \(morningTime)"), icon: "sun.horizon")
-                .card(radius: 24, padding: 20)
+                .card(radius: 16, padding: 20)
         }
     }
 

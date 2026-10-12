@@ -26,8 +26,19 @@ struct StressBrief: View {
     @State private var failed = ""
     var body: some View {
         BriefWebView(html: html, documentHeight: $height, loading: $loading, failed: $failed)
-            .frame(height: min(max(1, height), 330))
+            .frame(height: min(max(1, height), 940))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+struct StressSurface<Content: View>: View {
+    let content: Content
+    @State private var activity = WindowActivity()
+    var body: some View {
+        content.preferredColorScheme(Theme.scheme).tint(Theme.accent)
+            .background(Theme.background)
+            .background(WindowActivityReader(activity: activity).frame(width:0,height:0))
+            .environment(\.interactiveWindow, activity.active)
     }
 }
 
@@ -136,22 +147,26 @@ struct StressBrief: View {
             }
             // Exercise actual production navigation. Leave each phase's last 60 s idle.
             let within = elapsed.truncatingRemainder(dividingBy: 150)
-            let page = elapsed >= 600 ? 0 : within < 30 ? 0 : within < 60 ? 1 : 2
+            let page = elapsed >= 600 ? 0 : within < 20 ? 0 : within < 40 ? 1 : within < 60 ? 2 : 3
             if page != previousPage {
                 previousPage = page
                 if page == 0 { Nav.shared.go(.memory); Nav.shared.push(.doc(title: "压力测试总档", path: "data/memory/profile/总档.md")) }
+                else if page == 3 { Nav.shared.go(.memory); Nav.shared.push(.health) }
                 else { Nav.shared.go(page == 1 ? .chat : .today) }
                 PerfProbe.shared.record("navigation")
             }
+            let skin = [Skin.silver, .paper, .night, .silver][min(3,Int(within / 20))]
+            if elapsed < 600 && Theme.skin != skin { SkinStore.shared.select(skin); PerfProbe.shared.record("skin_change") }
             PerfProbe.shared.heartbeat(["app_active": NSApp.isActive, "miniaturized": main.isMiniaturized,
                 "visible": main.isVisible, "occlusion_visible": main.occlusionState.contains(.visible), "page": page,
-                "chat_items": ChatClient.shared.items.count, "webviews": webCount(main.contentView!) + webCount(brief.contentView!)])
+                "chat_items": ChatClient.shared.items.count, "webviews": webCount(main.contentView!) + webCount(brief.contentView!),
+                "skin": Theme.skin.rawValue, "brief_created": BriefResources.created, "brief_dismantled": BriefResources.dismantled, "brief_live": BriefResources.live, "brief_loads": BriefResources.loads, "brief_skin_updates": BriefResources.skinUpdates])
         }
         pulse.resume(); timers.append(pulse)
     }
     @MainActor static func window<V: View>(_ title: String, size: NSSize, root: V) -> NSWindow {
         let w = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
-        w.title = title; w.isReleasedWhenClosed = false; w.contentView = NSHostingView(rootView: root.preferredColorScheme(.light)); w.center(); w.orderFront(nil); return w
+        w.title = title; w.isReleasedWhenClosed = false; w.contentView = NSHostingView(rootView: StressSurface(content: root)); w.center(); w.orderFront(nil); return w
     }
     @MainActor static func webCount(_ view: NSView) -> Int { (view is WKWebView ? 1 : 0) + view.subviews.reduce(0) { $0 + webCount($1) } }
 }

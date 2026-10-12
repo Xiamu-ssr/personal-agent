@@ -161,10 +161,10 @@ struct ConnectorDetailPage: View {
                 HStack(spacing: 16) {
                     ConnectorImage(name: connector.name, size: 56)
                     Text("账号 · \(connector.accounts.count) 个")
-                        .font(.system(size: 13)).foregroundStyle(Theme.sub)
+                        .font(Theme.font(size: 13)).foregroundStyle(Theme.sub)
                     Spacer()
                 }
-                .card(radius: 22, padding: 20)
+                .card(radius: 16, padding: 20)
                 if !error.isEmpty { Note(text: error, icon: "exclamationmark.circle") }
                 if !store.error.isEmpty { Note(text: store.error, icon: "wifi.exclamationmark") }
                 accounts(connector)
@@ -187,20 +187,20 @@ struct ConnectorDetailPage: View {
             SectionTitle(text: "账号")
             if connector.accounts.isEmpty {
                 Note(text: "还没有添加账号\n添加后，豆豆就能使用这个服务", icon: "person.crop.circle.badge.plus")
-                    .card(radius: 22, padding: 14)
+                    .card(radius: 16, padding: 14)
             }
             ForEach(connector.accounts) { account in
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 7) {
-                        Text(account.label).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.ink)
+                        Text(account.label).font(Theme.font(size: 15, weight: .medium)).foregroundStyle(Theme.ink)
                         HStack(spacing: 6) {
                             Circle().fill(account.status == "ok" ? Theme.online : Theme.danger).frame(width: 7, height: 7)
                             Text(account.status == "ok" ? "已连接" : "连接异常")
                             if let checked = account.checkedAt { Text("· " + Fmt.ago(checked) + "验证") }
                         }
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.sub)
+                        .font(Theme.font(size: 11.5)).foregroundStyle(Theme.sub)
                         if account.status != "ok" {
-                            Text(account.error.isEmpty ? "尚未通过验证" : account.error).font(.system(size: 12)).foregroundStyle(Theme.danger)
+                            Text(account.error.isEmpty ? "尚未通过验证" : account.error).font(Theme.font(size: 12)).foregroundStyle(Theme.danger)
                         }
                     }
                     Spacer(minLength: 4)
@@ -213,7 +213,7 @@ struct ConnectorDetailPage: View {
                     }
                     .disabled(working != nil)
                 }
-                .card(radius: 20, padding: 18)
+                .card(radius: 16, padding: 18)
             }
         }
     }
@@ -253,7 +253,7 @@ struct ConnectorFormPage: View {
             if let draft {
                 if draft.editing {
                     Text("授权码不修改请留空，保存时会重新验证。")
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.sub)
+                        .font(Theme.font(size: 12.5)).foregroundStyle(Theme.sub)
                 }
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach((draft.connector.fields ?? []).filter { $0.visible(values) }) { field in
@@ -261,7 +261,7 @@ struct ConnectorFormPage: View {
                     }
                 }
                 .disabled(verifying)
-                .card(radius: 22, padding: 24)
+                .card(radius: 16, padding: 24)
                 .frame(maxWidth: 640, alignment: .leading)
                 if !error.isEmpty { Note(text: error, icon: "exclamationmark.circle").frame(maxWidth: 640, alignment: .leading) }
                 Button(verifying ? "正在验证…" : draft.editing ? "保存并验证" : "验证并添加") { save(draft) }
@@ -310,7 +310,7 @@ private struct ConnectorFieldView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(field.label + (field.required ? " *" : "")).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink)
+            Text(field.label + (field.required ? " *" : "")).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.ink)
             if field.type == "select" {
                 Picker(field.label, selection: value) {
                     Text("请选择").tag("")
@@ -333,13 +333,13 @@ private struct ConnectorFieldView: View {
                             .buttonStyle(.plain).foregroundStyle(Theme.sub).help(shown ? "隐藏\(field.label)" : "显示\(field.label)")
                     }
                 }
-                .font(.system(size: 14)).foregroundStyle(Theme.ink)
+                .font(Theme.font(size: 14)).foregroundStyle(Theme.ink)
                 .padding(.horizontal, 12).frame(height: 40)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.field))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
             }
             let help = field.help(values)
-            if !help.isEmpty { Text(help).font(.system(size: 11.5)).foregroundStyle(Theme.sub).fixedSize(horizontal: false, vertical: true) }
+            if !help.isEmpty { Text(help).font(Theme.font(size: 11.5)).foregroundStyle(Theme.sub).fixedSize(horizontal: false, vertical: true) }
         }
     }
 }
@@ -403,12 +403,12 @@ struct ConnectorListRow: View {
             HStack(spacing: 12) {
                 ConnectorImage(name: connector.name)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(connector.title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
-                    Text(connector.description).font(.system(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
+                    Text(connector.title).font(Theme.font(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
+                    Text(connector.description).font(Theme.font(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
                 }
                 Spacer(minLength: 10)
                 if connected { GoldTag(text: "已连接") }
-                else { Text("连接").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.accent).padding(.horizontal, 14).frame(height: 28).background(Theme.field, in: Capsule()) }
+                else { Text("连接").font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.accent).padding(.horizontal, 14).frame(height: 28).background(Theme.field, in: Capsule()) }
             }.padding(.vertical, 12).padding(.horizontal, 6).contentShape(Rectangle())
         }.buttonStyle(.plain)
     }

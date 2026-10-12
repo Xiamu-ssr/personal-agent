@@ -10,7 +10,7 @@ struct PageScaffold<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                LazyVStack(alignment: .leading, spacing: 22) {
                     HStack(alignment: .top) {
                         PageTitle(title: title, subtitle: subtitle)
                         Spacer()
@@ -50,20 +50,20 @@ struct SubPage<Content: View, Trailing: View>: View {
             HStack(spacing: 10) {
                 Button { Nav.shared.pop() } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
-                        Text("返回").font(.system(size: 13))
+                        Image(systemName: "chevron.left").font(Theme.font(size: 13, weight: .semibold))
+                        Text("返回").font(Theme.font(size: 13))
                     }
                     .foregroundStyle(Theme.ink.opacity(0.75))
                     .padding(.horizontal, 12)
                     .frame(height: 32)
                     .background(Capsule().fill(Theme.card))
-                    .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+                    .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut("[", modifiers: .command)
                 if !scrolls {
-                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text(title).font(Theme.titleFont(20)).foregroundStyle(Theme.ink).lineLimit(1)
                 }
                 Spacer()
                 trailing()
@@ -104,6 +104,8 @@ struct RouteView: View {
         case .web(let title, let path): WebRoute(title: title, path: path)
         case .doc(let title, let path): DocRoute(title: title, path: path)
         case .memoryCategory(let dir): MemoryCategoryPage(dir: dir)
+        case .health: HealthPage()
+        case .healthBrief(let path, let title): HealthBriefPage(path: path, title: title)
         case .diaries: DiaryListPage()
         case .connectors(let tab, let focus): ConnectorsPage(initialTab: tab, focus: focus)
         case .connector(let name): ConnectorDetailPage(name: name)
@@ -136,9 +138,9 @@ struct WebRoute: View {
                 WebPage(path: path, loading: $loading, failed: $failed)
                 if !failed.isEmpty { Note(text: "打不开：\(failed)", icon: "exclamationmark.triangle") }
             }
-            .background(.white)
+            .background(Theme.card)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.white, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
             .shadow(color: Color(hex: 0x253751, alpha: 0.06), radius: 16, y: 8)
             .padding(.horizontal, 28)
             .padding(.bottom, 22)
@@ -165,7 +167,7 @@ struct DocRoute: View {
                     Note(text: err.isEmpty ? "加载中…" : err)
                 }
             }
-            .card(radius: 22, padding: 24)
+            .card(radius: 16, padding: 24)
         }
         .task(id: "\(path)#\(chat.filesVersion)") {
             do { text = try await Api.text(path); err = "" } catch { text = nil; err = error.localizedDescription }
@@ -220,7 +222,7 @@ struct TasksPage: View {
     @Environment(\.interactiveWindow) private var active
     @Environment(\.scenePhase) private var scenePhase
     private var chat: ChatClient { .shared }
-    @State private var recent: [TaskSummary] = []
+    @State private var taskList = TaskListStore()
     @State private var schedule: [ScheduleJob]? = nil
     @State private var loaded = false
     @State private var err = ""
@@ -231,8 +233,16 @@ struct TasksPage: View {
             PillTabs(titles: ["任务", "定时"], selection: Binding(get: { Nav.shared.tasksSection }, set: { Nav.shared.tasksSection = $0 }))
             switch Nav.shared.tasksSection {
             case 0:
-                if !allRunning.isEmpty { runningCard }
+                if !allRunning.isEmpty { SectionTitle(text: "进行中"); runningCard }
                 recentCard
+                if taskList.next != nil {
+                    HStack { Spacer(); if taskList.loading { ActiveProgress().controlSize(.small) } else { Text("加载更早的任务").font(Theme.font(size: 13)).foregroundStyle(Theme.sub) }; Spacer() }
+                        .task(id: taskList.next) { await taskList.loadNext() }
+                }
+                if !taskList.error.isEmpty {
+                    Note(text: taskList.error)
+                    Button("重试") { Task { if taskList.loaded { await taskList.loadNext() } else { await taskList.refresh(version: chat.jobsVersion) } } }.buttonStyle(SoftButtonStyle())
+                }
             default: scheduleCard
             }
             if !err.isEmpty { Note(text: err, icon: "wifi.exclamationmark") }
@@ -244,12 +254,10 @@ struct TasksPage: View {
     private func load() async {
         let version = chat.jobsVersion
         do {
-            async let jobsResponse = Api.json("/api/jobs")
-            async let stateResponse = Api.json("/api/state")
-            let (r, st) = try await (jobsResponse, stateResponse)
+            async let page: () = taskList.refresh(version: version)
+            let st = try await Api.json("/api/state")
+            await page
             guard version == chat.jobsVersion, !Task.isCancelled else { return }
-            chat.applyJobs(r["running"] as? [[String: Any]] ?? [], version: version)
-            recent = (r["recent"] as? [[String: Any]] ?? []).compactMap(TaskSummary.parse)
             schedule = (st["schedule"] as? [[String: Any]] ?? []).map {
                 ScheduleJob(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? ($0["id"] as? String ?? ""),
                             cron: $0["cron"] as? String ?? "", kind: $0["kind"] as? String ?? "")
@@ -278,7 +286,7 @@ struct TasksPage: View {
                 } else {
                     Rows(items: allRunning) { t in
                         HStack(spacing: 10) {
-                        ListRow(icon: chat.backgroundTasks.contains(where: { $0.id == t.id }) ? "arrow.triangle.branch" : "clock", tint: Color(hex: 0x3F7F87),
+                        ListRow(icon: chat.backgroundTasks.contains(where: { $0.id == t.id }) ? "arrow.triangle.branch" : "clock", tint: Theme.accent,
                                 title: t.label, subtitle: "\(t.detail) · 已运行 \(Fmt.duration(ctx.date.timeIntervalSince(t.started)))",
                                 action: { Nav.shared.push(.taskDetail(id: t.id, title: t.label, briefPath: nil)) }) {
                             ActiveProgress().controlSize(.small)
@@ -294,31 +302,31 @@ struct TasksPage: View {
                     }
                 }
             }
-            .card(radius: 22, padding: 10)
+            .card(radius: 16, padding: 10)
         }
     }
 
     private var recentCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if recent.isEmpty && allRunning.isEmpty {
-                Note(text: loaded ? "还没有任务" : "加载中…", icon: "tray").card(radius: 22, padding: 16)
+            if taskList.recent.isEmpty && allRunning.isEmpty {
+                Note(text: loaded ? "还没有任务" : "加载中…", icon: "tray").card(radius: 16, padding: 16)
             } else {
                 ForEach(["今天", "近 7 天", "更早"], id: \.self) { group in
-                    let entries = recent.filter { item in Self.completedGroup(item.time) == group && !allRunning.contains(where: { $0.id == item.id }) }.sorted { ($0.time ?? .distantPast) > ($1.time ?? .distantPast) }
+                    let entries = taskList.recent.filter { item in Self.completedGroup(item.time) == group && !allRunning.contains(where: { $0.id == item.id }) }.sorted { ($0.time ?? .distantPast) > ($1.time ?? .distantPast) }
                     if !entries.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             SectionTitle(text: group)
                             Rows(items: entries) { item in
                                 let ok = item.status == .done
-                                ListRow(icon: ok ? "checkmark.circle" : "exclamationmark.triangle", tint: ok ? Color(hex: 0x3F7F87) : Theme.danger,
+                                ListRow(icon: ok ? "checkmark.circle" : "exclamationmark.triangle", tint: ok ? Theme.accent : Theme.danger,
                                         title: item.title, subtitle: item.time.map(Fmt.when) ?? "",
                                         action: { Nav.shared.push(.taskDetail(id: item.id, title: item.title,
                                                                             briefPath: item.outputs.first(where: { BriefItem.validPath($0) }))) }) {
-                                    if ok { GoldTag(text: "完成") } else { Text(item.status.label).font(.system(size: 11.5, weight: .medium)).foregroundStyle(item.status == .error ? Theme.danger : Theme.sub) }
+                                    if ok { GoldTag(text: "完成") } else { Text(item.status.label).font(Theme.font(size: 11.5, weight: .medium)).foregroundStyle(item.status == .error ? Theme.danger : Theme.sub) }
                                 }
                                 .accessibilityLabel(item.title)
                                 .verificationAction(item.title)
-                            }.card(radius: 22, padding: 10)
+                            }.card(radius: 16, padding: 10)
                         }
                     }
                 }
@@ -326,22 +334,17 @@ struct TasksPage: View {
         }
     }
 
-    static func completedGroup(_ date: Date?, now: Date = Date()) -> String {
-        guard let date else { return "更早" }
-        if Calendar.current.isDate(date, inSameDayAs: now) { return "今天" }
-        let start = Calendar.current.date(byAdding: .day, value: -7, to: Calendar.current.startOfDay(for: now)) ?? now
-        return date >= start ? "近 7 天" : "更早"
-    }
+    static func completedGroup(_ date: Date?, now: Date = Date()) -> String { TaskListStore.group(date, now: now) }
 
     private var scheduleCard: some View {
         Group {
             if let schedule, !schedule.isEmpty {
                 Rows(items: schedule) { j in
-                    ListRow(icon: !j.isSystem ? "clock" : "gearshape.2", tint: !j.isSystem ? Color(hex: 0x3F7F87) : Theme.faint,
+                    ListRow(icon: !j.isSystem ? "clock" : "gearshape.2", tint: !j.isSystem ? Theme.accent : Theme.faint,
                             title: j.name, subtitle: cronText(j.cron) + (!j.isSystem ? "" : " · 系统任务")) {
                         if !j.isSystem {
                             if launching.contains(j.id) || chat.live.contains(where: { $0.label == j.name }) {
-                                Text(launching.contains(j.id) ? "启动中…" : "进行中").font(.system(size: 12)).foregroundStyle(Theme.sub)
+                                Text(launching.contains(j.id) ? "启动中…" : "进行中").font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
                             } else {
                                 Button("立即运行") { run(j) }.buttonStyle(SoftButtonStyle())
                             }
@@ -352,7 +355,7 @@ struct TasksPage: View {
                 Note(text: schedule == nil ? "加载中…" : "还没有定时任务")
             }
         }
-        .card(radius: 22, padding: 10)
+        .card(radius: 16, padding: 10)
     }
 
     private func run(_ j: ScheduleJob) {

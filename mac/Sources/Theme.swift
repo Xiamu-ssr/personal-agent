@@ -1,3 +1,5 @@
+import AppKit
+import Observation
 import SwiftUI
 
 extension Color {
@@ -7,54 +9,77 @@ extension Color {
     }
 }
 
-/// Silver-blue metal with champagne gold (spec §四).
+enum Skin: String, CaseIterable, Identifiable {
+    case silver, paper, night
+    var id: String { rawValue }
+    var title: String { switch self { case .silver: "银蓝"; case .paper: "纸墨"; case .night: "夜幕" } }
+    var palette: [UInt32] {
+        switch self {
+        case .silver: [0xF3F5F8, 0xFFFFFF, 0x1E2733, 0x6B7686, 0xE3E7ED, 0x4A78A8, 0xE6EEF7, 0xB89A5E, 0x3E8E6A, 0xC2873A, 0x4A78A8]
+        case .paper: [0xF5F0E6, 0xFBF8F2, 0x231F1A, 0x7A7065, 0xE6DDCD, 0xB4442E, 0xF3E3DA, 0x9C7A3C, 0x5B7F4E, 0xB0782C, 0x5E6F8C]
+        case .night: [0x0F1216, 0x181C22, 0xE6E8EB, 0x8C95A1, 0x262B33, 0x5CCFB0, 0x1E3330, 0xE0A54B, 0x5CCFB0, 0xE0A54B, 0x7BA7E0]
+        }
+    }
+}
+
+@Observable final class SkinStore {
+    static let shared = SkinStore(defaults: Prefs.uiDefaults)
+    private(set) var skin: Skin
+    @ObservationIgnored private let defaults: UserDefaults
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        skin = defaults.string(forKey: "skin").flatMap(Skin.init) ?? .silver
+    }
+    func select(_ skin: Skin) {
+        guard self.skin != skin else { return }
+        self.skin = skin
+        defaults.set(skin.rawValue, forKey: "skin")
+    }
+}
+
+/// Every lookup observes the local skin, without replacing a page or its native views.
 enum Theme {
-    static let ink = Color(hex: 0x252E38)
-    static let sub = Color(hex: 0x728093)
-    static let faint = Color(hex: 0x8F99A6)
-    static let line = Color(hex: 0x7589A0, alpha: 0.12)
-    static let card = Color(hex: 0xFBFCFE, alpha: 0.84)
-    static let field = Color(hex: 0xF1F4F8)
-    static let userBubble = Color(hex: 0xDCE4EE)
-    static let goldText = Color(hex: 0x6C4A25)
-    static let online = Color(hex: 0x4FA37A)
-    static let danger = Color(hex: 0xB65A5A)
-    static let accent = Color(hex: 0x4E79A3)
-
-    static let canvas = LinearGradient(stops: [
-        .init(color: Color(hex: 0xC9D3DF), location: 0),
-        .init(color: Color(hex: 0xE5E9EE), location: 0.45),
-        .init(color: Color(hex: 0xEEF1F4), location: 1),
-    ], startPoint: .top, endPoint: .bottom)
-
-    static let gold = LinearGradient(stops: [
-        .init(color: Color(hex: 0xFFFBED), location: 0),
-        .init(color: Color(hex: 0xF3DFB0), location: 0.28),
-        .init(color: Color(hex: 0xE2C88E), location: 0.55),
-        .init(color: Color(hex: 0xEAD299), location: 0.78),
-        .init(color: Color(hex: 0x9C7440), location: 1),
-    ], startPoint: UnitPoint(x: 0.2, y: 0), endPoint: UnitPoint(x: 0.8, y: 1))
-
-    /// The pale champagne wash behind the selected sidebar row.
-    static let goldWash = LinearGradient(colors: [Color(hex: 0xFBF3DF), Color(hex: 0xF1E2BE)], startPoint: .topLeading, endPoint: .bottomTrailing)
-
-    // Memory categories (spec §三.6 / §四).
-    static let categories: [(dir: String, name: String, icon: String, color: Color)] = [
-        ("work", "工作", "briefcase", Color(hex: 0x417DAC)),
-        ("project", "项目", "folder", Color(hex: 0x428B94)),
-        ("life", "生活", "house", Color(hex: 0x9F7E51)),
-        ("health", "健康", "heart", Color(hex: 0xC36577)),
-        ("people", "人际", "person.2", Color(hex: 0x597AC0)),
-        ("preferences", "偏好", "slider.horizontal.3", Color(hex: 0x7E6BA5)),
-        ("interests", "兴趣", "sparkles", Color(hex: 0xA06C8E)),
-        ("finance", "财务", "yensign.circle", accent),
-        ("feedback", "反馈", "text.bubble", accent),
-        ("history", "历史", "clock.arrow.circlepath", accent),
-        ("automation-prefs", "自动化偏好", "gearshape.2", accent),
-        ("voice-notes", "语音笔记", "waveform", accent),
-        ("role", "角色", "person.crop.circle", accent),
-    ]
-
+    static var skin: Skin { SkinStore.shared.skin }
+    private static func color(_ i: Int) -> Color { Color(hex: skin.palette[i]) }
+    static var background: Color { color(0) }
+    static var card: Color { color(1) }
+    static var ink: Color { color(2) }
+    static var sub: Color { color(3) }
+    static var faint: Color { sub }
+    static var line: Color { color(4) }
+    static var accent: Color { color(5) }
+    static var field: Color { background }
+    static var userBubble: Color { color(6) }
+    static var ornament: Color { color(7) }
+    static var online: Color { color(8) }
+    static var warning: Color { color(9) }
+    static var info: Color { color(10) }
+    static var danger: Color { skin == .night ? Color(hex: 0xE49B91) : Color(hex: 0xB4442E) }
+    static var goldText: Color { accent }
+    static var canvas: LinearGradient { LinearGradient(colors: [background, background], startPoint: .top, endPoint: .bottom) }
+    static var gold: LinearGradient { goldWash }
+    static var goldWash: LinearGradient { LinearGradient(colors: [userBubble, userBubble], startPoint: .top, endPoint: .bottom) }
+    static var scheme: ColorScheme { skin == .night ? .dark : .light }
+    static var appearance: NSAppearance? { NSAppearance(named: skin == .night ? .darkAqua : .aqua) }
+    static var sidebar: Color { card }
+    static var bodySize: CGFloat { 15 }
+    static var secondarySize: CGFloat { 13 }
+    static var cardTitleSize: CGFloat { 17 }
+    static func font(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        Font.system(size: size, weight: skin == .night && weight == .regular ? .light : weight, design: design).monospacedDigit()
+    }
+    static func titleFont(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+        skin == .paper ? .custom("Songti SC", size: size).weight(weight).monospacedDigit() : font(size: size, weight: weight)
+    }
+    static var categories: [(dir: String, name: String, icon: String, color: Color)] {
+        [("work", "工作", "briefcase", accent), ("project", "项目", "folder", accent),
+         ("life", "生活", "house", ornament), ("health", "健康", "heart", online),
+         ("people", "人际", "person.2", accent), ("preferences", "偏好", "slider.horizontal.3", accent),
+         ("interests", "兴趣", "sparkles", ornament), ("finance", "财务", "yensign.circle", accent),
+         ("feedback", "反馈", "text.bubble", accent), ("history", "历史", "clock.arrow.circlepath", accent),
+         ("automation-prefs", "自动化偏好", "gearshape.2", accent), ("voice-notes", "语音笔记", "waveform", accent),
+         ("role", "角色", "person.crop.circle", accent)]
+    }
     static func category(_ dir: String) -> (name: String, icon: String, color: Color) {
         if let c = categories.first(where: { $0.dir == dir }) { return (c.name, c.icon, c.color) }
         return (dir == "profile" ? "总档" : dir, "doc.text", accent)
@@ -62,20 +87,20 @@ enum Theme {
 }
 
 struct CardStyle: ViewModifier {
-    var radius: CGFloat = 22
+    var radius: CGFloat = 16
     var padding: CGFloat = 18
 
     func body(content: Content) -> some View {
         content
             .padding(padding)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 1))
-            .shadow(color: Color(hex: 0x253751, alpha: 0.055), radius: 17, y: 12)
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
+            .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 2)
     }
 }
 
 extension View {
-    func card(radius: CGFloat = 22, padding: CGFloat = 18) -> some View { modifier(CardStyle(radius: radius, padding: padding)) }
+    func card(radius: CGFloat = 16, padding: CGFloat = 18) -> some View { modifier(CardStyle(radius: radius, padding: padding)) }
 }
 
 /// The champagne-gold metallic capsule used for selected states, 已连接 and primary buttons.
@@ -83,11 +108,7 @@ struct GoldBase: View {
     var radius: CGFloat = 999
 
     var body: some View {
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(Theme.gold)
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(LinearGradient(colors: [.white.opacity(0.85), Color(hex: 0x9C7440, alpha: 0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
-            .shadow(color: Color(hex: 0x9C7440, alpha: 0.28), radius: 4, y: 2)
+        RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Theme.userBubble)
     }
 }
 
@@ -96,7 +117,7 @@ struct GoldButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 14, weight: .semibold))
+            .font(Theme.font(size: 14, weight: .semibold))
             .foregroundStyle(Theme.goldText)
             .padding(.horizontal, 20)
             .frame(height: height)
@@ -110,12 +131,12 @@ struct GoldButtonStyle: ButtonStyle {
 struct SoftButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(Color(hex: 0x4A6587))
+            .font(Theme.font(size: 12.5, weight: .medium))
+            .foregroundStyle(Theme.accent)
             .padding(.horizontal, 14)
             .frame(height: 28)
-            .background(Capsule().fill(Color(hex: 0xE4EBF3)))
-            .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+            .background(Capsule().fill(Theme.userBubble))
+            .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Capsule())
     }
@@ -130,11 +151,11 @@ struct CircleIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
+                .font(Theme.font(size: 14, weight: .medium))
                 .foregroundStyle(Theme.ink.opacity(0.8))
                 .frame(width: 36, height: 36)
                 .background(Circle().fill(Theme.card))
-                .overlay(Circle().strokeBorder(.white, lineWidth: 1))
+                .overlay(Circle().strokeBorder(Theme.line, lineWidth: 0.5))
                 .shadow(color: Color(hex: 0x253751, alpha: 0.06), radius: 8, y: 4)
         }
         .buttonStyle(.plain)
@@ -170,11 +191,11 @@ struct IconTile: View {
 
     var body: some View {
         Image(systemName: icon)
-            .font(.system(size: size * 0.45, weight: .medium))
+            .font(Theme.font(size: size * 0.45, weight: .medium))
             .foregroundStyle(tint)
             .frame(width: size, height: size)
             .background(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(tint.opacity(0.1)))
-            .overlay(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
     }
 }
 
@@ -184,8 +205,8 @@ struct PageTitle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 30, weight: .bold)).foregroundStyle(Theme.ink)
-            if !subtitle.isEmpty { Text(subtitle).font(.system(size: 13)).foregroundStyle(Theme.sub) }
+            Text(title).font(Theme.titleFont(28)).foregroundStyle(Theme.ink)
+            if !subtitle.isEmpty { Text(subtitle).font(Theme.font(size: 13)).foregroundStyle(Theme.sub) }
         }
     }
 }
@@ -196,7 +217,7 @@ struct SectionTitle: View {
 
     var body: some View {
         HStack {
-            Text(text).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+            Text(text).font(Theme.titleFont(20)).foregroundStyle(Theme.ink)
             Spacer()
             trailing
         }
@@ -211,8 +232,8 @@ struct Note: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            if let icon { Image(systemName: icon).font(.system(size: 22, weight: .light)).foregroundStyle(Theme.faint) }
-            Text(text).font(.system(size: 13)).foregroundStyle(Theme.sub).multilineTextAlignment(.center)
+            if let icon { Image(systemName: icon).font(Theme.font(size: 22, weight: .light)).foregroundStyle(Theme.faint) }
+            Text(text).font(Theme.font(size: 13)).foregroundStyle(Theme.sub).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
@@ -233,16 +254,16 @@ struct ListRow<Trailing: View>: View {
         let row = HStack(spacing: 12) {
             if let icon { IconTile(icon: icon, tint: tint, size: 32) }
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                if !subtitle.isEmpty { Text(subtitle).font(.system(size: 12)).foregroundStyle(Theme.sub).lineLimit(2) }
+                Text(title).font(Theme.titleFont(Theme.bodySize, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                if !subtitle.isEmpty { Text(subtitle).font(Theme.font(size: Theme.secondarySize)).foregroundStyle(Theme.sub).lineLimit(2) }
             }
             Spacer(minLength: 8)
             trailing()
-            if action != nil { Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.faint) }
+            if action != nil { Image(systemName: "chevron.right").font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.faint) }
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 12).fill(hover && action != nil ? Color(hex: 0xEEF2F7, alpha: 0.8) : .clear))
+        .background(RoundedRectangle(cornerRadius: 12).fill(hover && action != nil ? Theme.field : .clear))
         .contentShape(Rectangle())
         if let action {
             Button(action: action) { row }.buttonStyle(.plain).onHover { hover = $0 }
@@ -283,7 +304,7 @@ struct PillTabs: View {
             ForEach(titles.indices, id: \.self) { i in
                 Button { selection = i } label: {
                     Text(titles[i])
-                        .font(.system(size: 13, weight: selection == i ? .semibold : .regular))
+                        .font(Theme.font(size: 13, weight: selection == i ? .semibold : .regular))
                         .foregroundStyle(selection == i ? Theme.goldText : Theme.sub)
                         .padding(.horizontal, 14)
                         .frame(height: 30)
@@ -302,7 +323,7 @@ struct GoldTag: View {
     let text: String
 
     var body: some View {
-        Text(text).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.goldText)
+        Text(text).font(Theme.font(size: 11.5, weight: .semibold)).foregroundStyle(Theme.goldText)
             .padding(.horizontal, 12).frame(height: 24).background(GoldBase())
     }
 }
@@ -312,7 +333,7 @@ struct Dot: View {
 
     var body: some View {
         Circle().fill(on ? Theme.online : Theme.faint.opacity(0.6)).frame(width: 7, height: 7)
-            .overlay(Circle().strokeBorder(.white, lineWidth: 1))
+            .overlay(Circle().strokeBorder(Theme.line, lineWidth: 0.5))
     }
 }
 

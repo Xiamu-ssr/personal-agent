@@ -9,21 +9,27 @@ enum LocalMenuReview {
         Session.shared.configured = true; Session.shared.onboarded = true
         let chat = ChatClient.shared; chat.start()
         defer { chat.stop(); MenuController.shared.close() }
-        for _ in 0..<100 where !chat.connected { try await V05Review.pause(30) }
+        for _ in 0..<100 where !chat.connected { try await V06Review.pause(30) }
         try check(chat.connected, "menu connected to loopback websocket")
-        try await V05Review.scenario("idle")
+        try await V06Review.scenario("idle")
         let menu = MenuController.shared; menu.install(); menu.button?.performClick(nil)
-        try await V05Review.pause(300); try check(menu.popover.isShown, "performClick opens real popover")
-        guard let root = menu.popover.contentViewController?.view, let editor = V05Review.input(root) else { throw VerificationError(description: "real menu native composer") }
-        try await V05Review.capture(root, "30-menu-open")
+        try await V06Review.pause(300); try check(menu.popover.isShown, "performClick opens real popover")
+        guard let root = menu.popover.contentViewController?.view, let editor = V06Review.input(root) else { throw VerificationError(description: "real menu native composer") }
+        let originalSkin=Theme.skin
+        for skin in Skin.allCases {
+            SkinStore.shared.select(skin); try await V06Review.pause(200)
+            try check(root.window?.appearance?.name == (skin == .night ? NSAppearance.Name.darkAqua : .aqua), "popover system controls follow selected skin")
+            try await V06Review.capture(root, "30-menu-" + skin.rawValue)
+        }
+        SkinStore.shared.select(originalSkin); try await V06Review.pause(100)
         editor.window?.makeFirstResponder(editor)
         editor.insertText("菜单栏本地验收消息。", replacementRange: NSRange(location: 0, length: editor.string.utf16.count))
-        try await V05Review.pause(100)
+        try await V06Review.pause(100)
         let enter = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: editor.window!.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)!
-        editor.keyDown(with: enter); try await V05Review.pause(1500)
+        editor.keyDown(with: enter); try await V06Review.pause(1500)
         try check(chat.items.contains { $0.kind == .user && $0.text == "菜单栏本地验收消息。" && !$0.pending } && chat.items.last?.kind == .assistant && !chat.busy, "Return sends and renders reply")
-        try await V05Review.capture(root, "31-menu-reply")
-        let main = V05Review.window(); AppDelegate.openMain = { main.makeKeyAndOrderFront(nil) }
+        try await V06Review.capture(root, "31-menu-reply")
+        let main = V06Review.window(); AppDelegate.openMain = { main.makeKeyAndOrderFront(nil) }
         func pressHeader(_ label: String) throws {
             func find(_ view: NSView) -> NSButton? {
                 if let button = view as? NSButton, button.accessibilityLabel() == label { return button }
@@ -32,14 +38,14 @@ enum LocalMenuReview {
             guard let button = find(root) else { throw VerificationError(description: "popover action: " + label) }
             button.performClick(nil)
         }
-        try pressHeader("打开主窗口"); try await V05Review.pause(500)
+        try pressHeader("打开主窗口"); try await V06Review.pause(500)
         try check(main.isVisible && !menu.popover.isShown, "open main closes popover")
-        try await V05Review.capture(main.contentView!, "32-menu-opened-main")
-        menu.button?.performClick(nil); try await V05Review.pause(200)
-        try check(menu.popover.isShown, "same popover reopens"); try await V05Review.capture(root, "33-menu-before-quit")
+        try await V06Review.capture(main.contentView!, "32-menu-opened-main")
+        menu.button?.performClick(nil); try await V06Review.pause(200)
+        try check(menu.popover.isShown, "same popover reopens"); try await V06Review.capture(root, "33-menu-before-quit")
         print("PASS: real status-item click path, native Return/reply and shared main window; invoking menu Quit"); fflush(stdout)
         try pressHeader("退出豆豆")
-        try await V05Review.pause(1000)
+        try await V06Review.pause(1000)
         throw VerificationError(description: "menu Quit did not terminate the owned test process")
     }
 }
