@@ -1,0 +1,7 @@
+{
+  "nullDisplayedAsDashes": true,
+  "syncPost": true,
+  "refreshedGet": true,
+  "weeklyOlderThan7Days": true,
+  "recordMarkdown": true
+}

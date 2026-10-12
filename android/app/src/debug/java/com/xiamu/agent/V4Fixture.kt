@@ -49,12 +49,13 @@ class V4Fixture(private val context: Context,val scenario: String) {
                     path=="/api/profile" && request.method=="GET" -> json(profile)
                     path=="/api/profile" && request.method=="PUT" -> { profile=JSONObject(request.body.readUtf8()); json(profile) }
                     path=="/api/briefs" -> json(JSONObject().put("items",if(scenario=="today-empty") JSONArray() else briefs()))
-                    path=="/api/jobs" -> json(JSONObject().put("running",JSONArray()).put("recent",JSONArray().put(job("晨报已生成",briefPath,now,true)).put(job("采购资料已整理","data/sites/purchase/index.html",now-86400000,true)).put(job("上周核对未完成","",now-10*86400000,false))))
+                    path=="/api/jobs" -> json(JSONObject().put("running",JSONArray()).put("recent",JSONArray().put(job("晨报已生成",briefPath,now,true)).put(job("采购资料已整理","data/sites/purchase/index.html",now-86400000,true)).put(job("上周核对未完成","",now-10*86400000,false))).put("next",JSONObject.NULL))
+                    path=="/api/health" -> json(JSONObject().put("syncedAt",JSONObject.NULL).put("device",JSONObject.NULL).put("note",JSONObject.NULL).put("days",JSONArray()).put("weekly",JSONArray()).put("records",JSONArray()))
                     path=="/api/settings" -> json(V5Fixture.settingsDocument())
                     path.startsWith("/api/tasks/") && path.endsWith("/history") -> {
                         val id=request.requestUrl!!.pathSegments[2]
                         json(JSONObject().put("id",id).put("title",id).put("status",if(id=="purchase") "running" else "done")
-                            .put("items",JSONArray().put(JSONObject().put("kind","prompt").put("text","整理今天的安排").put("time",now))
+                            .put("items",JSONArray().put(JSONObject().put("kind","prompt").put("from","agent").put("text","整理今天的安排").put("time",now))
                                 .put(JSONObject().put("kind","result").put("text","已整理完成。 [晨报]($briefPath)").put("time",now))))
                     }
                     path=="/api/tree" -> tree(request.requestUrl?.queryParameter("dir").orEmpty())
@@ -82,7 +83,7 @@ class V4Fixture(private val context: Context,val scenario: String) {
     }
     private fun json(j: JSONObject,status: Int=200)=MockResponse().setResponseCode(status).setHeader("Content-Type","application/json").setBody(j.toString())
     private fun tasks()=if(scenario=="today-empty") JSONArray() else JSONArray().put(JSONObject().put("id","purchase").put("description","整理采购资料").put("startedAt",now-180000))
-    private fun job(title: String,path: String,time: Long,ok: Boolean)=JSONObject().put("id",title).put("title",title).put("label",title).put("path",path).put("ts",time).put("ok",ok)
+    private fun job(title: String,path: String,time: Long,ok: Boolean)=JSONObject().put("id",title).put("title",title).put("label",title).put("path",path).put("ts",time).put("ok",ok).put("status",if(ok) "done" else "error").put("outputs",JSONArray())
 
     fun briefs(): JSONArray = ReviewBriefs.items(day)
     private fun entry(name: String,dir: Boolean)=JSONObject().put("name",name).put("dir",dir).put("mtime",now).put("size",100)

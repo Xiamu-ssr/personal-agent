@@ -1,0 +1,47 @@
+{
+  "required": [
+    "today-silver",
+    "chat-silver",
+    "today-paper",
+    "chat-paper",
+    "today-night",
+    "chat-night",
+    "health",
+    "tasks-grouped",
+    "task-detail",
+    "settings-skins",
+    "chat-return-bottom"
+  ],
+  "all": [
+    "brief-full-height.png",
+    "brief-prompt-chat.png",
+    "chat-night.png",
+    "chat-paper.png",
+    "chat-return-bottom.png",
+    "chat-silver.png",
+    "health-record.png",
+    "health-weekly.png",
+    "health.png",
+    "settings-skins.png",
+    "task-detail.png",
+    "tasks-grouped.png",
+    "tasks-paginated.png",
+    "today-night.png",
+    "today-paper.png",
+    "today-silver.png"
+  ],
+  "bottomChromeRecaptured": [
+    {
+      "name": "today-silver.png",
+      "sha256": "c4e058fa262f6e77971733bf5d08aede5dc2b4726645e9b0c822aceaafe6dbc5"
+    },
+    {
+      "name": "today-night.png",
+      "sha256": "ad064891fab0032134b9a70a08afbcfdf86ffb69a357216fe6c3a0b297b6b703"
+    },
+    {
+      "name": "tasks-grouped.png",
+      "sha256": "2f46322b7e93a26af68b7c78ab6065cc115d4aa2bff5427a547b789b0231aa0f"
+    }
+  ]
+}

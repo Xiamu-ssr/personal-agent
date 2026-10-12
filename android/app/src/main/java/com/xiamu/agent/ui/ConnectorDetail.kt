@@ -77,31 +77,31 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
                     Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         ConnectorLogo(connector.name, 60.dp)
                         Column(Modifier.weight(1f)) {
-                            Text(connector.title, fontSize = 27.sp, fontWeight = FontWeight.Bold, color = Pal.Ink)
-                            Text(connector.description, fontSize = 13.sp, lineHeight = 20.sp, color = Pal.Muted, modifier = Modifier.padding(top = 5.dp))
+                            Text(connector.title, fontSize = Type.Large, fontFamily = Type.titleFamily, fontWeight = FontWeight.Bold, color = Pal.Ink)
+                            Text(connector.description, fontSize = Type.Secondary, lineHeight = Type.SecondaryLine, color = Pal.Muted, modifier = Modifier.padding(top = 5.dp))
                         }
                     }
                 }
                 if (loadError.isNotBlank() || error.isNotBlank()) item { ErrorNote(error.ifBlank { loadError }) }
-                item { SectionTitle("账号") { Text("${connector.accounts.size} 个", fontSize = 12.sp, color = Pal.Muted) } }
+                item { SectionTitle("账号") { Text("${connector.accounts.size} 个", fontSize = Type.Label, color = Pal.Muted) } }
                 if (connector.accounts.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().card().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(if (connector.fields == null) "账号表单即将支持" else "还没有添加账号",
-                            fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Pal.Ink)
+                            fontSize = Type.Body, fontWeight = FontWeight.Medium, color = Pal.Ink)
                         Text(if (connector.fields == null) "敬请期待" else "添加后，豆豆就能使用这个服务",
-                            fontSize = 13.sp, lineHeight = 20.sp, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
+                            fontSize = Type.Secondary, lineHeight = Type.SecondaryLine, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
                 connector.accounts.forEach { account ->
                     item(key = account.id) {
                         Column(Modifier.padding(bottom = 12.dp).fillMaxWidth().card().padding(horizontal = 18.dp, vertical = 16.dp)) {
-                            Text(account.label, fontSize = 16.sp, lineHeight = 23.sp, fontWeight = FontWeight.Medium, color = Pal.Ink)
+                            Text(account.label, fontSize = Type.Body, lineHeight = Type.BodyLine, fontWeight = FontWeight.Medium, color = Pal.Ink)
                             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 StatusDot(if (account.status == "ok") Pal.Online else Pal.Danger)
-                                Text(if (account.status == "ok") "已连接" else "连接异常", fontSize = 12.sp, color = if (account.status == "ok") Pal.Muted else Pal.Danger)
-                                if (account.checkedAt > 0) Text("· ${ago(account.checkedAt)}验证", fontSize = 11.sp, color = Pal.Faint)
+                                Text(if (account.status == "ok") "已连接" else "连接异常", fontSize = Type.Label, color = if (account.status == "ok") Pal.Muted else Pal.Danger)
+                                if (account.checkedAt > 0) Text("· ${ago(account.checkedAt)}验证", fontSize = Type.Tiny, color = Pal.Faint)
                             }
-                            if (account.status != "ok") Text(account.error?.takeIf { it.isNotBlank() } ?: "尚未通过验证", fontSize = 13.sp, lineHeight = 20.sp,
+                            if (account.status != "ok") Text(account.error?.takeIf { it.isNotBlank() } ?: "尚未通过验证", fontSize = Type.Secondary, lineHeight = Type.SecondaryLine,
                                 color = Pal.Danger, modifier = Modifier.padding(top = 8.dp))
                             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
                                 if (connector.fields != null) TextButton(enabled = busy == null, onClick = { Nav.open(Route.ConnectorForm(connector, account)) }) { Text("编辑", color = Pal.Link) }
@@ -208,7 +208,7 @@ private fun AccountField(field: ConnectorField, value: String, values: Map<Strin
     var shown by remember(field.key) { mutableStateOf(false) }
     var expanded by remember(field.key) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-        Text(field.label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(bottom = 9.dp))
+        Text(field.label, fontSize = Type.Secondary, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(bottom = 9.dp))
         if (field.type == "select") {
             if (field.options.size <= 3 && field.options.isNotEmpty()) {
                 SegTabs(field.options.map { it.label }, field.options.indexOfFirst { it.value == value }, Modifier.testTag("field:${field.key}")) {
@@ -218,29 +218,29 @@ private fun AccountField(field: ConnectorField, value: String, values: Map<Strin
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Pal.Field).tap(enabled) { expanded = true }
                     .padding(horizontal = 14.dp, vertical = 13.dp).testTag("field:${field.key}"), verticalAlignment = Alignment.CenterVertically) {
                     Text(field.options.firstOrNull { it.value == value }?.label ?: "请选择",
-                        fontSize = 14.sp, color = if (value.isBlank()) Pal.Faint else Pal.Ink, modifier = Modifier.weight(1f))
+                        fontSize = Type.Secondary, color = if (value.isBlank()) Pal.Faint else Pal.Ink, modifier = Modifier.weight(1f))
                     Icon(Icons.Outlined.KeyboardArrowDown, null, tint = Pal.Muted, modifier = Modifier.size(20.dp))
                 }
                 DropdownMenu(expanded, { expanded = false }, containerColor = Pal.CardSolid, shape = RoundedCornerShape(18.dp)) {
                     field.options.forEach { option ->
-                        DropdownMenuItem(text = { Text(option.label, fontSize = 14.sp, color = if (option.value == value) Pal.GoldInk else Pal.Ink) },
+                        DropdownMenuItem(text = { Text(option.label, fontSize = Type.Secondary, color = if (option.value == value) Pal.GoldInk else Pal.Ink) },
                             onClick = { if (enabled) onChange(option.value); expanded = false })
                     }
                 }
             }
         } else {
             val secret = field.type == "secret"
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Pal.Field).border(1.dp, Color(0x267589A0), RoundedCornerShape(14.dp))
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Pal.Field).border(1.dp, Pal.Line, RoundedCornerShape(14.dp))
                 .padding(start = 14.dp, end = if (secret) 8.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 BasicTextField(
-                    value, onChange, enabled = enabled, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = Pal.Ink),
+                    value, onChange, enabled = enabled, singleLine = true, textStyle = TextStyle(fontSize = Type.Secondary, color = Pal.Ink),
                     cursorBrush = SolidColor(Pal.Gold), modifier = Modifier.weight(1f).padding(vertical = 14.dp).testTag("field:${field.key}"),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = if (secret) false else null,
                         keyboardType = when { secret -> KeyboardType.Password; field.type == "number" -> KeyboardType.Decimal; else -> KeyboardType.Text }, imeAction = ImeAction.Next),
                     visualTransformation = if (secret && !shown) PasswordVisualTransformation() else VisualTransformation.None,
                     decorationBox = { inner ->
                         Box {
-                            if (value.isEmpty()) Text(when { editing && secret -> "不修改请留空"; else -> field.placeholder }, fontSize = 14.sp, color = Pal.Faint)
+                            if (value.isEmpty()) Text(when { editing && secret -> "不修改请留空"; else -> field.placeholder }, fontSize = Type.Secondary, color = Pal.Faint)
                             inner()
                         }
                     },
@@ -250,7 +250,7 @@ private fun AccountField(field: ConnectorField, value: String, values: Map<Strin
             }
         }
         val help = field.help(values)
-        if (help.isNotBlank()) Text(help, fontSize = 11.sp, lineHeight = 17.sp, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
+        if (help.isNotBlank()) Text(help, fontSize = Type.Tiny, lineHeight = Type.SecondaryLine, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -258,8 +258,8 @@ private fun AccountField(field: ConnectorField, value: String, values: Map<Strin
 internal fun RemovalDialog(title: String, message: String, action: String, busy: Boolean, error: String, blocked: Boolean = false, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text(title, fontSize = 21.sp, fontWeight = FontWeight.SemiBold, color = Pal.Ink) },
-        text = { Column { Text(message, fontSize = 14.sp, lineHeight = 22.sp, color = Pal.Muted); if (error.isNotBlank()) ErrorNote(error) } },
+        title = { Text(title, fontSize = Type.Page, fontFamily = Type.titleFamily, fontWeight = FontWeight.SemiBold, color = Pal.Ink) },
+        text = { Column { Text(message, fontSize = Type.Secondary, lineHeight = Type.BodyLine, color = Pal.Muted); if (error.isNotBlank()) ErrorNote(error) } },
         confirmButton = { TextButton(enabled = !busy && !blocked, onClick = onConfirm) { Text(if (busy) "正在${action}…" else action, color = if (busy || blocked) Pal.Faint else Pal.Danger) } },
         dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(if (blocked) "知道了" else "取消", color = if (busy) Pal.Faint else Pal.Muted) } },
         containerColor = Pal.CardSolid, shape = RoundedCornerShape(24.dp),

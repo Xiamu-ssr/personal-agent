@@ -8,7 +8,7 @@ import java.net.URLEncoder
 
 class AgentProtocolTest {
     private fun settings() = JSONObject("""{"model":"haiku","permissionMode":"auto","models":[{"id":"haiku","label":"Haiku","note":"消耗约 1×"},{"id":"mimo","label":"MiMo","note":"消耗约 2×"}],"permissionModes":[{"id":"auto","label":"自动","note":"拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}""")
-    private fun history(status: String = "running") = JSONObject("""{"id":"任务 /A?","title":"整理采购资料","status":"$status","items":[{"kind":"prompt","text":"整理采购资料","time":1791675360000},{"kind":"text","text":"先核对已有记录。","time":"2026-10-11T07:36:00+08:00"},{"kind":"tool","text":"读取 data/memory/总档.md","tool":"Read","time":1791675360000},{"kind":"result","text":"## 结果\n\n**交期已核对**","time":1791675360000}]}""")
+    private fun history(status: String = "running") = JSONObject("""{"id":"任务 /A?","title":"整理采购资料","status":"$status","items":[{"kind":"prompt","from":"agent","text":"整理采购资料","time":1791675360000},{"kind":"text","text":"先核对已有记录。","time":"2026-10-11T07:36:00+08:00"},{"kind":"tool","text":"读取 data/memory/总档.md","tool":"Read","time":1791675360000},{"kind":"result","text":"## 结果\n\n**交期已核对**","time":1791675360000}]}""")
     private fun brief(cards: Int = 2) = JSONObject().put("date","2026-10-11").put("name","晨报").put("time","2026-10-11T07:36:00+08:00")
         .put("path","data/briefs/2026-10-11/晨报.html").put("cards",JSONArray((1..cards).map { JSONObject().put("html","<!doctype html><html><head><style>h1{color:blue}</style></head><body><section class='card'>卡片 $it</section></body></html>") }))
 

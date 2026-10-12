@@ -12,6 +12,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,54 +63,76 @@ fun cronLabel(c: String): String {
 @Composable
 fun TasksScreen(bottom: Dp) {
     val scope = rememberCoroutineScope()
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
     var seg by rememberSaveable { mutableIntStateOf(0) }
     var notice by remember { mutableStateOf("") }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { Chat.refreshRunning(); while (true) { delay(1000); now = System.currentTimeMillis() } }
-    val (recent, error) = load("jobs", cacheValue = false) { Api.getJson("/api/jobs").optJSONArray("recent").objects().sortedByDescending { it.optLong("ts") } }
+    var timeline by remember { mutableStateOf(JobsTimeline()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf("") }
+    var loaded by remember { mutableStateOf(false) }
+    suspend fun fetch(before: Long? = null) {
+        loading = true; error = ""
+        try {
+            val page = Api.jobs(before)
+            check(before == null || page.next == null || page.next < before) { "任务分页游标没有前进" }
+            timeline = timeline.apply(page, older = before != null)
+            loaded = true
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) { error = e.message ?: "任务加载失败" }
+        finally { loading = false }
+    }
+    LaunchedEffect(Unit) {
+        Chat.refreshRunning(); fetch()
+        while (true) { delay(1000); now = System.currentTimeMillis() }
+    }
+    val nearEnd by remember { derivedStateOf {
+        val layout = list.layoutInfo
+        layout.totalItemsCount > 0 && (layout.visibleItemsInfo.lastOrNull()?.index ?: 0) >= layout.totalItemsCount - 3
+    } }
+    LaunchedEffect(seg) {
+        // Collect sequentially. A loading-state update must not cancel its own HTTP request.
+        snapshotFlow { timeline.next?.takeIf { seg == 0 && nearEnd && !loading && loaded && error.isBlank() } }.collect { next ->
+            if (next != null) fetch(next)
+        }
+    }
     val (jobs, scheduleError) = load("schedule", cacheValue = false) { schedule() }
-    LazyColumn(contentPadding = pagePadding(bottom)) {
-        item { PageHeader("任务") { SettingsButton() } }
-        item { SegTabs(listOf("任务", "定时"), seg, Modifier.padding(bottom=12.dp)) { seg = it } }
+    val running = if (Chat.connected.value) (Chat.running.toList() + Chat.tasks.map { Running(it.id, it.description, it.startedAt) }).distinctBy { it.id } else timeline.running
+    LazyColumn(state = list, modifier = Modifier.fillMaxSize().testTag("jobs-list"), contentPadding = pagePadding(bottom)) {
+        item(key = "header") { PageHeader("任务") { SettingsButton() } }
+        item(key = "segments") { SegTabs(listOf("任务", "定时"), seg, Modifier.padding(bottom = 12.dp)) { seg = it } }
         if (seg == 0) {
-            val running = (Chat.running.toList() + Chat.tasks.map { Running(it.id, it.description, it.startedAt) }).distinctBy { it.id }
-            if (running.isNotEmpty()) item {
-                CardList {
-                    running.forEachIndexed { i, r ->
-                        if (i > 0) Hairline()
-                        val task = Chat.tasks.firstOrNull { it.id == r.id }
+            if (running.isNotEmpty()) {
+                item(key = "running-title") { SectionTitle("进行中") }
+                running.forEach { r -> item(key = "running:${r.id}") {
+                    val task = Chat.tasks.firstOrNull { it.id == r.id }
+                    CardList(Modifier.padding(bottom = 6.dp)) {
                         ListRow(r.label, "已运行 ${elapsed(r.started, now)}", leading = {
-                            CircularProgressIndicator(Modifier.size(28.dp), color=Pal.Gold, strokeWidth=2.dp)
+                            CircularProgressIndicator(Modifier.size(22.dp), color = Pal.Link, strokeWidth = 2.dp)
                         }, trailing = { if (task != null) TaskStopButton(task) else Tag("进行中") },
                             onClick = { Nav.open(Route.TaskDetail(r.id, r.label)) })
                         if (task?.error?.isNotBlank() == true) ErrorNote(task.error)
                     }
-                }
+                } }
             }
-            if (Chat.jobsError.value.isNotBlank()) item { ErrorNote(Chat.jobsError.value) }
-            when {
-                recent == null && error.isNotBlank() -> item { ErrorNote(error) }
-                recent == null -> item { Loading() }
-                recent.isEmpty() && running.isEmpty() -> item { EmptyNote("现在没有在跑的任务") }
-                else -> {
-                    val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                    recent.orEmpty().groupBy { when { it.optLong("ts") >= start -> "今天"; it.optLong("ts") >= start - 6 * 86_400_000L -> "近 7 天"; else -> "更早" } }.forEach { (group, list) ->
-                        item { SectionTitle(group) }
-                        item {
-                            CardList {
-                                list.filter { it.optString("id").isNotBlank() && it.optString("id") !in running.map { task -> task.id } }.distinctBy { it.optString("id") }.forEachIndexed { i, job ->
-                                    if (i > 0) Hairline()
-                                    val ok = job.optBoolean("ok")
-                                    val path = job.optString("path").ifBlank { job.optJSONArray("outputs").strings().firstOrNull().orEmpty() }
-                                    ListRow(job.optString("title").ifBlank { job.optString("label") }, "${whenLabel(job.optLong("ts"))} · ${if(ok) "成功" else "出错"}",
-                                        if (ok) Icons.Outlined.CheckCircleOutline else Icons.Outlined.ErrorOutline, if(ok) Color(0xFF527C80) else Pal.Danger,
-                                        onClick = { Nav.open(Route.TaskDetail(job.getString("id"), job.optString("title").ifBlank { job.optString("label") }, path.takeIf(::isBriefPath))) })
-                                }
-                            }
-                        }
+            groupJobs(timeline.recent.filter { it.id !in running.map { r -> r.id } }).forEach { (group, records) ->
+                item(key = "group:$group") { SectionTitle(group.label) }
+                records.forEach { job -> item(key = "job:${job.id}") {
+                    CardList(Modifier.padding(bottom = 6.dp)) {
+                        ListRow(job.title, "${whenLabel(job.ts)} · ${job.status.label}",
+                            if (job.status == TaskStatus.Error) Icons.Outlined.ErrorOutline else Icons.Outlined.CheckCircleOutline,
+                            if (job.status == TaskStatus.Error) Pal.Danger else Pal.Online,
+                            onClick = { Nav.open(Route.TaskDetail(job.id, job.title, job.path ?: job.outputs.firstOrNull(::isBriefPath))) })
                     }
-                }
+                } }
             }
+            if (loading) item(key = "loading") { Loading() }
+            if (error.isNotBlank()) item(key = "error") {
+                ErrorNote(error)
+                QuietButton("重试") { scope.launch { fetch(if (loaded) timeline.next else null) } }
+            }
+            if (loaded && !loading && timeline.recent.isEmpty() && running.isEmpty()) item { EmptyNote("还没有任务") }
+            if (loaded && !loading && timeline.next == null && timeline.recent.isNotEmpty()) item { FooterNote("已显示全部任务") }
         } else {
             when {
                 jobs == null && scheduleError.isNotBlank() -> item { ErrorNote(scheduleError) }
@@ -120,9 +143,9 @@ fun TasksScreen(bottom: Dp) {
                         jobs.forEachIndexed { i, j ->
                             if (i > 0) Hairline()
                             val system = j.kind in setOf("compact", "cleanup")
-                            ListRow(j.name, cronLabel(j.cron) + if(!j.enabled) " · 已暂停" else "", if(system) Icons.Outlined.SettingsSuggest else Icons.Outlined.Schedule,
+                            ListRow(j.name, cronLabel(j.cron) + if (!j.enabled) " · 已暂停" else "", if (system) Icons.Outlined.SettingsSuggest else Icons.Outlined.Schedule,
                                 Pal.Link, trailing = {
-                                    if(system) Tag("系统任务") else QuietButton("立即运行") {
+                                    if (system) Tag("系统任务") else QuietButton("立即运行") {
                                         scope.launch {
                                             notice = runCatching { Api.postJson("/api/run", JSONObject().put("id", j.id)); "已安排「${j.name}」，完成后会送到聊天和今日" }.getOrElse { it.message ?: "运行失败" }
                                         }
@@ -133,6 +156,6 @@ fun TasksScreen(bottom: Dp) {
                 }
             }
         }
-        if (notice.isNotBlank()) item { Text(notice, fontSize=13.sp, color=Pal.GoldInk, modifier=Modifier.padding(top=12.dp)) }
+        if (notice.isNotBlank()) item { Text(notice, fontSize = Type.Secondary, color = Pal.Link, modifier = Modifier.padding(top = 12.dp)) }
     }
 }

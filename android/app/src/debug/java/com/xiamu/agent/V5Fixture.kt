@@ -79,8 +79,8 @@ class V5Fixture {
                         JSONObject().put("id",it.getString("id")).put("label",it.getString("title")).put("started",now-180000)
                     })).put("recent",JSONArray(histories.values.filter { it.getString("status") != "running" }.map {
                         JSONObject().put("id",it.getString("id")).put("title",it.getString("title")).put("label",it.getString("title")).put("ts",now)
-                            .put("ok",it.getString("status") == "done").put("path",if (it.getString("id") == "done-morning") briefPath else "")
-                    })))
+                            .put("ok",it.getString("status") == "done").put("status",it.getString("status")).put("outputs",JSONArray()).put("path",if (it.getString("id") == "done-morning") briefPath else "")
+                    })).put("next",JSONObject.NULL))
                     parts.take(2) == listOf("api","tasks") && parts.size == 4 -> {
                         val id = parts[2]
                         val record = histories[id]
@@ -93,7 +93,7 @@ class V5Fixture {
                                 else if (text.isBlank()) json(JSONObject().put("error","请输入消息"),400)
                                 else {
                                     record.put("status","running")
-                                    record.getJSONArray("items").put(item("prompt",text)).put(item("tool","核对新增要求","Read"))
+                                    record.getJSONArray("items").put(item("prompt",text).put("from","user")).put(item("tool","核对新增要求","Read"))
                                     socket?.send(JSONObject().put("t","task").put("phase","snapshot").put("tasks",running()).toString())
                                     json(JSONObject().put("ok",true).put("id",id))
                                 }
@@ -110,7 +110,7 @@ class V5Fixture {
     }
     private fun json(value: JSONObject, code: Int = 200) = MockResponse().setResponseCode(code).setHeader("Content-Type","application/json").setBody(value.toString())
     private fun unknown(request: RecordedRequest): MockResponse { unexpected.add("${request.method} ${request.requestUrl!!.encodedPath}"); return json(JSONObject().put("error","本地假服务没有此接口"),404) }
-    private fun item(kind: String, text: String, tool: String? = null) = JSONObject().put("kind",kind).put("text",text).put("time",System.currentTimeMillis()).apply { tool?.let { put("tool",it) } }
+    private fun item(kind: String, text: String, tool: String? = null) = JSONObject().put("kind",kind).put("text",text).put("time",System.currentTimeMillis()).apply { if (kind == "prompt") put("from","agent"); tool?.let { put("tool",it) } }
     private fun history(id: String, title: String, status: String) = JSONObject().put("id",id).put("title",title).put("status",status).put("items",JSONArray()
         .put(item("prompt",if (id == "done-morning") "整理今天的安排，写一份晨报。" else "整理供应商回复，列出样品和交期的待核对项。"))
         .put(item("text","先核对已有记录，再整理今天的变化。"))
@@ -151,6 +151,6 @@ class V5Fixture {
     fun close() { socket?.close(1000,null); server.shutdown() }
 
     companion object {
-        fun settingsDocument() = JSONObject("""{"model":"anthropic/claude-haiku-5.5","permissionMode":"auto","models":[{"id":"anthropic/claude-haiku-5.5","label":"Claude Haiku 5.5","note":"消耗约 1×"},{"id":"xiaomi/mimo-v2.6-pro","label":"MiMo V2.6 Pro","note":"消耗约 2×"},{"id":"z-ai/glm-5.3-flashx","label":"GLM 5.3 FlashX","note":"消耗约 3×"}],"permissionModes":[{"id":"auto","label":"自动","note":"危险操作由豆豆判断并拦下"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}""")
+        fun settingsDocument() = JSONObject("""{"model":"anthropic/claude-haiku-5.5","permissionMode":"auto","models":[{"id":"anthropic/claude-haiku-5.5","label":"Claude Haiku 5.5","note":"消耗约 1×"},{"id":"z-ai/glm-5.3-flash","label":"GLM 5.3 Flash","note":"消耗约 2×"},{"id":"z-ai/glm-5.3-flashx","label":"GLM 5.3 FlashX","note":"消耗约 3×"}],"permissionModes":[{"id":"auto","label":"自动","note":"危险操作由豆豆判断并拦下"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}""")
     }
 }

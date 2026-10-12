@@ -1,0 +1,14 @@
+{
+  "historyReads": 5,
+  "initialIntervalsMs": [
+    3085,
+    3006
+  ],
+  "attachmentKinds": [
+    "image",
+    "file",
+    "voice"
+  ],
+  "mainChatSends": 0,
+  "positionPreserved": true
+}

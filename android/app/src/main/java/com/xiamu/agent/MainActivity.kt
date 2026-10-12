@@ -20,6 +20,13 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import com.xiamu.agent.ui.ConversationScrollState
+import com.xiamu.agent.ui.Pal
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -109,6 +116,18 @@ internal fun MainScreens() {
     val tab = Nav.tab.intValue
     val route = Nav.stack.lastOrNull()
     val chatList = rememberLazyListState()
+    val chatScroll = remember { ConversationScrollState() }
+    val pager = rememberPagerState(initialPage = SwipePages.page(tab, Nav.todaySegment.intValue)) { SwipePages.count }
+    LaunchedEffect(tab, Nav.todaySegment.intValue, route) {
+        val target = SwipePages.page(tab, Nav.todaySegment.intValue)
+        if (route == null && pager.settledPage != target && !pager.isScrollInProgress) pager.animateScrollToPage(target)
+    }
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage }.distinctUntilChanged().collect { page ->
+            Nav.tab.intValue = SwipePages.tab(page)
+            if (page == 1 || page == 2) Nav.todaySegment.intValue = page - 1
+        }
+    }
     var dockHeight by remember { mutableIntStateOf(0) }
     val bottom = with(LocalDensity.current) { dockHeight.toDp() }
 
@@ -122,27 +141,28 @@ internal fun MainScreens() {
     Box(Modifier.fillMaxSize().canvasBackground()) {
         if (route != null) key(route) { RoutePage(route) }
         else {
-            key(tab) {
-                when (tab) {
-                    0 -> ChatScreen(chatList, bottom)
-                    1 -> TodayScreen(bottom)
-                    2 -> TasksScreen(bottom)
-                    3 -> MemoryScreen(bottom)
-                    4 -> DouScreen(bottom)
+            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { it }) { page ->
+                when (page) {
+                    0 -> ChatScreen(chatList, bottom, chatScroll)
+                    1, 2 -> TodayScreen(bottom, segment = page - 1)
+                    3 -> TasksScreen(bottom)
+                    4 -> MemoryScreen(bottom)
                 }
             }
-            Dock(
-                Modifier.align(Alignment.BottomCenter).onSizeChanged { dockHeight = it.height }
+            // Paint the margins and system insets too; lists reserve this entire height.
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Pal.Background)
+                    .onSizeChanged { dockHeight = it.height }
                     .navigationBarsPadding().imePadding().padding(horizontal = 14.dp, vertical = 8.dp),
-            )
+            ) { Dock() }
         }
         Box(
             Modifier.align(Alignment.TopCenter).fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars)
-                .background(androidx.compose.ui.graphics.Color(0xFFC9D3DF)),
+                .background(Pal.Background),
         )
         Box(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsBottomHeight(WindowInsets.navigationBars)
-                .background(androidx.compose.ui.graphics.Color(0xFFEEF1F4)),
+                .background(Pal.Background),
         )
         VoiceOverlay()
     }

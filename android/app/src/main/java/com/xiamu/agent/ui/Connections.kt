@@ -181,7 +181,7 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                             item(key = d.id) {
                                 Column(Modifier.alpha(if (d.online) 1f else 0.58f)) {
                                     SectionTitle(d.name)
-                                    Text(deviceStatus(d), fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
+                                    Text(deviceStatus(d), fontSize = Type.Label, color = Pal.Muted, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
                                     if (d.caps.isEmpty()) EmptyNote("这台设备还没有提供能力")
                                     else CardList {
                                         d.caps.forEachIndexed { i, cap ->
@@ -269,7 +269,7 @@ fun DevicesScreen(gateway: ConnectorGateway = CloudConnectors) {
             title = { Text("连接 $kind", color = Pal.Ink) },
             text = {
                 Column {
-                    Text("在那台设备上装豆豆，用设置里的配对码登录。", fontSize = 14.sp, lineHeight = 22.sp, color = Pal.Muted)
+                    Text("在那台设备上装豆豆，用设置里的配对码登录。", fontSize = Type.Secondary, lineHeight = Type.BodyLine, color = Pal.Muted)
                     PairCode()
                     PillLink("打开安装包下载页") { openBrowser(ctx, "https://github.com/Xiamu-ssr/personal-agent/releases") }
                 }
@@ -284,7 +284,7 @@ fun DevicesScreen(gateway: ConnectorGateway = CloudConnectors) {
 @Composable
 private fun DeviceCard(name: String, sub: String, kind: String, online: Boolean, remove: (() -> Unit)? = null, onClick: () -> Unit) {
     CardList(Modifier.padding(top = 14.dp)) {
-        ListRow(name, sub, deviceIcon(kind), if (online) Color(0xFF637DA0) else Pal.Muted, subLines = 2,
+        ListRow(name, sub, deviceIcon(kind), if (online) Pal.Link else Pal.Muted, subLines = 2,
             trailing = remove?.let { action -> { TextButton(onClick = action) { Text("移除", color = Pal.Danger) } } }, onClick = onClick)
     }
 }
@@ -302,7 +302,7 @@ fun SkillsScreen() {
                 else -> CardList(Modifier.padding(top = 12.dp)) {
                     skills.forEachIndexed { i, s ->
                         if (i > 0) Hairline()
-                        ListRow(s.optString("name"), s.optString("description"), Icons.Outlined.Extension, Color(0xFF776AA3), subLines = 3)
+                        ListRow(s.optString("name"), s.optString("description"), Icons.Outlined.Extension, Pal.Link, subLines = 3)
                     }
                 }
             }
@@ -313,14 +313,14 @@ fun SkillsScreen() {
 @Composable
 fun SearchField(value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(23.dp)).background(Color(0xA6FFFFFF)).padding(horizontal = 14.dp),
+        modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(23.dp)).background(Pal.Card).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         Icon(Icons.Outlined.Search, null, tint = Pal.Faint, modifier = Modifier.size(18.dp))
         BasicTextField(
-            value, onChange, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = Pal.Ink), cursorBrush = SolidColor(Pal.Gold),
+            value, onChange, singleLine = true, textStyle = TextStyle(fontSize = Type.Secondary, color = Pal.Ink), cursorBrush = SolidColor(Pal.Gold),
             modifier = Modifier.weight(1f),
-            decorationBox = { inner -> Box { if (value.isBlank()) Text(hint, fontSize = 14.sp, color = Pal.Faint); inner() } },
+            decorationBox = { inner -> Box { if (value.isBlank()) Text(hint, fontSize = Type.Secondary, color = Pal.Faint); inner() } },
         )
     }
 }

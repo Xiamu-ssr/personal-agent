@@ -56,8 +56,8 @@ fun RuntimeSettingsScreen(permissions: Boolean) {
                                 }
                             }).padding(vertical = 18.dp).testTag("setting:${option.id}"), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(option.label, color = Pal.Ink, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                                Text(option.note, color = Pal.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                Text(option.label, color = Pal.Ink, fontSize = Type.Body, fontWeight = FontWeight.Medium)
+                                Text(option.note, color = Pal.Muted, fontSize = Type.Label, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(top = 5.dp))
                             }
                             RadioButton(selected = selected == option.id, onClick = null, enabled = saving == null,

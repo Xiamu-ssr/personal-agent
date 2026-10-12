@@ -114,6 +114,12 @@ object Api {
     suspend fun briefs(): List<BriefDocument> = getJson("/api/briefs?days=7").optJSONArray("items").objects()
         .mapNotNull(BriefDocument::from).sortedByDescending { it.time }
 
+    suspend fun briefItem(path: String): BriefDocument = BriefDocument.from(getJson("/api/briefs/item?path=${enc(path)}"))
+        ?.also { require(it.path == path) } ?: error("简报内容无法读取")
+    suspend fun jobs(before: Long? = null): JobsPage = JobsPage.from(getJson("/api/jobs?limit=30" + (before?.let { "&before=$it" } ?: "")))
+    suspend fun health(): HealthData = HealthData.from(getJson("/api/health"))
+    suspend fun syncHealth(): HealthData = HealthData.from(postJson("/api/health/sync", JSONObject()))
+
     suspend fun settings(): AgentSettings = AgentSettings.from(getJson("/api/settings"))
     suspend fun saveSettings(model: String? = null, permissionMode: String? = null): AgentSettings {
         require(model != null || permissionMode != null)
@@ -126,9 +132,11 @@ object Api {
     suspend fun taskHistory(id: String): TaskHistory = TaskHistory.from(getJson("/api/tasks/${enc(id)}/history")).also {
         require(it.id == id) { "返回的任务不匹配，请重试" }
     }
-    suspend fun sendToTask(id: String, text: String) {
-        require(text.isNotBlank())
-        val result = postJson("/api/tasks/${enc(id)}/send", JSONObject().put("text", text))
+    suspend fun sendToTask(id: String, text: String, attachments: List<Attachment> = emptyList()) {
+        require(text.isNotBlank() || attachments.isNotEmpty())
+        val body = JSONObject().put("text", text)
+        if (attachments.isNotEmpty()) body.put("attachments", JSONArray(attachments.map { it.toJson() }))
+        val result = postJson("/api/tasks/${enc(id)}/send", body)
         check(result.getBoolean("ok") && result.getString("id") == id) { "任务续聊发送失败，请重试" }
     }
 

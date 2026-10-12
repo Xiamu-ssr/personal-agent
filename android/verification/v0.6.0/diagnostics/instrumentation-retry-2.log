@@ -1,0 +1,174 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V6Checks:
+INSTRUMENTATION_STATUS: test=taskUsesSharedMessagesToolsComposerAndAttachmentSendWithFailuresPreserved
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=taskUsesSharedMessagesToolsComposerAndAttachmentSendWithFailuresPreserved
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cardsUseFullHeightAndNativeSwipesFollowTheRequiredOrder
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cardsUseFullHeightAndNativeSwipesFollowTheRequiredOrder
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=groupedJobsLoadTheNextCursorThroughTheList
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: expected:<1> but was:<2>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.xiamu.agent.V6Checks.groupedJobsLoadTheNextCursorThroughTheList$lambda$56(V6Checks.kt:214)
+	at com.xiamu.agent.V6Checks.$r8$lambda$xpw2xaof1QV0JTNompBIyKHmeIY(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda10.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.groupedJobsLoadTheNextCursorThroughTheList(V6Checks.kt:206)
+
+INSTRUMENTATION_STATUS: stream=
+Error in groupedJobsLoadTheNextCursorThroughTheList(com.xiamu.agent.V6Checks):
+java.lang.AssertionError: expected:<1> but was:<2>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.xiamu.agent.V6Checks.groupedJobsLoadTheNextCursorThroughTheList$lambda$56(V6Checks.kt:214)
+	at com.xiamu.agent.V6Checks.$r8$lambda$xpw2xaof1QV0JTNompBIyKHmeIY(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda10.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.groupedJobsLoadTheNextCursorThroughTheList(V6Checks.kt:206)
+
+INSTRUMENTATION_STATUS: test=groupedJobsLoadTheNextCursorThroughTheList
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=allSkinsPersistAndSixNativeScreensMatchHtmlSkinAtDocumentStart
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=allSkinsPersistAndSixNativeScreensMatchHtmlSkinAtDocumentStart
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=healthRendersNullsSyncsAndOpensOldWeeklyBriefAndMemoryRecord
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=healthRendersNullsSyncsAndOpensOldWeeklyBriefAndMemoryRecord
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V6Checks.waitText(V6Checks.kt:44)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows$lambda$52(V6Checks.kt:192)
+	at com.xiamu.agent.V6Checks.$r8$lambda$sQNS4uIGhwV50GccMht83l37Kuw(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda9.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(V6Checks.kt:175)
+
+INSTRUMENTATION_STATUS: stream=
+Error in historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(com.xiamu.agent.V6Checks):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V6Checks.waitText(V6Checks.kt:44)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows$lambda$52(V6Checks.kt:192)
+	at com.xiamu.agent.V6Checks.$r8$lambda$sQNS4uIGhwV50GccMht83l37Kuw(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda9.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(V6Checks.kt:175)
+
+INSTRUMENTATION_STATUS: test=historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 42.816
+There were 2 failures:
+1) groupedJobsLoadTheNextCursorThroughTheList(com.xiamu.agent.V6Checks)
+java.lang.AssertionError: expected:<1> but was:<2>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.xiamu.agent.V6Checks.groupedJobsLoadTheNextCursorThroughTheList$lambda$56(V6Checks.kt:214)
+	at com.xiamu.agent.V6Checks.$r8$lambda$xpw2xaof1QV0JTNompBIyKHmeIY(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda10.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.groupedJobsLoadTheNextCursorThroughTheList(V6Checks.kt:206)
+2) historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(com.xiamu.agent.V6Checks)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V6Checks.waitText(V6Checks.kt:44)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows$lambda$52(V6Checks.kt:192)
+	at com.xiamu.agent.V6Checks.$r8$lambda$sQNS4uIGhwV50GccMht83l37Kuw(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda9.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(V6Checks.kt:175)
+
+FAILURES!!!
+Tests run: 7,  Failures: 2
+
+
+INSTRUMENTATION_CODE: -1

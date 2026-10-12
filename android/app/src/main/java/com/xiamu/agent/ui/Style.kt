@@ -48,6 +48,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -56,75 +57,98 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Silver-blue metal + champagne gold (spec §四). */
-object Pal {
-    val Ink = Color(0xFF252E38)
-    val Muted = Color(0xFF728093)
-    val Faint = Color(0xFF8F99A6)
-    val Line = Color(0x1F7589A0)
-    val Card = Color(0xD6FBFCFE)
-    val CardSolid = Color(0xFFFBFCFE)
-    val Field = Color(0x75E0E4EA)
-    val Icon = Color(0xFF506880)
-    val Link = Color(0xFF49799D)
-    val GoldInk = Color(0xFF6C4A25)
-    val Gold = Color(0xFFB18C53)
-    val Danger = Color(0xFFB4505F)
-    val Online = Color(0xFF5BA37A)
-    val UserBubble = Color(0x339AAFC5)
-    val UserText = Color(0xFF3B526C)
-    val Quiet = Color(0xFFE2EEF5)
-    val QuietText = Color(0xFF477799)
+/** All native surfaces and typography use the selected local skin. */
+object SkinState {
+    val current = androidx.compose.runtime.mutableStateOf(com.xiamu.agent.Skin.Silver)
+    fun restore() { current.value = com.xiamu.agent.Prefs.skinPreference.current }
+    fun select(skin: com.xiamu.agent.Skin) { current.value = com.xiamu.agent.Prefs.skinPreference.select(skin) }
 }
 
-val GoldBrush = Brush.linearGradient(
-    0f to Color(0xFFFFFBED), 0.22f to Color(0xFFF3DFB0), 0.45f to Color(0xFFE2C88E),
-    0.62f to Color(0xFFEAD299), 1f to Color(0xFF9C7440),
-)
-val GoldRim = Brush.horizontalGradient(
-    listOf(Color(0xFF8E6835), Color(0xFFD1AD66), Color(0xFFFFF2CA), Color(0xFFBB9250), Color(0xFF825D2E)),
-)
-private val GoldEdge = Color(0x82BA9659)
-private val GoldShine = Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFFFF8DF), Color.Transparent))
+object Pal {
+    private val c get() = SkinState.current.value.colors
+    val Background get() = Color(c.background)
+    val Ink get() = Color(c.ink)
+    val Muted get() = Color(c.secondary)
+    val Faint get() = Color(c.secondary)
+    val Line get() = Color(c.line)
+    val Card get() = Color(c.card)
+    val CardSolid get() = Card
+    val Field get() = Background
+    val Icon get() = Color(c.accent)
+    val Link get() = Color(c.accent)
+    val GoldInk get() = Link
+    val Gold get() = Color(c.decoration)
+    val Danger get() = Color(c.attention)
+    val Online get() = Color(c.good)
+    val Info get() = Color(c.info)
+    val UserBubble get() = Color(c.accentSoft)
+    val UserText get() = Ink
+    val Quiet get() = UserBubble
+    val QuietText get() = Link
+}
+
+object Type {
+    val Large = 28.sp
+    val Page = 20.sp
+    val CardTitle = 17.sp
+    val Body = 15.sp
+    val Secondary = 13.sp
+    val Label = 12.sp
+    val Tiny = 11.sp
+    val Number = 26.sp
+    val BodyLine = 22.sp
+    val SecondaryLine = 19.sp
+    val LabelLine = 16.sp
+    val titleFamily get() = if (SkinState.current.value == com.xiamu.agent.Skin.Paper) androidx.compose.ui.text.font.FontFamily.Serif else androidx.compose.ui.text.font.FontFamily.SansSerif
+    val bodyWeight get() = if (SkinState.current.value == com.xiamu.agent.Skin.Night) FontWeight.Light else FontWeight.Normal
+    fun body(size: Int) = TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif, fontSize = size.sp,
+        lineHeight = (size * 1.45f).sp, fontWeight = bodyWeight, fontFeatureSettings = "tnum", color = Pal.Ink)
+    fun title(size: Int) = body(size).copy(fontFamily = titleFamily, fontWeight = FontWeight.SemiBold)
+}
+
+val GoldBrush get() = Brush.linearGradient(listOf(Pal.Quiet, Pal.Quiet))
+val GoldRim get() = Brush.horizontalGradient(listOf(Pal.Link, Pal.Link))
 
 @Composable
 fun AgentTheme(content: @Composable () -> Unit) {
+    val night = SkinState.current.value == com.xiamu.agent.Skin.Night
+    val view = androidx.compose.ui.platform.LocalView.current
+    val background = Pal.Background
+    androidx.compose.runtime.SideEffect {
+        var context = view.context
+        while (context is android.content.ContextWrapper && context !is android.app.Activity) context = context.baseContext
+        (context as? android.app.Activity)?.window?.let { window ->
+            window.statusBarColor = background.toArgb()
+            window.navigationBarColor = background.toArgb()
+            window.isNavigationBarContrastEnforced = false
+            androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !night
+                isAppearanceLightNavigationBars = !night
+            }
+        }
+    }
+    val colors = if (night) androidx.compose.material3.darkColorScheme() else lightColorScheme()
     MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Pal.Gold, onPrimary = Color.White, background = Color(0xFFE5E9EE), surface = Pal.CardSolid,
-            onSurface = Pal.Ink, onBackground = Pal.Ink, outline = Pal.Faint, error = Pal.Danger,
-        ),
-        typography = Typography(bodyLarge = TextStyle(fontSize = 15.sp, lineHeight = 24.sp, color = Pal.Ink)),
+        colorScheme = colors.copy(primary = Pal.Link, onPrimary = Pal.Background, primaryContainer = Pal.Quiet,
+            onPrimaryContainer = Pal.Ink, secondary = Pal.Gold, secondaryContainer = Pal.Quiet,
+            onSecondaryContainer = Pal.Ink, background = background, surface = Pal.Card, surfaceVariant = Pal.Field,
+            surfaceContainer = Pal.Card, surfaceContainerHigh = Pal.Card, surfaceContainerHighest = Pal.Field,
+            surfaceContainerLow = Pal.Card, surfaceContainerLowest = Pal.Background, surfaceDim = Pal.Background,
+            surfaceBright = Pal.Card, surfaceTint = Color.Transparent, onSurface = Pal.Ink, onSurfaceVariant = Pal.Muted,
+            onBackground = Pal.Ink, outline = Pal.Line, outlineVariant = Pal.Line, error = Pal.Danger,
+            errorContainer = Pal.Danger.copy(alpha = .12f), onErrorContainer = Pal.Danger),
+        typography = Typography(displayLarge = Type.title(28), displayMedium = Type.title(28), displaySmall = Type.title(26),
+            headlineLarge = Type.title(28), headlineMedium = Type.title(26), headlineSmall = Type.title(20),
+            titleLarge = Type.title(20), titleMedium = Type.title(17), titleSmall = Type.title(15),
+            bodyLarge = Type.body(15), bodyMedium = Type.body(15), bodySmall = Type.body(13),
+            labelLarge = Type.body(13), labelMedium = Type.body(12), labelSmall = Type.body(11)),
         content = content,
     )
 }
 
-/** The app canvas: silver-blue at the top fading to near-white, with a soft light on the right. */
-fun Modifier.canvasBackground() = drawBehind {
-    drawRect(Brush.verticalGradient(0f to Color(0xFFC9D3DF), 0.45f to Color(0xFFE5E9EE), 1f to Color(0xFFEEF1F4)))
-    drawRect(
-        Brush.radialGradient(
-            listOf(Color(0xB0FFFFFF), Color.Transparent),
-            center = Offset(size.width * 1.05f, size.height * 0.3f), radius = size.width * 0.95f,
-        ),
-    )
-}
-
-fun Modifier.card(radius: Dp = 22.dp, color: Color = Pal.Card): Modifier {
-    val shape = RoundedCornerShape(radius)
-    return shadow(10.dp, shape, ambientColor = Color(0x1A253751), spotColor = Color(0x1A253751))
-        .background(color, shape)
-        .border(1.dp, Color(0xB3FFFFFF), shape)
-}
-
-/** Champagne-gold metal fill with a thin highlight along the top edge. */
-fun Modifier.gold(shape: Shape = CircleShape) = clip(shape)
-    .background(GoldBrush)
-    .border(1.dp, GoldEdge, shape)
-    .drawWithContent {
-        drawContent()
-        drawRect(GoldShine, topLeft = Offset(size.width * 0.15f, 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(size.width * 0.7f, 1.dp.toPx()))
-    }
+fun Modifier.canvasBackground() = background(Pal.Background)
+fun Modifier.card(radius: Dp = 16.dp, color: Color = Pal.Card): Modifier = background(color, RoundedCornerShape(radius.coerceAtMost(16.dp)))
+fun Modifier.gold(shape: Shape = CircleShape) = clip(shape).background(Pal.Quiet)
 
 /** clickable without the grey ripple; most surfaces here are glassy and the ripple looks muddy on them. */
 @Composable
@@ -141,7 +165,7 @@ fun Screen(content: @Composable BoxScope.() -> Unit) {
 fun PageHeader(title: String, sub: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Column(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, top = 18.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.weight(1f))
+            Text(title, style = Type.title(28), color = Pal.Ink, modifier = Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), content = actions)
         }
         if (sub != null) Text(sub, fontSize = 13.sp, color = Pal.Muted, modifier = Modifier.padding(top = 4.dp))
@@ -155,7 +179,7 @@ fun SubHeader(title: String, onBack: () -> Unit) {
         Box(Modifier.align(Alignment.CenterStart).size(44.dp).clip(CircleShape).tap(onClick = onBack), contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Outlined.ArrowBackIos, "返回", tint = Pal.Icon, modifier = Modifier.size(18.dp).offset(x = 3.dp))
         }
-        Text(title, fontSize = 14.sp, color = Pal.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(title, style = Type.title(20), color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 56.dp))
     }
 }
@@ -163,7 +187,7 @@ fun SubHeader(title: String, onBack: () -> Unit) {
 @Composable
 fun BigTitle(title: String, sub: String? = null) {
     Column(Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp, bottom = 8.dp)) {
-        Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Pal.Ink)
+        Text(title, style = Type.title(28), color = Pal.Ink)
         if (sub != null) Text(sub, fontSize = 13.sp, color = Pal.Muted, modifier = Modifier.padding(top = 6.dp))
     }
 }
@@ -171,7 +195,7 @@ fun BigTitle(title: String, sub: String? = null) {
 @Composable
 fun CircleButton(icon: ImageVector, desc: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(42.dp).clip(CircleShape).background(Color(0x99FFFFFF)).border(1.dp, Color(0x80FFFFFF), CircleShape).tap(onClick = onClick),
+        Modifier.size(42.dp).clip(CircleShape).background(Pal.Card).tap(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, desc, tint = Pal.Icon, modifier = Modifier.size(20.dp)) }
 }
@@ -179,7 +203,7 @@ fun CircleButton(icon: ImageVector, desc: String, onClick: () -> Unit) {
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
     Row(modifier.fillMaxWidth().padding(top = 22.dp, bottom = 10.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Pal.Ink, modifier = Modifier.weight(1f))
+        Text(text, style = Type.title(17), color = Pal.Ink, modifier = Modifier.weight(1f))
         trailing()
     }
 }
@@ -232,13 +256,13 @@ fun ListRow(
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = if (dim) Pal.Faint else Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (!sub.isNullOrBlank()) {
-                Text(sub, fontSize = 12.sp, lineHeight = 17.sp, color = if (dim) Pal.Faint else subColor, maxLines = subLines,
+                Text(sub, fontSize = 13.sp, lineHeight = 19.sp, color = if (dim) Pal.Faint else subColor, maxLines = subLines,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
             }
         }
         when {
             trailing != null -> Box(Modifier.padding(start = 10.dp)) { trailing() }
-            onClick != null -> Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = Color(0xFF9DAEC2), modifier = Modifier.size(20.dp))
+            onClick != null -> Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = Pal.Muted, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -247,7 +271,7 @@ fun ListRow(
 fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
     Box(
-        modifier.height(52.dp).then(if (enabled) Modifier.gold(shape) else Modifier.clip(shape).background(Color(0xFFDDE2E8)))
+        modifier.height(52.dp).then(if (enabled) Modifier.gold(shape) else Modifier.clip(shape).background(Pal.Field))
             .tap(enabled, onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (enabled) Pal.GoldInk else Pal.Faint) }
@@ -255,11 +279,10 @@ fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = t
 
 /** Plain silver button for secondary actions. */
 @Composable
-fun SilverButton(text: String, modifier: Modifier = Modifier, color: Color = Color(0xFF5B6B7F), onClick: () -> Unit) {
+fun SilverButton(text: String, modifier: Modifier = Modifier, color: Color = Pal.Link, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     Box(
-        modifier.height(48.dp).clip(shape).background(Brush.verticalGradient(listOf(Color(0xFFFDFEFE), Color(0xFFE9EDF2))))
-            .border(1.dp, Color(0xBAFFFFFF), shape).tap(onClick = onClick),
+        modifier.height(48.dp).clip(shape).background(Pal.Card).tap(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = color) }
 }
@@ -274,7 +297,7 @@ fun GoldChip(text: String) {
 @Composable
 fun QuietButton(text: String, onClick: () -> Unit) {
     Box(
-        Modifier.clip(RoundedCornerShape(14.dp)).background(Pal.Quiet).border(1.dp, Color(0x3BBFCDDB), RoundedCornerShape(14.dp))
+        Modifier.clip(RoundedCornerShape(14.dp)).background(Pal.Quiet)
             .tap(onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
     ) { Text(text, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = Pal.QuietText) }
 }
@@ -295,7 +318,7 @@ fun SegTabs(labels: List<String>, selected: Int, modifier: Modifier = Modifier, 
                 Box(
                     Modifier.then(if (on) Modifier.gold(RoundedCornerShape(12.dp)) else Modifier).padding(horizontal = 9.dp, vertical = 7.dp),
                 ) {
-                    Text(label, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) Pal.GoldInk else Color(0xFF70829A))
+                    Text(label, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) Pal.GoldInk else Pal.Muted)
                 }
                 Box(Modifier.padding(top = 3.dp).width(20.dp).height(2.dp).clip(CircleShape).then(if (on) Modifier.background(GoldRim) else Modifier))
             }
@@ -308,19 +331,19 @@ fun GoldSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val x = animateDpAsState(if (checked) 20.dp else 2.dp, label = "knob")
     val shape = RoundedCornerShape(14.dp)
     Box(
-        Modifier.size(46.dp, 28.dp).then(if (checked) Modifier.gold(shape) else Modifier.clip(shape).background(Color(0xFFD9DFE6)))
+        Modifier.size(46.dp, 28.dp).then(if (checked) Modifier.clip(shape).background(Pal.Link) else Modifier.clip(shape).background(Pal.Line))
             .tap { onChange(!checked) },
     ) {
         Box(
             Modifier.offset { androidx.compose.ui.unit.IntOffset(x.value.roundToPx(), 2.dp.roundToPx()) }.size(24.dp).shadow(2.dp, CircleShape)
-                .background(Brush.linearGradient(listOf(Color.White, if (checked) Color(0xFFF2E9D8) else Color(0xFFF4F6F8))), CircleShape),
+                .background(Brush.linearGradient(listOf(Pal.Card, Pal.Card)), CircleShape),
         )
     }
 }
 
 @Composable
 fun StatusDot(color: Color, size: Dp = 7.dp) {
-    Box(Modifier.size(size).background(color, CircleShape).border(1.dp, Color.White, CircleShape))
+    Box(Modifier.size(size).background(color, CircleShape))
 }
 
 @Composable

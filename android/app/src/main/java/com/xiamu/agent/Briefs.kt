@@ -8,6 +8,15 @@ import java.time.OffsetDateTime
 /** Each card is the complete HTML document supplied by /api/briefs. */
 data class HtmlBriefCard(val html: String)
 
+/** The root attribute is inserted into the local response before the HTML parser runs. */
+fun briefWithSkin(html: String, skin: Skin): String {
+    val root = Regex("<html\\b([^>]*)>", RegexOption.IGNORE_CASE)
+    require(root.containsMatchIn(html)) { "简报缺少 HTML 文档" }
+    val match = root.find(html)!!
+    val attributes = match.groupValues[1].replace(Regex("\\s+data-skin\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", RegexOption.IGNORE_CASE), "")
+    return html.replaceRange(match.range, "<html data-skin=\"${skin.id}\"$attributes>")
+}
+
 data class BriefDocument(val date: String, val name: String, val time: Long, val path: String, val cards: List<HtmlBriefCard>) {
     companion object {
         fun from(j: JSONObject): BriefDocument? = runCatching {

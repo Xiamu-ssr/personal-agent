@@ -1,0 +1,42 @@
+{
+  "suites": [
+    {
+      "name": "com.xiamu.agent.V6RulesTest",
+      "tests": "21",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.xiamu.agent.AgentProtocolTest",
+      "tests": "13",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.xiamu.agent.ChatStateTest",
+      "tests": "15",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.xiamu.agent.QueueTest",
+      "tests": "6",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.xiamu.agent.device.StepLedgerTest",
+      "tests": "3",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "tests": 58,
+  "failures": 0,
+  "buildLog": "bottom-chrome-build.log"
+}

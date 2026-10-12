@@ -1,0 +1,18 @@
+{
+  "fixture": "127.0.0.1 only",
+  "avd": "pa35",
+  "serial": "emulator-5554",
+  "tests": 7,
+  "passed": true,
+  "bootCount": 1,
+  "attempts": 4,
+  "ordinaryPolling": {
+    "passed": false,
+    "accepted": false,
+    "reason": "Output matches prior JUnit record; fresh-launch provenance was not established. Script fixed locally; emulator not restarted."
+  },
+  "inTestRealPollingIntervalsMs": [
+    3085,
+    3006
+  ]
+}

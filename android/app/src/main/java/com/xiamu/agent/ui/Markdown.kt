@@ -133,11 +133,11 @@ private fun parse(src: String, pointers: Boolean): List<Block> {
 fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink, fontSize: Int = 15, onPointer: ((String) -> Unit)? = null) {
     val blocks = remember(src, onPointer != null) { parse(src, onPointer != null) }
     val body = fontSize.sp
-    val lh = (fontSize * 1.65f).sp
+    val lh = (fontSize * 1.45f).sp
     Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         for (b in blocks) when (b) {
             is Block.Heading -> Text(
-                inline(b.text), fontWeight = FontWeight.SemiBold, color = Pal.Ink,
+                inline(b.text), fontWeight = FontWeight.SemiBold, fontFamily = Type.titleFamily, color = Pal.Ink,
                 fontSize = when (b.level) { 1 -> (fontSize + 4).sp; 2 -> (fontSize + 2).sp; else -> (fontSize + 1).sp },
                 lineHeight = (fontSize * 1.9f).sp, modifier = Modifier.padding(top = 4.dp),
             )
@@ -147,13 +147,13 @@ fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink,
             }
             is Block.Para -> PointerText(b.text, b.pointers, body, lh, color, onPointer)
             is Block.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-                Box(Modifier.width(3.dp).fillMaxHeight().padding(vertical = 2.dp).background(Color(0x40728093), RoundedCornerShape(2.dp)))
+                Box(Modifier.width(3.dp).fillMaxHeight().padding(vertical = 2.dp).background(Pal.Muted, RoundedCornerShape(2.dp)))
                 Text(inline(b.text), fontSize = body, lineHeight = lh, color = Pal.Muted, modifier = Modifier.padding(start = 10.dp))
             }
             is Block.Code -> Text(
-                b.text, fontFamily = FontFamily.Monospace, fontSize = (fontSize - 3).sp, lineHeight = (fontSize * 1.3f).sp, color = Color(0xFF3C4A5A),
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x14506880))
-                    .horizontalScroll(rememberScrollState()).padding(12.dp),
+                b.text, fontFamily = FontFamily.Monospace, fontSize = (fontSize - 3).sp, lineHeight = (fontSize * 1.3f).sp, color = Pal.Ink,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Pal.Quiet)
+                    .contentHorizontalScroll(rememberScrollState()).padding(12.dp),
             )
             is Block.Table -> MdTable(b.rows, fontSize)
             Block.Rule -> Box(Modifier.padding(vertical = 6.dp).fillMaxWidth().height(1.dp).background(Pal.Line))
@@ -170,7 +170,7 @@ private fun PointerText(text: String, paths: List<String>, fontSize: TextUnit, l
     }
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
-    val style = LocalTextStyle.current.copy(fontSize = 11.sp, lineHeight = 15.sp)
+    val style = LocalTextStyle.current.copy(fontSize = Type.Tiny, lineHeight = Type.LabelLine)
     val chips = paths.mapIndexed { i, p ->
         val label = p.substringAfterLast('/').removeSuffix(".md")
         val size = measurer.measure(label, style, softWrap = false).size
@@ -178,7 +178,7 @@ private fun PointerText(text: String, paths: List<String>, fontSize: TextUnit, l
         val height = with(density) { (15.sp.toPx() + 6.dp.toPx()).toSp() }
         "pointer:$i" to InlineTextContent(Placeholder(width, height, PlaceholderVerticalAlign.TextCenter)) {
             Row(
-                Modifier.fillMaxSize().clip(RoundedCornerShape(9.dp)).background(Color(0x1A4A77A0)).tap { onPointer(p) }.padding(horizontal = 8.dp, vertical = 3.dp),
+                Modifier.fillMaxSize().clip(RoundedCornerShape(9.dp)).background(Pal.Quiet).tap { onPointer(p) }.padding(horizontal = 8.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Outlined.Description, null, tint = Pal.Link, modifier = Modifier.padding(end = 3.dp).size(12.dp))
@@ -186,7 +186,7 @@ private fun PointerText(text: String, paths: List<String>, fontSize: TextUnit, l
             }
         }
     }.toMap()
-    val annotated = remember(text, paths) {
+    val annotated = remember(text, paths, SkinState.current.value) {
         buildAnnotatedString {
             append(inline(text))
             paths.forEachIndexed { i, p ->
@@ -204,8 +204,8 @@ private fun MdTable(rows: List<List<String>>, fontSize: Int) {
     val cols = rows.maxOf { it.size }
     val wide = cols > 3
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x0D506880))
-            .then(if (wide) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Pal.Quiet)
+            .then(if (wide) Modifier.contentHorizontalScroll(rememberScrollState()) else Modifier),
     ) {
         rows.forEachIndexed { r, row ->
             if (r > 0) Box(Modifier.then(if (wide) Modifier.width((cols * 120).dp) else Modifier.fillMaxWidth()).height(1.dp).background(Pal.Line))
@@ -222,7 +222,7 @@ private fun MdTable(rows: List<List<String>>, fontSize: Int) {
     }
 }
 
-private val linkStyle = TextLinkStyles(SpanStyle(color = Pal.Link, textDecoration = TextDecoration.Underline))
+private val linkStyle get() = TextLinkStyles(SpanStyle(color = Pal.Link, textDecoration = TextDecoration.Underline))
 private val markdownLink = Regex("""^\[([^\]]+)]\((https?://[^)\s]+|data/briefs/[^)\r\n]+\.html)\)""")
 
 fun inline(s: String): AnnotatedString = buildAnnotatedString {
@@ -237,7 +237,7 @@ fun inline(s: String): AnnotatedString = buildAnnotatedString {
             }
             c == '`' && s.indexOf('`', i + 1) > i -> {
                 val end = s.indexOf('`', i + 1)
-                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 0.9.em, background = Color(0x1A506880))) {
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 0.9.em, background = Pal.Quiet)) {
                     append(s.substring(i + 1, end))
                 }
                 i = end + 1

@@ -1,0 +1,190 @@
+Android 0.6.0 本地实现与验收报告
+2026-10-12，versionName 0.6.0，versionCode 8（由 7 递增）。
+
+本轮安卓实现已准备好交给 Claude 集成 review。58 项 JVM 测试、7 项 0.6 模拟器交互检查通过，
+release 构建和签名检查通过。16 张 0.6 截图位于 verification/v0.6.0/；本次底部修正覆盖其中指定三张，
+其余截图沿用上一轮。以下先列本次修正，再保留完整 0.6 实现和验收记录。
+
+只修改 personal-agent/android/**；cloud 的 brief-base.css 和接口代码只读。
+没有 commit、push、发布、部署、ssh，没有向真实服务聊天、上传、连接或运行任务。
+未读取 Mac 的 Doudou token，未操作系统安全或授权弹窗。所有功能请求使用 loopback 假服务。
+上一轮完整 0.6 验收只启动过一次 pa35 / emulator-5554，修复和重试复用该次开机，最后 emu kill，
+共约 13.1 分钟。本次底部修正另启动一次，59.8 秒，截图结束立即 emu kill；
+两次均已确认 emulator-5554 离线、qemu 残留数为 0。
+
+本次补充：底部遮挡修正
+
+- MainActivity.kt 把 Dock 放进全宽、实心 Pal.Background 的底部容器；背景先于内边距绘制，
+  覆盖输入区和页签外侧留白，延伸到屏幕最底的手势条区域。三套皮肤和全部主页面共用这处布局。
+- 测量整个底部容器（包含导航栏、键盘和卡片留白），提供给各列表的底部内边距。
+  今日/任务等列表保留该高度 + 16dp，聊天保留该高度 + 14dp，最后一项能滚到输入区上方。
+- ./gradlew testDebugUnitTest assembleDebug assembleRelease --max-workers=2 通过，JVM 58/58，
+  testDebugUnitTest 实际执行；日志 bottom-chrome-build.log。Release 重新构建并通过 apksigner 校验，
+  v2=true，现有 release 签名与 debug 签名不同，版本仍为 0.6.0 / 8。
+- 只用 loopback V6ReviewActivity 假服务，一次开机覆盖 today-silver.png、today-night.png、
+  tasks-grouped.png。三张图底部 32dp 的采样像素均为当前皮肤页面底色，没有列表残影。
+- 实际滚到底检查了今日最后一张卡片末尾提示和任务最后一项“历史任务 44”。
+  任务列表“已显示全部任务”文字底部与后台任务提示文字顶部相距 115px，完整露出；
+  末项截图/任务原生 UI 层级位于 diagnostics/bottom-chrome-today-end.png、
+  diagnostics/bottom-chrome-tasks-end.png、diagnostics/bottom-chrome-tasks-end.xml。
+- 证据为 bottom-chrome-checks.json、bottom-chrome-recapture.log，复现脚本为
+  verification/v0.6.0/bottom-chrome-recapture.py。截图后立即关闭，另行检查无 qemu 残留。
+- 本次只重截指定三张图，没有重新运行上一轮 7 项 instrumentation 或普通页面轮询采样，
+  没有重截纸墨和聊天等其他页面，也没有使用真实服务或实体手机。
+
+实现方式：
+
+1. 皮肤和排版
+   - 设置 → 皮肤提供银蓝、纸墨、夜幕，色块预览和单选，点击立即生效。
+     SharedPreferences 独立保存本机选择，默认银蓝，不跟随系统深浅色。
+   - Skin/Pal/Type 统一颜色、字号层次、正文行距和 tnum 数字排版；纸墨标题衬线，夜幕正文较轻。
+   - 页签、页头、卡片、列表、用户气泡、Markdown、输入框、按钮、开关和各设置/连接/记忆页面取主题。
+     删除旧的金色渐变、白色边框、页签固定颜色；卡片圆角收为 16dp，豆豆回复去掉气泡底。
+   - 系统状态栏、导航栏及明暗图标跟皮肤变化。
+   - 底部四页签是聊天、今日、任务、记忆；原豆豆的角色、形象和日记入口移到设置。
+
+2. 简报
+   - 在本地 HTML 响应交给解析器之前给根 html 加 data-skin，早于任何 head 脚本；切换皮肤重载文档。
+   - document.documentElement.scrollHeight 换算完整高度，安全上限 2 倍屏高；不再有 75% 上限。
+   - WebView 禁用内部滚动、滚动条和嵌套滚动，移动手势交给外层列表/分页，只保留正常按钮点击。
+   - 高度用 180ms 动画更新，列表 key/高度缓存保持稳定；只加载可见卡片，复用和离开时暂停/释放。
+   - 保留离线 origin、CSP、外部导航/网络/iframe/popup/下载/权限拦截，仅放行 doudou prompt。
+
+3. 聊天和横滑
+   - 主聊天、任务详情共用 ChatRow、Markdown、ToolRow、MessageComposer 和 ConversationScrollState。
+   - 以用户手势的位置决定跟随；新消息/流式增长/键盘调整不能擅自把看历史的人拉下去。
+   - 超过约一屏出现回到底部，离开底部的新增消息累计未读，点击平滑到底并清计数；发送也回到底部。
+   - HorizontalPager 的连续页是聊天 → 今日简报 → 今日站点 → 任务 → 记忆，页签与分段同步。
+     输入框在分页区域外；代码、宽表、附件等横向滚动内容隔离其手势；未申请系统返回手势排除区。
+
+4. 任务
+   - GET /api/jobs?limit=30 和 next/before，按本地日历分今天、近 7 天、更早，进行中排最上面。
+     分页合并按 id 去重，滚到底读取更早的，next=null 结束；加载错误可重试。
+   - 详情按 history 原顺序渲染：第一条 agent prompt 标“豆豆交代的”，user prompt 为用户气泡和附件，
+     tool 为默认折叠工具行，text/result 为豆豆的 Markdown 回复。
+   - 输入框支持与主聊天相同的文字、文件、图片、语音动作，各任务有自己的草稿。
+     先 upload，再 POST 任务 send + attachments；空文字但有附件可发，失败保留草稿和已选文件。
+   - 运行中独立 lifecycle coroutine 每 3 秒读取 history，终态停止；刷新复用聊天滚动规则。
+
+5. 健康
+   - 记忆页健康入口改为原生健康页面，删除 latest.json 指标读取。
+   - 同步按钮 POST /api/health/sync，转圈，显示返回 note 或同步时间/设备，再 GET 刷新。
+   - 今天四格，Compose Canvas 画七天柱/线；null 显示 --，缺失日期保持空槽，折线在空槽断开。
+   - 周报日期范围和总结，点击 /api/briefs/item 打开不限七天的卡片页面。
+   - 健康记录为两列标题、日期、两行预览，点击已有 Markdown 记忆文件页。
+   - 周报/记录保留“新”标记：以本地已读时间与更新日期比较，打开后消除，后续更新再出现。
+
+实际验证：
+
+- ./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease --max-workers=2 通过。
+  最终日志 final-build.log；其后只调整了保留的模型/权限历史检查并重建测试 APK，test-apk-final-build.log 通过。
+- JVM 58/58：AgentProtocolTest 13、ChatStateTest 15、QueueTest 6、StepLedgerTest 3、V6RulesTest 21。
+  新增覆盖皮肤保存/切换、在底部和历史位置的新消息、键盘、发送/返回、任务日历分组/DST/分页去重、
+  agent/user 附件映射、健康 null/零值/七天对齐/同步说明/新标记、横滑顺序与边界、解析前 skin 注入。
+- V6Checks 7/7：instrumentation-final.log 为 OK (7 tests)，35.67 秒。
+  验证三套皮肤选择和 SharedPreferences 重读，原生聊天/今日截图，HTML 最早脚本读取 skin，
+  完整高度与内外层实际触摸，五段横滑，真实 HTML 按钮中文 prompt，离线拦截，分页 cursor，
+  任务工具默认折叠、send 失败保留和图片/文件/语音三类 upload→task send，健康同步和旧周报/记忆打开，
+  聊天未读数 2、键盘不改变历史位置、回到底部、在底部弹键盘及发送后回底。
+  附件文件由测试直接加入已选列表；没有用系统文件选择器或实际录音。
+- 卡片样本完整 scrollHeight=806 CSS px，原生高度 2110px；内部 scrollTop=0，外层列表确实移动。
+  三套 skin 在文档最早脚本中的值和卡片背景 RGB 都匹配，见 skins.json、brief-gestures.json。
+- 任务在 JUnit 中以 System.nanoTime 记下最初轮询间隔 3085ms、3006ms；发送后的立即刷新另计。
+  见 task-contract.json。聊天位置/分页证据见 chat-scroll.json、jobs-pagination.json。
+- python3 -m py_compile tools/review_v06.py 通过；git diff --check -- android 通过。
+- Release apksigner verify --verbose 通过，v2=true；确认 release 签名与 debug 签名不同。
+  aapt2 确认 com.xiamu.agent / 0.6.0 / 8。Manifest、assets、R8 映射没有验收 Activity/假服务/样例，
+  没有 debug 健康写入权限。见 signature.log、apk-badging.log、release.json。
+
+最终截图（均相对 android/）：
+
+- verification/v0.6.0/today-silver.png、chat-silver.png
+- verification/v0.6.0/today-paper.png、chat-paper.png
+- verification/v0.6.0/today-night.png、chat-night.png
+- verification/v0.6.0/health.png
+- verification/v0.6.0/tasks-grouped.png、tasks-paginated.png
+- verification/v0.6.0/task-detail.png（工具行展开和折叠、附件、共享输入框）
+- verification/v0.6.0/settings-skins.png
+- verification/v0.6.0/chat-return-bottom.png（未读 2）
+- verification/v0.6.0/brief-full-height.png、brief-prompt-chat.png
+- verification/v0.6.0/health-weekly.png、health-record.png
+完整截图清单见 screenshots.json。
+
+失败、修复与未采纳证据：
+
+- 最初未读徽标被圆形裁剪，且测试读取了合并后的语义树；已修正显示和读取。
+- 回底按钮隐藏时会取消自己所属的协程；改为保持协程作用域后，实际回底通过。
+- 以 loading 作为分页 effect key 会取消自己的请求；改为顺序 snapshotFlow 收集后，同一 cursor 只请求一次。
+- HTML 探针改变文档高度，测试偶尔在高度动画结束前点击；现等原生高度追上 scrollHeight 后点击。
+  最终四轮中的最后一轮全部通过，早期失败日志/截图保存在 diagnostics/。
+- 额外普通页面轮询采样读到了与 JUnit 完全相同的旧文件，没有本次启动标识，未采纳。
+  因此不能宣称普通页面独立轮询采样已通过；工具在该附加步骤退出为失败，finally 已关闭模拟器。
+  已在采样前删除旧文件、等待 onStop 新输出、添加 launchId/processId/clock 校验，只做了编译和语法检查。
+  没有为此再次启动模拟器。acceptance.json 单独标明 7 项交互通过及这项采样未通过。
+
+未验证及下一步：
+
+- 未对真实云端做合同联调；只读对照了本轮接口源码，不等于部署或端到端可用。
+- 未验证实体手机、生产任务上下文、跨端同步、真实健康来源与离线手机返回、真实文件选择器/相机/录音、
+  App 进程冷重启持久化，以及 release 实机流畅度/内存性能。没有把截图、构建或保存当成这些验证。
+- 保留的模型/权限保存回归只编译未运行，未运行完整 V4/设备能力/后台服务检查。
+- Claude 需要集成 0.6 云端后安排真实服务和实体手机验收；普通页面采样的修复也需下一次实际复测。
+  本轮没有用户授权/安装阻塞。
+
+Release APK：app/build/outputs/apk/release/app-release.apk
+大小：3384542 bytes。
+SHA-256：ade04627589798b5e6647104888c665a72ab0be11309dbd4c8e21e3c7fbda343。
+
+实际改动文件（相对 android/，验收目录另列）：
+
+- app/build.gradle.kts
+- app/src/androidTest/java/com/xiamu/agent/V5Checks.kt
+- app/src/androidTest/java/com/xiamu/agent/V6Checks.kt
+- app/src/debug/AndroidManifest.xml
+- app/src/debug/assets/v06/brief-base.css
+- app/src/debug/java/com/xiamu/agent/V4Fixture.kt
+- app/src/debug/java/com/xiamu/agent/V5Fixture.kt
+- app/src/debug/java/com/xiamu/agent/V6Fixture.kt
+- app/src/debug/java/com/xiamu/agent/V6ReviewActivity.kt
+- app/src/main/java/com/xiamu/agent/Api.kt
+- app/src/main/java/com/xiamu/agent/App.kt
+- app/src/main/java/com/xiamu/agent/Briefs.kt
+- app/src/main/java/com/xiamu/agent/ChatScrollRules.kt
+- app/src/main/java/com/xiamu/agent/HealthData.kt
+- app/src/main/java/com/xiamu/agent/Jobs.kt
+- app/src/main/java/com/xiamu/agent/MainActivity.kt
+- app/src/main/java/com/xiamu/agent/Prefs.kt
+- app/src/main/java/com/xiamu/agent/Skin.kt
+- app/src/main/java/com/xiamu/agent/SwipePages.kt
+- app/src/main/java/com/xiamu/agent/TaskHistory.kt
+- app/src/main/java/com/xiamu/agent/ui/Account.kt
+- app/src/main/java/com/xiamu/agent/ui/CapabilityAuthorization.kt
+- app/src/main/java/com/xiamu/agent/ui/ChatScreen.kt
+- app/src/main/java/com/xiamu/agent/ui/Composer.kt
+- app/src/main/java/com/xiamu/agent/ui/Connections.kt
+- app/src/main/java/com/xiamu/agent/ui/ConnectorDetail.kt
+- app/src/main/java/com/xiamu/agent/ui/ConversationScroll.kt
+- app/src/main/java/com/xiamu/agent/ui/Doudou.kt
+- app/src/main/java/com/xiamu/agent/ui/HealthScreen.kt
+- app/src/main/java/com/xiamu/agent/ui/HorizontalContent.kt
+- app/src/main/java/com/xiamu/agent/ui/HtmlBrief.kt
+- app/src/main/java/com/xiamu/agent/ui/Markdown.kt
+- app/src/main/java/com/xiamu/agent/ui/Membership.kt
+- app/src/main/java/com/xiamu/agent/ui/Memory.kt
+- app/src/main/java/com/xiamu/agent/ui/Pages.kt
+- app/src/main/java/com/xiamu/agent/ui/RuntimeSettings.kt
+- app/src/main/java/com/xiamu/agent/ui/Sites.kt
+- app/src/main/java/com/xiamu/agent/ui/Skins.kt
+- app/src/main/java/com/xiamu/agent/ui/Style.kt
+- app/src/main/java/com/xiamu/agent/ui/Tabs.kt
+- app/src/main/java/com/xiamu/agent/ui/TaskActivity.kt
+- app/src/main/java/com/xiamu/agent/ui/TaskDetail.kt
+- app/src/main/java/com/xiamu/agent/ui/Today.kt
+- app/src/main/java/com/xiamu/agent/ui/ToolRow.kt
+- app/src/main/res/values/themes.xml
+- app/src/test/java/com/xiamu/agent/AgentProtocolTest.kt
+- app/src/test/java/com/xiamu/agent/V6RulesTest.kt
+- tools/README-v06.md
+- tools/review_v06.py
+- REVIEW-v0.6.0.txt
+- verification/v0.6.0/（截图、日志、JSON 与 diagnostics/）

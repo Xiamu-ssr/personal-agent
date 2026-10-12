@@ -27,6 +27,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.BatteryChargingFull
@@ -160,8 +162,8 @@ fun LoginScreen() {
         ) {
             Spacer(Modifier.height(56.dp))
             Avatar(76.dp)
-            Text("登录豆豆", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.padding(top = 26.dp))
-            Text("你的个人 agent，住在你自己的云主机上", fontSize = 14.sp, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
+            Text("登录豆豆", fontSize = Type.Large, fontFamily = Type.titleFamily, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.padding(top = 26.dp))
+            Text("你的个人 agent，住在你自己的云主机上", fontSize = Type.Secondary, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
             Column(Modifier.padding(top = 32.dp).fillMaxWidth().card(radius = 24.dp).padding(horizontal = 20.dp)) {
                 LoginField("账号", server, { server = it }, "云端地址", KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next))
                 Hairline()
@@ -179,7 +181,7 @@ fun LoginScreen() {
             }
             if (error.isNotBlank()) ErrorNote(error)
             GoldButton(if (busy) "正在登录…" else "登录", Modifier.fillMaxWidth().padding(top = if (error.isBlank()) 24.dp else 4.dp), ready) { login() }
-            Text("没有密码？在已登录的设备上：设置 → 生成配对码", fontSize = 12.sp, color = Pal.Faint,
+            Text("没有密码？在已登录的设备上：设置 → 生成配对码", fontSize = Type.Label, color = Pal.Faint,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
@@ -192,13 +194,13 @@ private fun LoginField(
     visual: VisualTransformation = VisualTransformation.None, trailing: @Composable (() -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-        Text(label, fontSize = 12.sp, color = Pal.Muted)
+        Text(label, fontSize = Type.Label, color = Pal.Muted)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
             BasicTextField(
                 value, onChange, singleLine = true, keyboardOptions = keyboard, keyboardActions = actions, visualTransformation = visual,
-                textStyle = TextStyle(fontSize = 16.sp, color = Pal.Ink), cursorBrush = SolidColor(Pal.Gold),
+                textStyle = TextStyle(fontSize = Type.Body, color = Pal.Ink), cursorBrush = SolidColor(Pal.Gold),
                 modifier = Modifier.weight(1f),
-                decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, fontSize = 16.sp, color = Pal.Faint); inner() } },
+                decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, fontSize = Type.Body, color = Pal.Faint); inner() } },
             )
             trailing?.invoke()
         }
@@ -282,10 +284,10 @@ fun OnboardingScreen() {
     Screen {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(40.dp))
-            Text("开通本机能力", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.padding(start = 4.dp))
+            Text("开通本机能力", fontSize = Type.Large, fontFamily = Type.titleFamily, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.padding(start = 4.dp))
             Text(
                 "打开的，豆豆可以随时用；没打开的，它碰不到。之后在「连接应用 → 本机」里随时改。",
-                fontSize = 14.sp, lineHeight = 22.sp, color = Pal.Muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 22.dp),
+                fontSize = Type.Secondary, lineHeight = Type.BodyLine, color = Pal.Muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 22.dp),
             )
             LocalCapabilities()
             EnableAllCapabilities()
@@ -310,8 +312,8 @@ fun PairCode() {
     var busy by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconTile(Icons.Outlined.Key, Color(0xFF96734F))
-            Text("生成配对码", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(start = 14.dp).weight(1f))
+            IconTile(Icons.Outlined.Key, Pal.Gold)
+            Text("生成配对码", fontSize = Type.Body, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(start = 14.dp).weight(1f))
             QuietButton(if (busy) "生成中…" else if (code.isBlank()) "生成" else "换一个") {
                 if (busy) return@QuietButton
                 busy = true
@@ -324,12 +326,12 @@ fun PairCode() {
         }
         if (code.isNotBlank()) {
             Text(
-                code.chunked(3).joinToString(" "), fontSize = 30.sp, fontWeight = FontWeight.SemiBold, color = Pal.GoldInk, letterSpacing = 4.sp,
+                code.chunked(3).joinToString(" "), fontSize = Type.Large, fontFamily = Type.titleFamily, fontWeight = FontWeight.SemiBold, color = Pal.GoldInk, letterSpacing = 4.sp,
                 modifier = Modifier.padding(top = 14.dp, start = 50.dp),
             )
         }
-        if (error.isNotBlank()) Text(error, fontSize = 12.sp, color = Pal.Danger, modifier = Modifier.padding(top = 8.dp, start = 50.dp))
-        Text("24 小时内有效，只能用一次，会顶掉之前没用的码", fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp, start = 50.dp))
+        if (error.isNotBlank()) Text(error, fontSize = Type.Label, color = Pal.Danger, modifier = Modifier.padding(top = 8.dp, start = 50.dp))
+        Text("24 小时内有效，只能用一次，会顶掉之前没用的码", fontSize = Type.Label, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp, start = 50.dp))
     }
 }
 
@@ -359,6 +361,12 @@ fun SettingsScreen() {
     }
     SubPage("设置") {
         item { MembershipCard(state) }
+        item { SectionTitle("外观") }
+        item { CardList {
+            ListRow("皮肤", SkinState.current.value.label, Icons.Outlined.Palette, Pal.Link) { Nav.open(Route.Skins) }
+            Hairline()
+            ListRow("豆豆", "角色、形象与日记", Icons.Outlined.PersonOutline, Pal.Link) { Nav.open(Route.Doudou) }
+        } }
         item { SectionTitle("模型与权限") }
         item {
             CardList {
@@ -371,18 +379,18 @@ fun SettingsScreen() {
         item { SectionTitle("能力与连接") }
         item {
             CardList {
-                ListRow("连接应用", "本机、云端和其他设备的能力", Icons.Outlined.Hub, Color(0xFF4A77A0)) { Nav.open(Route.Connectors()) }
+                ListRow("连接应用", "本机、云端和其他设备的能力", Icons.Outlined.Hub, Pal.Link) { Nav.open(Route.Connectors()) }
                 Hairline()
-                ListRow("设备", "豆豆能用的手机、电脑和云电脑", Icons.Outlined.Devices, Color(0xFF478AA8)) { Nav.open(Route.Devices) }
+                ListRow("设备", "豆豆能用的手机、电脑和云电脑", Icons.Outlined.Devices, Pal.Link) { Nav.open(Route.Devices) }
                 Hairline()
-                ListRow("技能", "豆豆整理好的常用做法", Icons.Outlined.Extension, Color(0xFF776AA3)) { Nav.open(Route.Skills) }
+                ListRow("技能", "豆豆整理好的常用做法", Icons.Outlined.Extension, Pal.Link) { Nav.open(Route.Skills) }
             }
         }
         item { SectionTitle("通知") }
         item {
             CardList {
                 ListRow("接收消息通知", if (notifyDenied) "系统通知权限被拒绝 · 点这里去系统设置打开" else "App 不在前台时，豆豆的回复和任务结果弹通知", Icons.Outlined.NotificationsNone,
-                    Color(0xFF96734F), subColor = if (notifyDenied) Pal.Danger else Pal.Muted, subLines = 2,
+                    Pal.Gold, subColor = if (notifyDenied) Pal.Danger else Pal.Muted, subLines = 2,
                     onClick = if (notifyDenied) { { c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", c.packageName, null))) } } else null,
                     trailing = {
                     GoldSwitch(notify) { want ->
@@ -397,7 +405,7 @@ fun SettingsScreen() {
         item { SectionTitle("账号") }
         item {
             CardList {
-                ListRow("云端地址", Prefs.server, Icons.Outlined.Cloud, Color(0xFF4E79A3))
+                ListRow("云端地址", Prefs.server, Icons.Outlined.Cloud, Pal.Link)
                 Hairline()
                 PairCode()
                 Hairline()
@@ -410,5 +418,5 @@ fun SettingsScreen() {
 
 @Composable
 fun PillLink(text: String, onClick: () -> Unit) {
-    Text(text, fontSize = 13.sp, color = Pal.Link, modifier = Modifier.clip(CircleShape).tap(onClick = onClick).padding(vertical = 6.dp))
+    Text(text, fontSize = Type.Secondary, color = Pal.Link, modifier = Modifier.clip(CircleShape).tap(onClick = onClick).padding(vertical = 6.dp))
 }

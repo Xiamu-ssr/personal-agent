@@ -63,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,14 +112,15 @@ import java.util.Locale
 data class Picked(val id: Long, val name: String, val kind: String, val uri: Uri? = null, val file: File? = null)
 
 /** The draft is shared by every tab's input box. */
-object Draft {
+open class MessageDraft(private val taskId: String? = null) {
     val text = mutableStateOf("")
     val picked = mutableStateListOf<Picked>()
     val sending = mutableStateOf(false)
     val voiceMode = mutableStateOf(false)
     val note = mutableStateOf("")
+    val sentVersion = mutableIntStateOf(0)
 
-    private const val MAX_UPLOAD = 20 * 1024 * 1024
+    private val MAX_UPLOAD = 20 * 1024 * 1024
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var transfer: Job? = null
     private val uploaded = mutableMapOf<Long, Attachment>()
@@ -139,19 +141,21 @@ object Draft {
     fun send(ctx: Context, text: String = this.text.value.trim(), extra: List<Picked> = emptyList(), includeDraft: Boolean = true, onDone: () -> Unit = {}): Boolean {
         val files = (if (includeDraft) picked.toList() else emptyList()) + extra
         if (sending.value || (text.isBlank() && files.isEmpty())) { onDone(); return false }
-        if (!Chat.connected.value) {
+        if (taskId == null && !Chat.connected.value) {
             say("还没连上云端，稍等再发")
             extra.forEach { if (it !in picked) picked.add(it) }
             onDone()
             return false
         }
-        Nav.home(0)
+        if (taskId == null) Nav.home(0)
         sending.value = true
         transfer = scope.launch {
             try {
                 val atts = files.map { upload(ctx, it) }
-                if (Chat.send(text, atts)) {
-                    if (includeDraft && text == this@Draft.text.value.trim()) this@Draft.text.value = ""
+                val accepted = if (taskId == null) Chat.send(text, atts) else { Api.sendToTask(taskId, text, atts); true }
+                if (accepted) {
+                    sentVersion.intValue++
+                    if (includeDraft && text == this@MessageDraft.text.value.trim()) this@MessageDraft.text.value = ""
                     files.forEach(::remove)
                 } else {
                     extra.forEach { if (it !in picked) picked.add(it) }
@@ -180,6 +184,7 @@ object Draft {
         transfer?.cancel()
         picked.toList().forEach(::remove)
         uploaded.clear()
+        sentVersion.intValue = 0
         text.value = ""; note.value = ""; voiceMode.value = false; sending.value = false
     }
 
@@ -187,6 +192,8 @@ object Draft {
         note.value = text
     }
 }
+
+object Draft : MessageDraft()
 
 enum class VoiceMode { Hold, Note }
 
@@ -198,13 +205,15 @@ object Voice {
     val levels = mutableStateListOf<Float>()
     val busy = mutableStateOf("")
     private var recorder: Recorder? = null
+    private var draft: MessageDraft = Draft
     private var transcription: Job? = null
 
-    fun start(ctx: Context, m: VoiceMode): Boolean {
+    fun start(ctx: Context, m: VoiceMode, target: MessageDraft = Draft): Boolean {
+        draft = target
         if (mode.value != null || busy.value.isNotBlank()) return false
         val r = recorder ?: Recorder(ctx.applicationContext).also { recorder = it }
         if (!r.start()) {
-            Draft.say("麦克风打不开")
+            draft.say("麦克风打不开")
             return false
         }
         levels.clear(); elapsed.longValue = 0; cancelArmed.value = false
@@ -230,17 +239,17 @@ object Voice {
     /** Released the hold-to-talk button: transcribe, then send the text as a message. */
     fun finishHold(ctx: Context, scope: CoroutineScope, cancel: Boolean) {
         if (cancel) return cancel()
-        val f = stop() ?: return Draft.say("说话时间太短")
+        val f = stop() ?: return draft.say("说话时间太短")
         busy.value = "正在转文字…"
         transcription = scope.launch {
             try {
                 val text = Api.transcribe(f)
-                if (text.isBlank()) Draft.say("没听清，再说一次")
-                else if (!Draft.send(ctx, text, includeDraft = false)) Draft.text.value = listOf(Draft.text.value, text).filter { it.isNotBlank() }.joinToString("\n")
+                if (text.isBlank()) draft.say("没听清，再说一次")
+                else if (!draft.send(ctx, text, includeDraft = false)) draft.text.value = listOf(draft.text.value, text).filter { it.isNotBlank() }.joinToString("\n")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Draft.say("转文字失败：${e.message}")
+                draft.say("转文字失败：${e.message}")
             } finally {
                 f.delete()
                 busy.value = ""
@@ -250,23 +259,22 @@ object Voice {
 
     /** Voice note: upload the recording as a voice attachment and send right away; the cloud transcribes it. */
     fun finishNote(ctx: Context) {
-        val f = stop() ?: return Draft.say("录音太短")
+        val f = stop() ?: return draft.say("录音太短")
         val name = "语音笔记-" + SimpleDateFormat("HHmmss", Locale.CHINA).format(Date()) + ".aac"
         busy.value = "正在发送语音笔记…"
-        Draft.send(ctx, "", listOf(Picked(System.nanoTime(), name, "voice", file = f)), includeDraft = false) { busy.value = "" }
+        draft.send(ctx, "", listOf(Picked(System.nanoTime(), name, "voice", file = f)), includeDraft = false) { busy.value = "" }
     }
 }
 
 private fun hasPerm(ctx: Context, p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
 
-private data class TabSpec(val label: String, val icon: ImageVector, val tone: Color, val hint: String)
+private data class TabSpec(val label: String, val icon: ImageVector, val hint: String)
 
 private val tabSpecs = listOf(
-    TabSpec("聊天", Icons.Outlined.ChatBubbleOutline, Color(0xFF487FA6), "说说你想做什么…"),
-    TabSpec("今日", Icons.Outlined.CalendarToday, Color(0xFF527AAA), "告诉我今天的安排…"),
-    TabSpec("任务", Icons.Outlined.Checklist, Color(0xFF3F7F87), "交给豆豆一个任务…"),
-    TabSpec("记忆", Icons.Outlined.AutoAwesome, Color(0xFF776AA3), "告诉豆豆更多关于你的事…"),
-    TabSpec("豆豆", Icons.Outlined.PersonOutline, Color(0xFF637DA0), ""),
+    TabSpec("聊天", Icons.Outlined.ChatBubbleOutline, "说说你想做什么…"),
+    TabSpec("今日", Icons.Outlined.CalendarToday, "告诉我今天的安排…"),
+    TabSpec("任务", Icons.Outlined.Checklist, "交给豆豆一个任务…"),
+    TabSpec("记忆", Icons.Outlined.AutoAwesome, "告诉豆豆更多关于你的事…"),
 )
 
 /** Floating white card at the bottom: picked attachments, the input pill (not on 豆豆), and the tab bar. */
@@ -275,53 +283,52 @@ private val tabSpecs = listOf(
 fun Dock(modifier: Modifier = Modifier) {
     val tab = Nav.tab.intValue
     val ime = WindowInsets.isImeVisible
-    val note = Draft.note.value
-    LaunchedEffect(note) {
-        if (note.isNotBlank()) {
-            delay(3500)
-            Draft.note.value = ""
-        }
-    }
-    Column(modifier.fillMaxWidth().background(Color(0xFFEEF1F4), RoundedCornerShape(28.dp))
-        .card(radius = 28.dp, color = Color(0xE6FFFFFF)).padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = if (ime) 10.dp else 4.dp)) {
-        AnimatedVisibility(note.isNotBlank()) {
-            Text(note, fontSize = 12.sp, color = Pal.Danger, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
-        }
-        if (tab != 4) {
-            BackgroundTasks()
-            ReplyActivity()
-            if (Draft.picked.isNotEmpty()) PickedRow()
-            InputPill(tabSpecs[tab].hint)
-        }
+    Column(modifier.fillMaxWidth().background(Pal.Card, RoundedCornerShape(16.dp))
+        .card(radius = 16.dp, color = Pal.Card).padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = if (ime) 10.dp else 4.dp)) {
+        BackgroundTasks()
+        ReplyActivity()
+        MessageComposer(Draft, tabSpecs[tab].hint)
         if (!ime) NavRow(tab)
     }
 }
 
+/** Identical input/attachments/actions in the main thread and every task. */
 @Composable
-private fun PickedRow() {
+fun MessageComposer(draft: MessageDraft, hint: String) {
+    val note = draft.note.value
+    LaunchedEffect(note) { if (note.isNotBlank()) { delay(3500); draft.note.value = "" } }
+    AnimatedVisibility(note.isNotBlank()) {
+        Text(note, fontSize = Type.Secondary, color = Pal.Danger, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+    }
+    if (draft.picked.isNotEmpty()) PickedRow(draft)
+    InputPill(draft, hint)
+}
+
+@Composable
+private fun PickedRow(draft: MessageDraft) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp),
+        Modifier.fillMaxWidth().contentHorizontalScroll(rememberScrollState()).padding(bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Draft.picked.forEach { p ->
+        draft.picked.forEach { p ->
             Box {
                 Row(
-                    Modifier.height(54.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0F3F7)).border(1.dp, Color.White, RoundedCornerShape(14.dp))
+                    Modifier.height(54.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Background)
                         .padding(end = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (p.kind == "image" && p.uri != null) LocalThumb(p.uri)
                     else Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = Color(0xFF5484B0), modifier = Modifier.size(22.dp))
+                        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = Pal.Link, modifier = Modifier.size(22.dp))
                     }
-                    if (p.kind != "image") Text(p.name, fontSize = 12.sp, color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 130.dp))
+                    if (p.kind != "image") Text(p.name, fontSize = Type.Label, color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 130.dp))
                 }
-                if (!Draft.sending.value) {
+                if (!draft.sending.value) {
                     Box(
-                        Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp).size(20.dp).clip(CircleShape).background(Color(0xCC4A5668))
-                            .tap { Draft.remove(p) },
+                        Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp).size(20.dp).clip(CircleShape).background(Pal.Ink)
+                            .tap { draft.remove(p) },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Outlined.Close, "移除", tint = Color.White, modifier = Modifier.size(13.dp)) }
+                    ) { Icon(Icons.Outlined.Close, "移除", tint = Pal.Card, modifier = Modifier.size(13.dp)) }
                 }
             }
         }
@@ -342,28 +349,28 @@ private fun LocalThumb(uri: Uri) {
             }.getOrNull()
         }
     }
-    Box(Modifier.size(54.dp).background(Color(0xFFE3E8EE))) {
+    Box(Modifier.size(54.dp).background(Pal.Background)) {
         bmp?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
     }
 }
 
 @Composable
-private fun InputPill(hint: String) {
+private fun InputPill(draft: MessageDraft, hint: String) {
     val c = ctx()
-    var text by Draft.text
-    val sending = Draft.sending.value
+    var text by draft.text
+    val sending = draft.sending.value
     var menu by remember { mutableStateOf(false) }
     var cameraPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun add(uri: Uri, kind: String) {
-        Draft.picked.add(Picked(System.nanoTime(), displayName(c, uri), kind, uri = uri))
+        draft.picked.add(Picked(System.nanoTime(), displayName(c, uri), kind, uri = uri))
     }
 
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { add(it, "file") } }
     val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(9)) { uris -> uris.forEach { add(it, "image") } }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = cameraPath?.let(::File)
-        if (ok && f != null) Draft.picked.add(Picked(System.nanoTime(), f.name, "image", uri = Uri.fromFile(f), file = f))
+        if (ok && f != null) draft.picked.add(Picked(System.nanoTime(), f.name, "image", uri = Uri.fromFile(f), file = f))
         else f?.delete()
         cameraPath = null
     }
@@ -371,14 +378,14 @@ private fun InputPill(hint: String) {
         val f = File(c.cacheDir, "camera/IMG_${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
         cameraPath = f.absolutePath
         runCatching { takePhoto.launch(FileProvider.getUriForFile(c, "${c.packageName}.files", f)) }
-            .onFailure { f.delete(); cameraPath = null; Draft.say("手机上没有可用的相机") }
+            .onFailure { f.delete(); cameraPath = null; draft.say("手机上没有可用的相机") }
     }
     val cameraPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) launchCamera() else Draft.say("没有相机权限，去系统设置里打开")
+        if (ok) launchCamera() else draft.say("没有相机权限，去系统设置里打开")
     }
     var afterMic by remember { mutableStateOf<(() -> Unit)?>(null) }
     val micPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) afterMic?.invoke() else Draft.say("没有麦克风权限，去系统设置里打开")
+        if (ok) afterMic?.invoke() else draft.say("没有麦克风权限，去系统设置里打开")
         afterMic = null
     }
     fun withMic(block: () -> Unit) {
@@ -389,14 +396,14 @@ private fun InputPill(hint: String) {
     }
 
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFFEFF2F5)).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Background).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
             PillIcon(Icons.Outlined.Add, "添加", enabled = !sending) { menu = true }
             DropdownMenu(
                 expanded = menu, onDismissRequest = { menu = false },
-                shape = RoundedCornerShape(18.dp), containerColor = Color(0xFFFBFCFE), shadowElevation = 6.dp,
+                shape = RoundedCornerShape(18.dp), containerColor = Pal.Card, shadowElevation = 6.dp,
             ) {
                 MenuItem(Icons.Outlined.UploadFile, "上传文件") { menu = false; pickFile.launch(arrayOf("*/*")) }
                 MenuItem(Icons.Outlined.PhotoCamera, "拍照") {
@@ -407,36 +414,36 @@ private fun InputPill(hint: String) {
                     menu = false
                     pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }
-                MenuItem(Icons.Outlined.KeyboardVoice, "录制语音笔记") { menu = false; withMic { Voice.start(c, VoiceMode.Note) } }
+                MenuItem(Icons.Outlined.KeyboardVoice, "录制语音笔记") { menu = false; withMic { Voice.start(c, VoiceMode.Note, draft) } }
             }
         }
-        if (Draft.voiceMode.value) {
-            HoldToTalk(Modifier.weight(1f).padding(vertical = 5.dp))
+        if (draft.voiceMode.value) {
+            HoldToTalk(draft, Modifier.weight(1f).padding(vertical = 5.dp))
         } else {
             BasicTextField(
                 value = text, onValueChange = { text = it }, maxLines = 5,
-                textStyle = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, color = Pal.Ink),
+                textStyle = TextStyle(fontSize = Type.Body, lineHeight = Type.BodyLine, color = Pal.Ink),
                 cursorBrush = SolidColor(Pal.Gold),
                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 12.dp).testTag("composer"),
                 decorationBox = { inner ->
                     Box {
-                        if (text.isEmpty()) Text(hint, fontSize = 15.sp, color = Pal.Faint, maxLines = 1)
+                        if (text.isEmpty()) Text(hint, fontSize = Type.Body, color = Pal.Faint, maxLines = 1)
                         inner()
                     }
                 },
             )
         }
-        val canSend = text.isNotBlank() || Draft.picked.isNotEmpty()
+        val canSend = text.isNotBlank() || draft.picked.isNotEmpty()
         when {
             sending -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(Modifier.size(18.dp), color = Pal.Gold, strokeWidth = 2.dp)
             }
             canSend -> Box(
-                Modifier.padding(4.dp).size(36.dp).gold().tap { Draft.send(c) },
+                Modifier.padding(4.dp).size(36.dp).gold().tap { draft.send(c) },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Rounded.ArrowUpward, "发送", tint = Pal.GoldInk, modifier = Modifier.size(20.dp)) }
-            Draft.voiceMode.value -> PillIcon(Icons.Outlined.Keyboard, "打字") { Draft.voiceMode.value = false }
-            else -> PillIcon(Icons.Outlined.Mic, "按住说话") { withMic { Draft.voiceMode.value = true } }
+            draft.voiceMode.value -> PillIcon(Icons.Outlined.Keyboard, "打字") { draft.voiceMode.value = false }
+            else -> PillIcon(Icons.Outlined.Mic, "按住说话") { withMic { draft.voiceMode.value = true } }
         }
     }
 }
@@ -451,26 +458,26 @@ private fun PillIcon(icon: ImageVector, desc: String, enabled: Boolean = true, o
 @Composable
 private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit) {
     DropdownMenuItem(
-        text = { Text(label, fontSize = 15.sp, color = Pal.Ink) },
-        leadingIcon = { Icon(icon, null, tint = Color(0xFF4A77A0), modifier = Modifier.size(21.dp)) },
+        text = { Text(label, fontSize = Type.Body, color = Pal.Ink) },
+        leadingIcon = { Icon(icon, null, tint = Pal.Link, modifier = Modifier.size(21.dp)) },
         onClick = onClick,
         modifier = Modifier.widthIn(min = 180.dp),
     )
 }
 
 @Composable
-private fun HoldToTalk(modifier: Modifier) {
+private fun HoldToTalk(draft: MessageDraft, modifier: Modifier) {
     val c = ctx()
     val scope = rememberCoroutineScope()
     val holding = Voice.mode.value == VoiceMode.Hold
     Box(
         modifier.height(38.dp).clip(RoundedCornerShape(19.dp))
-            .then(if (holding) Modifier.gold(RoundedCornerShape(19.dp)) else Modifier.background(Color.White))
+            .then(if (holding) Modifier.gold(RoundedCornerShape(19.dp)) else Modifier.background(Pal.Card))
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     down.consume()
-                    if (Voice.busy.value.isNotBlank() || !Voice.start(c, VoiceMode.Hold)) return@awaitEachGesture
+                    if (Voice.busy.value.isNotBlank() || !Voice.start(c, VoiceMode.Hold, draft)) return@awaitEachGesture
                     val cancelAt = 80.dp.toPx()
                     var cancel = false
                     try {
@@ -497,7 +504,7 @@ private fun HoldToTalk(modifier: Modifier) {
                 holding -> "松开 发送"
                 else -> "按住 说话"
             },
-            fontSize = 15.sp, fontWeight = FontWeight.Medium, color = if (holding) Pal.GoldInk else Pal.Ink,
+            fontSize = Type.Body, fontWeight = FontWeight.Medium, color = if (holding) Pal.GoldInk else Pal.Ink,
         )
     }
 }
@@ -514,10 +521,10 @@ private fun NavRow(tab: Int) {
                 Box(
                     Modifier.size(46.dp, 30.dp).then(if (on) Modifier.gold(RoundedCornerShape(16.dp)) else Modifier),
                     contentAlignment = Alignment.Center,
-                ) { Icon(t.icon, t.label, tint = if (on) Pal.GoldInk else t.tone, modifier = Modifier.size(21.dp)) }
+                ) { Icon(t.icon, t.label, tint = if (on) Pal.GoldInk else Pal.Muted, modifier = Modifier.size(21.dp)) }
                 Text(
-                    t.label, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (on) Pal.GoldInk else Color(0xFF74849A), modifier = Modifier.padding(top = 3.dp),
+                    t.label, fontSize = Type.Tiny, lineHeight = Type.LabelLine, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (on) Pal.GoldInk else Pal.Muted, modifier = Modifier.padding(top = 3.dp),
                 )
                 Box(Modifier.padding(top = 3.dp).size(20.dp, 2.dp).clip(CircleShape).then(if (on) Modifier.background(GoldRim) else Modifier))
             }
@@ -539,22 +546,22 @@ fun VoiceOverlay() {
     }
     val secs = Voice.elapsed.longValue / 1000
     val time = "%02d:%02d".format(secs / 60, secs % 60)
-    Box(Modifier.fillMaxSize().background(Color(0x80BAC5D1)).then(if (mode == VoiceMode.Note) Modifier.tap {} else Modifier)) {
+    Box(Modifier.fillMaxSize().background(Pal.Ink.copy(alpha = .3f)).then(if (mode == VoiceMode.Note) Modifier.tap {} else Modifier)) {
         Column(
-            Modifier.align(Alignment.Center).padding(horizontal = 40.dp).fillMaxWidth().card(radius = 26.dp, color = Color(0xF5FBFCFE))
+            Modifier.align(Alignment.Center).padding(horizontal = 40.dp).fillMaxWidth().card(radius = 26.dp, color = Pal.Card)
                 .padding(horizontal = 24.dp, vertical = 26.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).background(Pal.Danger, CircleShape))
                 Spacer(Modifier.width(8.dp))
-                Text(if (mode == VoiceMode.Note) "正在录音 $time" else time, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Pal.Ink)
+                Text(if (mode == VoiceMode.Note) "正在录音 $time" else time, fontSize = Type.Body, fontWeight = FontWeight.Medium, color = Pal.Ink)
             }
             Waveform(Modifier.padding(vertical = 20.dp).fillMaxWidth().height(44.dp), if (Voice.cancelArmed.value) Pal.Danger else Pal.Gold)
             if (mode == VoiceMode.Hold) {
                 Text(
                     if (Voice.cancelArmed.value) "松开手指，取消发送" else "松开发送 · 上滑取消",
-                    fontSize = 13.sp, color = if (Voice.cancelArmed.value) Pal.Danger else Pal.Muted,
+                    fontSize = Type.Secondary, color = if (Voice.cancelArmed.value) Pal.Danger else Pal.Muted,
                 )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

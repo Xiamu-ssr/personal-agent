@@ -1,0 +1,68 @@
+{
+  "bootCount": 1,
+  "fixture": "127.0.0.1 only",
+  "screenshots": [
+    {
+      "name": "today-silver",
+      "size": [
+        1080,
+        2400
+      ],
+      "background": [
+        243,
+        245,
+        248
+      ],
+      "bottomBandDp": 32
+    },
+    {
+      "name": "today-night",
+      "size": [
+        1080,
+        2400
+      ],
+      "background": [
+        15,
+        18,
+        22
+      ],
+      "bottomBandDp": 32
+    },
+    {
+      "name": "tasks-grouped",
+      "size": [
+        1080,
+        2400
+      ],
+      "background": [
+        243,
+        245,
+        248
+      ],
+      "bottomBandDp": 32
+    }
+  ],
+  "taskListEnd": {
+    "footerBounds": [
+      64,
+      1733,
+      1027,
+      1791
+    ],
+    "backgroundTaskTextBounds": [
+      151,
+      1906,
+      938,
+      1964
+    ],
+    "clearancePixels": 115
+  },
+  "passed": true,
+  "durationSeconds": 59.8,
+  "killRequested": true,
+  "qemuRemaining": 0,
+  "emulator5554Offline": true,
+  "todayListEndVisualCheck": "最后一张卡片末尾提示完整显示在输入区上方",
+  "unitTestsPassed": true,
+  "releaseSha256": "ade04627589798b5e6647104888c665a72ab0be11309dbd4c8e21e3c7fbda343"
+}

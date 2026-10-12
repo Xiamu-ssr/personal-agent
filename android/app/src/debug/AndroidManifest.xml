@@ -8,6 +8,7 @@
     <application android:networkSecurityConfig="@xml/local_checks_network">
         <!-- Fixture packages must not reconnect a persisted test address automatically after boot. -->
         <receiver android:name=".device.BootReceiver" android:enabled="false" />
+        <activity android:name=".V6ReviewActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".V5ReviewActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".V4ReviewActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".TaskReviewActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />

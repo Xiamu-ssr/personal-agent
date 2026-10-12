@@ -7,6 +7,9 @@ import android.net.Uri
 import android.os.Message
 import android.view.MotionEvent
 import android.view.ViewGroup
+import android.view.ViewConfiguration
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import android.webkit.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,11 +27,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.xiamu.agent.BriefNavigation
 import com.xiamu.agent.HtmlBriefCard
+import com.xiamu.agent.briefWithSkin
 import org.json.JSONArray
 import java.io.ByteArrayInputStream
 import java.util.UUID
 
-/** A separate offline origin per card. The response body is the server HTML, unchanged. */
+/** A separate offline origin per card, with the native skin inserted before parsing. */
 @SuppressLint("SetJavaScriptEnabled")
 internal class OfflineBriefWebView(context: Context) : WebView(context) {
     @Volatile private var documentUrl = ""
@@ -38,7 +42,9 @@ internal class OfflineBriefWebView(context: Context) : WebView(context) {
     private var loaded = false
     var active = false
         private set
-    private var previousY = 0f
+    private var downX = 0f
+    private var downY = 0f
+    private var moved = false
     private var released = false
     private val measure = Runnable {
         if (active && !released) evaluateJavascript("[document.documentElement.scrollHeight, window.innerWidth]") { value ->
@@ -48,12 +54,17 @@ internal class OfflineBriefWebView(context: Context) : WebView(context) {
                 val cssWidth = dimensions.getDouble(1)
                 if (cssWidth > 0 && cssHeight > 0 && width > 0) onHeight?.invoke((cssHeight * width / cssWidth / resources.displayMetrics.density).toFloat())
             }
+            if (active && !released) postDelayed(measureHeight, 1000)
         }
     }
+    private val measureHeight: Runnable get() = measure
 
     init {
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         isHorizontalScrollBarEnabled = false
+        isVerticalScrollBarEnabled = false
+        overScrollMode = OVER_SCROLL_NEVER
+        isNestedScrollingEnabled = false
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = false
@@ -88,7 +99,7 @@ internal class OfflineBriefWebView(context: Context) : WebView(context) {
             }
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) { removeCallbacks(measure) }
             override fun onPageFinished(view: WebView, url: String?) {
-                if (active && url == documentUrl) { loaded = true; postOnAnimation(measure); postDelayed(measure, 250) }
+                if (active && url == documentUrl) { loaded = true; postOnAnimation(measure) }
             }
         }
         webChromeClient = object : WebChromeClient() {
@@ -121,17 +132,26 @@ internal class OfflineBriefWebView(context: Context) : WebView(context) {
     fun deactivate() { active = false; removeCallbacks(measure); stopLoading(); onPause(); onPrompt = null; onHeight = null }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        parent?.requestDisallowInterceptTouchEvent(false)
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { previousY = event.y; parent?.requestDisallowInterceptTouchEvent(canScrollVertically(-1) || canScrollVertically(1)) }
+            MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; moved = false }
             MotionEvent.ACTION_MOVE -> {
-                val direction = if (event.y > previousY) -1 else 1
-                parent?.requestDisallowInterceptTouchEvent(canScrollVertically(direction))
-                previousY = event.y
+                if (kotlin.math.abs(event.x - downX) > ViewConfiguration.get(context).scaledTouchSlop ||
+                    kotlin.math.abs(event.y - downY) > ViewConfiguration.get(context).scaledTouchSlop) {
+                    if (!moved) MotionEvent.obtain(event).also { it.action = MotionEvent.ACTION_CANCEL; super.onTouchEvent(it); it.recycle() }
+                    moved = true
+                    return false
+                }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
+            MotionEvent.ACTION_UP -> if (moved) return false
         }
         return super.onTouchEvent(event)
     }
+
+    override fun canScrollVertically(direction: Int) = false
+    override fun canScrollHorizontally(direction: Int) = false
+    override fun scrollTo(x: Int, y: Int) { super.scrollTo(0, 0) }
+    override fun onOverScrolled(x: Int, y: Int, clampedX: Boolean, clampedY: Boolean) { super.onOverScrolled(0, 0, true, true) }
 
     fun release() {
         if (released) return
@@ -145,10 +165,12 @@ internal class OfflineBriefWebView(context: Context) : WebView(context) {
 @Composable
 internal fun HtmlBriefCardView(card: HtmlBriefCard, cardKey: String, visible: Boolean, savedHeight: Dp?, onMeasured: (Dp) -> Unit) {
     val c = ctx()
-    val maximum = LocalConfiguration.current.screenHeightDp.dp * .75f
+    val maximum = LocalConfiguration.current.screenHeightDp.dp * 2f
+    val skin = SkinState.current.value
+    val document = remember(card.html, skin) { briefWithSkin(card.html, skin) }
     val density = LocalDensity.current
-    var height by remember(card.html) { mutableStateOf<Dp?>(null) }
-    var measured by remember(card.html) { mutableStateOf(false) }
+    var height by remember(document) { mutableStateOf<Dp?>(null) }
+    var measured by remember(document) { mutableStateOf(false) }
     var view by remember { mutableStateOf<OfflineBriefWebView?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, view) {
@@ -159,21 +181,21 @@ internal fun HtmlBriefCardView(card: HtmlBriefCard, cardKey: String, visible: Bo
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    val displayHeight = (height ?: savedHeight ?: 180.dp).coerceAtMost(maximum)
-    Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).height(displayHeight).card(radius = 24.dp).clip(RoundedCornerShape(24.dp)).testTag("brief-card:$cardKey")) {
+    val targetHeight = (height ?: savedHeight ?: 180.dp).coerceAtMost(maximum)
+    val displayHeight by animateDpAsState(targetHeight, animationSpec = tween(180), label = "brief-height")
+    Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).height(displayHeight).card().clip(RoundedCornerShape(16.dp)).testTag("brief-card:$cardKey")) {
         if (visible) {
             AndroidView(
                 modifier = Modifier.fillMaxWidth().height(if (measured) displayHeight else 1.dp),
                 factory = { context -> OfflineBriefWebView(context) },
                 update = { web ->
                     view = web
-                    web.bind(card.html,
+                    web.bind(document,
                     prompt = { prompt -> Draft.send(c, prompt, includeDraft = false) },
                     height = { measuredHeight ->
                         val next = with(density) { measuredHeight.dp.roundToPx().toDp() }.coerceIn(1.dp, maximum)
-                        height = next
+                        if (height != next) { height = next; onMeasured(next) }
                         measured = true
-                        onMeasured(next)
                     },
                     )
                 },

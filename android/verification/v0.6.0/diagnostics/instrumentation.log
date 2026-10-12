@@ -1,0 +1,161 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V6Checks:
+INSTRUMENTATION_STATUS: test=taskUsesSharedMessagesToolsComposerAndAttachmentSendWithFailuresPreserved
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=taskUsesSharedMessagesToolsComposerAndAttachmentSendWithFailuresPreserved
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cardsUseFullHeightAndNativeSwipesFollowTheRequiredOrder
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cardsUseFullHeightAndNativeSwipesFollowTheRequiredOrder
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=groupedJobsLoadTheNextCursorThroughTheList
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=groupedJobsLoadTheNextCursorThroughTheList
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=allSkinsPersistAndSixNativeScreensMatchHtmlSkinAtDocumentStart
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=allSkinsPersistAndSixNativeScreensMatchHtmlSkinAtDocumentStart
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=healthRendersNullsSyncsAndOpensOldWeeklyBriefAndMemoryRecord
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=healthRendersNullsSyncsAndOpensOldWeeklyBriefAndMemoryRecord
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: Failed to assert the following: (Text + EditableText = [2])
+Reason: Expected exactly '1' node but could not find any node that satisfies: ((TestTag = 'unread-count').filterToOne(on screen))
+However, the unmerged tree contains '1' node that matches. Are you missing `useUnmergedNode = true` in your finder?
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.AssertionsKt.assert(Assertions.kt:263)
+	at androidx.compose.ui.test.AssertionsKt.assert$default(Assertions.kt:255)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals(Assertions.kt:185)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals$default(Assertions.kt:181)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows$lambda$52(V6Checks.kt:183)
+	at com.xiamu.agent.V6Checks.$r8$lambda$sQNS4uIGhwV50GccMht83l37Kuw(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda9.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(V6Checks.kt:175)
+
+INSTRUMENTATION_STATUS: stream=
+Error in historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(com.xiamu.agent.V6Checks):
+java.lang.AssertionError: Failed to assert the following: (Text + EditableText = [2])
+Reason: Expected exactly '1' node but could not find any node that satisfies: ((TestTag = 'unread-count').filterToOne(on screen))
+However, the unmerged tree contains '1' node that matches. Are you missing `useUnmergedNode = true` in your finder?
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.AssertionsKt.assert(Assertions.kt:263)
+	at androidx.compose.ui.test.AssertionsKt.assert$default(Assertions.kt:255)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals(Assertions.kt:185)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals$default(Assertions.kt:181)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows$lambda$52(V6Checks.kt:183)
+	at com.xiamu.agent.V6Checks.$r8$lambda$sQNS4uIGhwV50GccMht83l37Kuw(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda9.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(V6Checks.kt:175)
+
+INSTRUMENTATION_STATUS: test=historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 33.245
+There was 1 failure:
+1) historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(com.xiamu.agent.V6Checks)
+java.lang.AssertionError: Failed to assert the following: (Text + EditableText = [2])
+Reason: Expected exactly '1' node but could not find any node that satisfies: ((TestTag = 'unread-count').filterToOne(on screen))
+However, the unmerged tree contains '1' node that matches. Are you missing `useUnmergedNode = true` in your finder?
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.AssertionsKt.assert(Assertions.kt:263)
+	at androidx.compose.ui.test.AssertionsKt.assert$default(Assertions.kt:255)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals(Assertions.kt:185)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals$default(Assertions.kt:181)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows$lambda$52(V6Checks.kt:183)
+	at com.xiamu.agent.V6Checks.$r8$lambda$sQNS4uIGhwV50GccMht83l37Kuw(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda9.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows(V6Checks.kt:175)
+
+FAILURES!!!
+Tests run: 7,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

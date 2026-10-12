@@ -44,6 +44,6 @@ fun EnableAllCapabilities() {
                 .filter { ContextCompat.checkSelfPermission(c,it) != PackageManager.PERMISSION_GRANTED }
             if(permissions.isEmpty()) afterRuntime() else runtime.launch(permissions.toTypedArray())
         }
-        if(notice.isNotBlank()) Text(notice,fontSize=12.sp,lineHeight=18.sp,color=Pal.Muted,modifier=Modifier.padding(top=8.dp))
+        if(notice.isNotBlank()) Text(notice,fontSize = Type.Label,lineHeight = Type.SecondaryLine,color=Pal.Muted,modifier=Modifier.padding(top=8.dp))
     }
 }

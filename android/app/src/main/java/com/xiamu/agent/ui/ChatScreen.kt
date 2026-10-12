@@ -94,7 +94,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun ChatScreen(list: LazyListState, bottom: Dp) {
+fun ChatScreen(list: LazyListState, bottom: Dp, scroll: ConversationScrollState = remember { ConversationScrollState() }) {
     val items = Chat.items
     val streaming = Chat.streaming.value
     val busy = Chat.busy.value
@@ -103,24 +103,15 @@ fun ChatScreen(list: LazyListState, bottom: Dp) {
     var query by remember { mutableStateOf("") }
     var highlight by remember { mutableIntStateOf(-1) }
     val scope = rememberCoroutineScope()
-    val atBottom by remember { derivedStateOf { !list.canScrollForward } }
     var headerH by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    LaunchedEffect(Chat.historyVersion.intValue) {
-        if (items.isNotEmpty() && !searching) list.scrollToItem(items.lastIndex, Int.MAX_VALUE / 2)
-    }
-
-    // Follow new messages, but only if the user is already at the bottom (or just sent something).
-    LaunchedEffect(items.size, streaming.length, busy, bottom) {
-        val n = items.size + extra
-        val mine = items.lastOrNull() is ChatItem.User
-        if (n > 0 && !searching && (atBottom || mine || list.firstVisibleItemIndex >= n - 3)) list.animateScrollToItem(n - 1, Int.MAX_VALUE / 2)
-    }
+    BindConversationScroll(list, scroll, items.count { it is ChatItem.User || it is ChatItem.Assistant } + if (streaming.isNotBlank()) 1 else 0,
+        "${items.size}:${streaming.length}:$busy", Draft.sentVersion.intValue, bottom)
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = list,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag("chat-list"),
             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = with(density) { headerH.toDp() } + 2.dp, bottom = bottom + 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -128,10 +119,11 @@ fun ChatScreen(list: LazyListState, bottom: Dp) {
             itemsIndexed(items) { i, it -> ChatRow(it, highlight == i) }
             if (extra == 1) item { Streaming(streaming, Chat.toolHint.value, busy && !Chat.turnClosed.value) }
         }
+        ReturnToBottom(list, scroll, Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = bottom + 20.dp))
         // Header floats over the list with a fade so messages scroll under it.
         Column(
             Modifier.fillMaxWidth().background(
-                androidx.compose.ui.graphics.Brush.verticalGradient(0f to Color(0xFFC9D3DF), 0.9f to Color(0xFFCCD6E1), 1f to Color(0x00CCD6E1)),
+                androidx.compose.ui.graphics.Brush.verticalGradient(0f to Pal.Background, .9f to Pal.Background, 1f to Pal.Background.copy(alpha = 0f)),
             ).onSizeChanged { headerH = it.height }.statusBarsPadding().padding(bottom = 12.dp),
         ) {
             if (searching) {
@@ -150,9 +142,9 @@ fun ChatScreen(list: LazyListState, bottom: Dp) {
                 ActivityStrip()
                 if (Chat.error.value.isNotBlank()) {
                     Text(
-                        Chat.error.value, fontSize = 12.sp, color = Pal.Danger,
+                        Chat.error.value, fontSize = Type.Label, color = Pal.Danger,
                         modifier = Modifier.padding(horizontal = 20.dp).padding(top = 8.dp).fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp)).background(Color(0xCCFFF3F3)).tap { Chat.error.value = "" }
+                            .clip(RoundedCornerShape(12.dp)).background(Pal.Danger.copy(alpha = .1f)).tap { Chat.error.value = "" }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                     )
                 }
@@ -169,17 +161,17 @@ private fun ChatHeader(onSearch: () -> Unit) {
     val pulse = rememberInfiniteTransition(label="busy-dot").animateFloat(.35f,1f,infiniteRepeatable(tween(900),RepeatMode.Reverse),label="breathe")
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(
-            Modifier.clip(RoundedCornerShape(24.dp)).background(Color(0xA6FFFFFF)).border(1.dp, Color(0x80FFFFFF), RoundedCornerShape(24.dp))
+            Modifier.clip(RoundedCornerShape(24.dp)).background(Pal.Card)
                 .padding(start = 5.dp, end = 14.dp, top = 5.dp, bottom = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Avatar(34.dp)
-            Text("豆豆", fontSize=15.sp, fontWeight=FontWeight.SemiBold, color=Pal.Ink, modifier=Modifier.padding(horizontal=9.dp))
+            Text("豆豆", fontSize = Type.Body, fontWeight=FontWeight.SemiBold, color=Pal.Ink, modifier=Modifier.padding(horizontal=9.dp))
             Box(Modifier.alpha(if(connected && busy) pulse.value else 1f)) { StatusDot(dot, 8.dp) }
         }
         Spacer(Modifier.weight(1f))
         Row(
-            Modifier.clip(RoundedCornerShape(24.dp)).background(Color(0xB5FFFFFF)).border(1.dp, Color(0x80FFFFFF), RoundedCornerShape(24.dp))
+            Modifier.clip(RoundedCornerShape(24.dp)).background(Pal.Card)
                 .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -205,7 +197,7 @@ private fun ActivityStrip() {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
     Column(
-        Modifier.padding(horizontal = 20.dp).padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xB8FFFFFF))
+        Modifier.padding(horizontal = 20.dp).padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Pal.Card)
             .tap { open = !open }.padding(horizontal = 14.dp, vertical = 9.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -213,14 +205,14 @@ private fun ActivityStrip() {
             val first = running.first()
             Text(
                 if (running.size == 1) "${first.label} · 已运行 ${elapsed(first.started, now)}" else "${running.size} 个任务在跑 · ${first.label}",
-                fontSize = 12.sp, color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp).weight(1f),
+                fontSize = Type.Label, color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp).weight(1f),
             )
             Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (open) "收起" else "展开", tint = Pal.Muted, modifier = Modifier.size(18.dp))
         }
         AnimatedVisibility(open) {
             Column(Modifier.padding(top = 6.dp)) {
                 running.forEach { r ->
-                    Text("${r.label} · ${elapsed(r.started, now)}", fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(start = 22.dp, top = 4.dp))
+                    Text("${r.label} · ${elapsed(r.started, now)}", fontSize = Type.Label, color = Pal.Muted, modifier = Modifier.padding(start = 22.dp, top = 4.dp))
                 }
             }
         }
@@ -233,17 +225,17 @@ private fun SearchBar(query: String, onChange: (String) -> Unit, onClose: () -> 
     LaunchedEffect(Unit) { focus.requestFocus() }
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(
-            Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(23.dp)).background(Color(0xD9FFFFFF)).padding(horizontal = 14.dp),
+            Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(23.dp)).background(Pal.Card).padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Outlined.Search, null, tint = Pal.Faint, modifier = Modifier.size(18.dp))
             BasicTextField(
-                query, onChange, singleLine = true, textStyle = TextStyle(fontSize = 15.sp, color = Pal.Ink), cursorBrush = SolidColor(Pal.Gold),
+                query, onChange, singleLine = true, textStyle = TextStyle(fontSize = Type.Body, color = Pal.Ink), cursorBrush = SolidColor(Pal.Gold),
                 modifier = Modifier.weight(1f).padding(start = 8.dp).focusRequester(focus),
-                decorationBox = { inner -> Box { if (query.isEmpty()) Text("搜索聊天记录", fontSize = 15.sp, color = Pal.Faint); inner() } },
+                decorationBox = { inner -> Box { if (query.isEmpty()) Text("搜索聊天记录", fontSize = Type.Body, color = Pal.Faint); inner() } },
             )
         }
-        Text("取消", fontSize = 15.sp, color = Pal.Link, modifier = Modifier.tap(onClick = onClose).padding(horizontal = 10.dp, vertical = 8.dp))
+        Text("取消", fontSize = Type.Body, color = Pal.Link, modifier = Modifier.tap(onClick = onClose).padding(horizontal = 10.dp, vertical = 8.dp))
     }
 }
 
@@ -259,7 +251,7 @@ private fun itemText(it: ChatItem): String = when (it) {
 private fun SearchResults(query: String, onPick: (Int) -> Unit) {
     val hits = Chat.items.withIndex().filter { itemText(it.value).contains(query, ignoreCase = true) }.reversed()
     Column(
-        Modifier.padding(horizontal = 20.dp).padding(top = 10.dp).fillMaxWidth().heightIn(max = 420.dp).card(radius = 20.dp, color = Color(0xF5FBFCFE))
+        Modifier.padding(horizontal = 20.dp).padding(top = 10.dp).fillMaxWidth().heightIn(max = 420.dp).card(radius = 20.dp, color = Pal.Card)
             .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
         if (hits.isEmpty()) EmptyNote("没找到「$query」", Modifier.padding(horizontal = 2.dp))
@@ -270,7 +262,7 @@ private fun SearchResults(query: String, onPick: (Int) -> Unit) {
             val start = (at - 18).coerceAtLeast(0)
             val snippet = (if (start > 0) "…" else "") + text.substring(start)
             Column(Modifier.fillMaxWidth().tap { onPick(i) }.padding(vertical = 11.dp)) {
-                Text(when (it) { is ChatItem.User -> "我"; is ChatItem.Alarm -> "定时提醒"; else -> "豆豆" }, fontSize = 11.sp, color = Pal.Faint)
+                Text(when (it) { is ChatItem.User -> "我"; is ChatItem.Alarm -> "定时提醒"; else -> "豆豆" }, fontSize = Type.Tiny, color = Pal.Faint)
                 Text(
                     buildAnnotatedString {
                         var k = 0
@@ -278,13 +270,13 @@ private fun SearchResults(query: String, onPick: (Int) -> Unit) {
                             val m = snippet.indexOf(query, k, ignoreCase = true)
                             if (m < 0) { append(snippet.substring(k)); break }
                             append(snippet.substring(k, m))
-                            withStyle(SpanStyle(color = Pal.GoldInk, fontWeight = FontWeight.SemiBold, background = Color(0x40E2C88E))) {
+                            withStyle(SpanStyle(color = Pal.GoldInk, fontWeight = FontWeight.SemiBold, background = Pal.Quiet)) {
                                 append(snippet.substring(m, m + query.length))
                             }
                             k = m + query.length
                         }
                     },
-                    fontSize = 14.sp, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    fontSize = Type.Secondary, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -295,20 +287,20 @@ private fun SearchResults(query: String, onPick: (Int) -> Unit) {
 private fun EmptyChat() {
     Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Avatar(84.dp)
-        Text("跟豆豆说点什么吧", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(top = 20.dp))
-        Text("它会记住重要的事，也能替你跑腿", fontSize = 13.sp, color = Pal.Muted, modifier = Modifier.padding(top = 6.dp))
+        Text("跟豆豆说点什么吧", fontSize = Type.CardTitle, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(top = 20.dp))
+        Text("它会记住重要的事，也能替你跑腿", fontSize = Type.Secondary, color = Pal.Muted, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
 @Composable
-private fun ChatRow(item: ChatItem, highlight: Boolean) {
+internal fun ChatRow(item: ChatItem, highlight: Boolean = false) {
     when (item) {
         is ChatItem.User -> UserBubble(item, highlight)
-        is ChatItem.Assistant -> Bubble(highlight) { SelectionContainer { Markdown(item.text, color = Color(0xFF3A4757)) } }
+        is ChatItem.Assistant -> Bubble(highlight) { SelectionContainer { Markdown(item.text, color = Pal.Ink) } }
         is ChatItem.Alarm -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("schedule-message"),
             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Alarm, null, tint = Pal.Muted, modifier = Modifier.size(14.dp))
-            Text(item.text, fontSize = 12.sp, color = Pal.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
+            Text(item.text, fontSize = Type.Label, color = Pal.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
         }
         is ChatItem.Card -> {
             val c = ctx()
@@ -318,8 +310,8 @@ private fun ChatRow(item: ChatItem, highlight: Boolean) {
                 Row(Modifier.fillMaxWidth().card(radius = 20.dp).tap { Nav.brief(item.path) }.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconTile(Icons.AutoMirrored.Outlined.Article, Pal.Link, 42.dp)
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                        Text(brief?.name ?: item.label.ifBlank { item.title }, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Pal.Ink)
-                        Text(whenLabel(brief?.time ?: item.ts), fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(top = 4.dp))
+                        Text(brief?.name ?: item.label.ifBlank { item.title }, fontSize = Type.Body, fontWeight = FontWeight.SemiBold, color = Pal.Ink)
+                        Text(whenLabel(brief?.time ?: item.ts), fontSize = Type.Label, color = Pal.Muted, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
                 return
@@ -329,18 +321,18 @@ private fun ChatRow(item: ChatItem, highlight: Boolean) {
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconTile(Icons.AutoMirrored.Outlined.Article, Color(0xFF4A77A0), 42.dp)
+                IconTile(Icons.AutoMirrored.Outlined.Article, Pal.Link, 42.dp)
                 Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                    Text(item.title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(item.title, fontSize = Type.Body, fontWeight = FontWeight.Medium, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(listOfNotNull(item.label.ifBlank { null }, if (item.ts > 0) whenLabel(item.ts) else null).joinToString(" · ").ifBlank { "点开看" },
-                        fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(top = 2.dp))
+                        fontSize = Type.Label, color = Pal.Muted, modifier = Modifier.padding(top = 2.dp))
                 }
             }
         }
         is ChatItem.Note -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             Text(
-                item.text, fontSize = 11.sp, color = Pal.Muted,
-                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0x80FFFFFF)).padding(horizontal = 10.dp, vertical = 4.dp),
+                item.text, fontSize = Type.Tiny, color = Pal.Muted,
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Pal.Card).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
     }
@@ -356,16 +348,16 @@ private fun UserBubble(item: ChatItem.User, highlight: Boolean) {
         Spacer(Modifier.width(48.dp))
         Box(Modifier.weight(1f,fill=false)) {
             Column(Modifier.clip(RoundedCornerShape(20.dp,20.dp,6.dp,20.dp))
-                .background(if(highlight) Color(0x66E2C88E) else if(item.queued) Pal.UserBubble.copy(alpha=.1f) else Pal.UserBubble)
+                .background(if(highlight) Pal.Quiet else if(item.queued) Pal.UserBubble.copy(alpha=.1f) else Pal.UserBubble)
                 .then(if(item.queued && item.id.isNotBlank()) Modifier.combinedClickable(onClick={},onLongClick={ menu=true }) else Modifier)
                 .testTag(if(item.queued) "queued-message" else "user-message").padding(horizontal=14.dp,vertical=11.dp),
                 verticalArrangement=Arrangement.spacedBy(8.dp),horizontalAlignment=Alignment.End) {
                 Attachments(item.attachments)
                 if(item.text.isNotBlank()) {
-                    if(item.queued) Text(item.text,fontSize=15.sp,lineHeight=23.sp,color=Pal.UserText.copy(alpha=.65f))
-                    else SelectionContainer { Text(item.text,fontSize=15.sp,lineHeight=23.sp,color=Pal.UserText) }
+                    if(item.queued) Text(item.text,fontSize = Type.Body,lineHeight = Type.BodyLine,color=Pal.UserText.copy(alpha=.65f))
+                    else SelectionContainer { Text(item.text,fontSize = Type.Body,lineHeight = Type.BodyLine,color=Pal.UserText) }
                 }
-                if(item.queued) Text("排队中",fontSize=10.sp,color=Pal.Muted)
+                if(item.queued) Text("排队中",fontSize = Type.Tiny,color=Pal.Muted)
             }
             DropdownMenu(expanded=menu,onDismissRequest={ menu=false }) {
                 DropdownMenuItem(text={ Text("撤回") },onClick={ menu=false; Chat.unqueue(item.id) })
@@ -380,13 +372,12 @@ private fun UserBubble(item: ChatItem.User, highlight: Boolean) {
 }
 
 @Composable
-private fun Bubble(highlight: Boolean = false, content: @Composable () -> Unit) {
+internal fun Bubble(highlight: Boolean = false, content: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth()) {
         Box(
-            Modifier.weight(1f, fill = false).clip(RoundedCornerShape(22.dp, 22.dp, 22.dp, 6.dp))
-                .background(if (highlight) Color(0xFFFFF6E3) else Color(0xE6FFFFFF))
-                .border(1.dp, Color(0xB3FFFFFF), RoundedCornerShape(22.dp, 22.dp, 22.dp, 6.dp))
-                .padding(horizontal = 16.dp, vertical = 13.dp),
+            Modifier.weight(1f, fill = false)
+                .then(if (highlight) Modifier.background(Pal.Quiet, RoundedCornerShape(14.dp)) else Modifier)
+                .padding(horizontal = 2.dp, vertical = 6.dp),
         ) { content() }
         Spacer(Modifier.width(24.dp))
     }
@@ -396,11 +387,8 @@ private fun Bubble(highlight: Boolean = false, content: @Composable () -> Unit) 
 private fun Streaming(text: String, hint: String, active: Boolean) {
     Bubble {
         Column {
-            if (text.isNotBlank()) Markdown(text, color = Color(0xFF3A4757))
-            if (active) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = if (text.isNotBlank()) 8.dp else 0.dp)) {
-                CircularProgressIndicator(Modifier.size(12.dp), color = Pal.Gold, strokeWidth = 1.5.dp)
-                Text(hint.ifBlank { if (text.isBlank()) "在想" else "还在写" }, fontSize = 12.sp, color = Pal.Muted, modifier = Modifier.padding(start = 8.dp))
-            }
+            if (text.isNotBlank()) Markdown(text, color = Pal.Ink)
+            if (active) ToolRow(hint.ifBlank { if (text.isBlank()) "在想" else "还在写" }, hint, active = true)
         }
     }
 }
@@ -415,13 +403,13 @@ private fun Attachments(list: List<Attachment>) {
             "image" -> RemoteImage(a.path, Modifier.sizeIn(maxWidth = 220.dp, maxHeight = 260.dp).clip(RoundedCornerShape(14.dp)).tap { Nav.open(Route.Image(a.path)) })
             "voice" -> VoiceRow(a)
             else -> Row(
-                Modifier.widthIn(max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xB3FFFFFF))
+                Modifier.widthIn(max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Card)
                     .tap { scope.launch { runCatching { openFile(c, a.path, a.name) }.onFailure { Chat.error.value = "打不开：${it.message}" } } }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = Color(0xFF5484B0), modifier = Modifier.size(24.dp))
-                Text(a.name, fontSize = 13.sp, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp))
+                Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = Pal.Link, modifier = Modifier.size(24.dp))
+                Text(a.name, fontSize = Type.Secondary, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp))
             }
         }
     }
@@ -431,16 +419,16 @@ private fun Attachments(list: List<Attachment>) {
 private fun VoiceRow(a: Attachment) {
     val c = ctx()
     val playing = VoicePlayer.playing.value == a.path
-    Column(Modifier.widthIn(min = 180.dp, max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xB3FFFFFF)).padding(10.dp)) {
+    Column(Modifier.widthIn(min = 180.dp, max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Card).padding(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(34.dp).gold().tap { VoicePlayer.toggle(c, a.path) }, contentAlignment = Alignment.Center) {
                 Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "暂停" else "播放", tint = Pal.GoldInk, modifier = Modifier.size(20.dp))
             }
-            Text("语音笔记", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(start = 10.dp))
+            Text("语音笔记", fontSize = Type.Secondary, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(start = 10.dp))
         }
         val t = a.transcript
         Text(
-            t ?: "正在转文字…", fontSize = 13.sp, lineHeight = 20.sp, color = if (t == null) Pal.Faint else Pal.UserText,
+            t ?: "正在转文字…", fontSize = Type.Secondary, lineHeight = Type.SecondaryLine, color = if (t == null) Pal.Faint else Pal.UserText,
             modifier = Modifier.padding(top = 8.dp, start = 2.dp),
         )
     }
@@ -456,8 +444,8 @@ private fun RemoteImage(path: String, modifier: Modifier) {
         val ratio = b.width.toFloat() / b.height.coerceAtLeast(1)
         Image(b.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = modifier.aspectRatio(ratio.coerceIn(0.5f, 2.5f)))
     } else {
-        Box(modifier.size(160.dp, 120.dp).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
-            if (failed) Text("图片加载失败", fontSize = 12.sp, color = Pal.Faint)
+        Box(modifier.size(160.dp, 120.dp).background(Pal.Card), contentAlignment = Alignment.Center) {
+            if (failed) Text("图片加载失败", fontSize = Type.Label, color = Pal.Faint)
             else CircularProgressIndicator(Modifier.size(18.dp), color = Pal.Gold, strokeWidth = 2.dp)
         }
     }

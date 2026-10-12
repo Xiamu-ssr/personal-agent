@@ -67,14 +67,14 @@ fun SiteCard(entry: Api.Entry, modifier: Modifier = Modifier) {
     }
     val title = metadata?.title ?: entry.name
     Column(modifier.card(radius=22.dp).clip(RoundedCornerShape(22.dp)).tap { Nav.open(Route.Web(title, path)) }) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1.2f).background(Brush.linearGradient(listOf(Color(0xFFB3C9DF),Color(0xFFEAE8DF)))), contentAlignment=Alignment.Center) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1.2f).background(Brush.linearGradient(listOf(Pal.Link,Pal.Link))), contentAlignment=Alignment.Center) {
             if(bitmap != null) Image(bitmap.asImageBitmap(), null, Modifier.fillMaxSize().testTag("site-thumbnail:$path"), contentScale=ContentScale.Crop, alignment=Alignment.TopCenter)
-            else Text(title.take(1), fontSize=36.sp, color=Color.White, fontWeight=FontWeight.SemiBold)
+            else Text(title.take(1), fontSize = Type.Large, color=Pal.Card, fontWeight=FontWeight.SemiBold)
         }
         Column(Modifier.padding(14.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
-            Text(title, fontSize=15.sp, fontWeight=FontWeight.SemiBold, color=Pal.Ink, maxLines=1, overflow=TextOverflow.Ellipsis)
-            Text(metadata?.description.orEmpty(), fontSize=11.sp, color=Pal.Muted, maxLines=1, overflow=TextOverflow.Ellipsis)
-            Text("更新于 ${whenLabel(entry.mtime)}", fontSize=10.sp, color=Pal.Faint)
+            Text(title, fontSize = Type.Body, fontWeight=FontWeight.SemiBold, color=Pal.Ink, maxLines=1, overflow=TextOverflow.Ellipsis)
+            Text(metadata?.description.orEmpty(), fontSize = Type.Tiny, color=Pal.Muted, maxLines=1, overflow=TextOverflow.Ellipsis)
+            Text("更新于 ${whenLabel(entry.mtime)}", fontSize = Type.Tiny, color=Pal.Faint)
         }
     }
 }

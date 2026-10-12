@@ -1,0 +1,11 @@
+{
+  "package": "com.xiamu.agent",
+  "versionCode": 8,
+  "versionName": "0.6.0",
+  "bytes": 3384542,
+  "sha256": "ade04627589798b5e6647104888c665a72ab0be11309dbd4c8e21e3c7fbda343",
+  "signatureVerified": true,
+  "releaseUsesDebugSigner": false,
+  "fixturesAbsent": true,
+  "debugHealthWritePermissionsAbsent": true
+}

@@ -12,7 +12,10 @@ enum class TaskItemKind(val wire: String) {
     Prompt("prompt"), Text("text"), Tool("tool"), Result("result");
     companion object { fun from(value: String) = entries.firstOrNull { it.wire == value } ?: error("任务记录无法识别") }
 }
-data class TaskHistoryItem(val kind: TaskItemKind, val text: String, val tool: String?, val time: Long) {
+data class TaskHistoryItem(val kind: TaskItemKind, val text: String, val tool: String?, val time: Long,
+    val from: String? = null, val attachments: List<Attachment> = emptyList()) {
+    val isUser: Boolean get() = kind == TaskItemKind.Prompt && from == "user"
+    val isInstruction: Boolean get() = kind == TaskItemKind.Prompt && from == "agent"
     companion object {
         fun from(j: JSONObject) = TaskHistoryItem(TaskItemKind.from(j.getString("kind")), j.getString("text"),
             if (j.isNull("tool")) null else j.getString("tool"),
@@ -20,7 +23,10 @@ data class TaskHistoryItem(val kind: TaskItemKind, val text: String, val tool: S
                 is Number -> time.toLong()
                 is String -> OffsetDateTime.parse(time).toInstant().toEpochMilli()
                 else -> error("任务时间无法识别")
-            })
+            }, if (j.isNull("from")) null else j.getString("from"),
+            j.optJSONArray("attachments").objects().map(Attachment::from)).also {
+                require(it.kind != TaskItemKind.Prompt || it.from in setOf("agent", "user")) { "任务消息缺少来源" }
+            }
     }
 }
 data class TaskHistory(val id: String, val title: String, val status: TaskStatus, val items: List<TaskHistoryItem>) {

@@ -15,6 +15,11 @@ object Prefs {
         }
     }
 
+    val skinPreference = SkinPreference(
+        read = { sp.getString("skin", null) },
+        write = { sp.edit().putString("skin", it).apply() },
+    )
+
     var server: String
         get() = sp.getString("server", DEFAULT_SERVER)!!.trimEnd('/')
         set(v) = sp.edit().putString("server", v.trim().trimEnd('/')).apply()
@@ -38,6 +43,9 @@ object Prefs {
 
     fun granted(cap: String): Boolean = sp.getBoolean("cap.$cap", false)
     fun setGranted(cap: String, on: Boolean) = sp.edit().putBoolean("cap.$cap", on).apply()
+
+    fun healthSeen(path: String): Long = sp.getLong("health.seen.$path", 0)
+    fun markHealthSeen(path: String, at: Long = System.currentTimeMillis()) { sp.edit().putLong("health.seen.$path", at).apply() }
 
     val configured: Boolean get() = token.isNotBlank() && server.isNotBlank()
 

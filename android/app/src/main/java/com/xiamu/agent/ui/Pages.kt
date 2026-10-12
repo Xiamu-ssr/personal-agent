@@ -73,6 +73,10 @@ import java.util.Locale
 /** Pages pushed on top of the tabs. */
 sealed interface Route {
     data object Settings : Route
+    data object Skins : Route
+    data object Doudou : Route
+    data object Health : Route
+    data class HealthBrief(val path: String, val title: String) : Route
     data class RuntimeSettings(val permissions: Boolean = false) : Route
     data class TaskDetail(val id: String, val title: String, val briefPath: String? = null) : Route
     data class Connectors(val tab: Int = 0, val device: String? = null) : Route
@@ -89,9 +93,10 @@ sealed interface Route {
 
 object Nav {
     val tab = mutableIntStateOf(0)
+    val todaySegment = mutableIntStateOf(0)
     val stack = mutableStateListOf<Route>()
     val briefPath = mutableStateOf<String?>(null)
-    fun brief(path: String) { briefPath.value = path; home(1) }
+    fun brief(path: String) { briefPath.value = path; todaySegment.intValue = 0; home(1) }
     fun open(r: Route) { stack.add(r) }
     fun back() { stack.removeLastOrNull() }
     fun home(tab: Int) {
@@ -127,6 +132,10 @@ fun RoutePage(r: Route) {
         is Route.Doc -> DocPage(r)
         is Route.Image -> ImagePage(r.path)
         Route.Settings -> SettingsScreen()
+        Route.Skins -> SkinsScreen()
+        Route.Doudou -> Screen { Column { SubHeader("豆豆", Nav::back); DouScreen(0.dp) } }
+        Route.Health -> HealthScreen()
+        is Route.HealthBrief -> HealthBriefScreen(r)
         is Route.RuntimeSettings -> RuntimeSettingsScreen(r.permissions)
         is Route.TaskDetail -> TaskDetailScreen(r)
         is Route.Connectors -> ConnectorsScreen(r)
@@ -152,7 +161,7 @@ private fun WebPage(r: Route.Web) {
         Column(Modifier.fillMaxSize()) {
             SubHeader(r.title, Nav::back)
             if (error.isNotBlank()) ErrorNote(error)
-            Box(Modifier.weight(1f).fillMaxWidth().navigationBarsPadding().padding(top = 4.dp).clipToBounds().background(Color.White)) {
+            Box(Modifier.weight(1f).fillMaxWidth().navigationBarsPadding().padding(top = 4.dp).clipToBounds().background(Pal.Card)) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize().clipToBounds(),
                     factory = { ctx ->
@@ -237,9 +246,9 @@ private fun ImagePage(path: String) {
         scale = (scale * z).coerceIn(1f, 5f)
         dx += pan.x; dy += pan.y
     }
-    Box(Modifier.fillMaxSize().background(Color(0xFF10141A))) {
+    Box(Modifier.fillMaxSize().background(Pal.Card)) {
         val b = bmp
-        if (failed) Text("图片加载失败，请返回重试", color = Color.White, modifier = Modifier.align(Alignment.Center))
+        if (failed) Text("图片加载失败，请返回重试", color = Pal.Card, modifier = Modifier.align(Alignment.Center))
         else if (b == null) Loading(Modifier.align(Alignment.Center))
         else Image(
             b.asImageBitmap(), null, contentScale = ContentScale.Fit,
@@ -247,10 +256,10 @@ private fun ImagePage(path: String) {
                 .graphicsLayer { scaleX = scale; scaleY = scale; translationX = dx; translationY = dy },
         )
         Box(
-            Modifier.statusBarsPadding().padding(16.dp).size(40.dp).clip(CircleShape).background(Color(0x33FFFFFF)).tap(onClick = Nav::back)
+            Modifier.statusBarsPadding().padding(16.dp).size(40.dp).clip(CircleShape).background(Pal.Card).tap(onClick = Nav::back)
                 .align(Alignment.TopStart),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Outlined.Close, "关闭", tint = Color.White) }
+        ) { Icon(Icons.Outlined.Close, "关闭", tint = Pal.Card) }
     }
 }
 
@@ -347,5 +356,5 @@ fun elapsed(ms: Long, now: Long = System.currentTimeMillis()): String {
 
 @Composable
 fun FooterNote(text: String) {
-    Text(text, fontSize = 12.sp, color = Pal.Faint, modifier = Modifier.fillMaxWidth().padding(top = 18.dp, start = 4.dp))
+    Text(text, fontSize = Type.Label, color = Pal.Faint, modifier = Modifier.fillMaxWidth().padding(top = 18.dp, start = 4.dp))
 }

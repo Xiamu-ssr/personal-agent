@@ -27,12 +27,12 @@ internal fun briefDay(day: String): String = runCatching {
 }.getOrDefault(day)
 
 @Composable
-fun TodayScreen(bottom: Dp) {
-    var seg by rememberSaveable { mutableIntStateOf(0) }
+fun TodayScreen(bottom: Dp, segment: Int = Nav.todaySegment.intValue) {
+    val seg = segment
     val list = rememberLazyListState()
     val heights = remember { mutableStateMapOf<String, Dp>() }
     val visible by remember { derivedStateOf { list.layoutInfo.visibleItemsInfo.map { it.key }.toSet() } }
-    val (data, error) = load("today-v5") { coroutineScope {
+    val (data, error) = load("today-v6") { coroutineScope {
         val briefs = async { Api.briefs() }
         val sites = async { Api.treeOrEmpty("data/sites").filter { it.dir } }
         val morning = async { schedule().firstOrNull { it.name.contains("晨报") }?.let { "${it.name} ${cronLabel(it.cron).removePrefix("每天 ")}" } ?: "晨报 7:30" }
@@ -46,14 +46,14 @@ fun TodayScreen(bottom: Dp) {
     val target = Nav.briefPath.value
     LaunchedEffect(data, target) {
         if(data != null && target != null) {
-            seg = 0
+            Nav.todaySegment.intValue = 0
             val index = rows.indexOfFirst { it.brief?.path == target }
             if(index >= 0) { list.scrollToItem(index + 2); Nav.briefPath.value = null }
         }
     }
     LazyColumn(state = list, modifier = Modifier.testTag("today-list"), contentPadding = pagePadding(bottom)) {
         item { PageHeader("今日") { SettingsButton() } }
-        item { SegTabs(listOf("简报", "站点"), seg, Modifier.padding(bottom=12.dp)) { seg = it } }
+        item { SegTabs(listOf("简报", "站点"), seg, Modifier.padding(bottom=12.dp)) { Nav.todaySegment.intValue = it } }
         when {
             data == null && error.isNotBlank() -> item { ErrorNote(error) }
             data == null -> item { Loading() }
@@ -64,7 +64,7 @@ fun TodayScreen(bottom: Dp) {
                 rows.forEach { row -> item(key = row.key, contentType = when { row.card != null -> "html-card"; row.brief != null -> "brief-title"; else -> "day" }) {
                     when {
                         row.day.isNotBlank() -> SectionTitle(briefDay(row.day), Modifier.padding(top=0.dp))
-                        row.brief != null -> Text("${clock(row.brief.time)} ${row.brief.name}", color=Pal.Muted, fontSize=12.sp,
+                        row.brief != null -> Text("${clock(row.brief.time)} ${row.brief.name}", color=Pal.Muted, fontSize = Type.Label,
                             modifier=Modifier.padding(start=4.dp,bottom=10.dp))
                         row.card != null -> HtmlBriefCardView(row.card, row.key, row.key in visible, heights[row.key]) { heights[row.key] = it }
                     }

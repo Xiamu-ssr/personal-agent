@@ -1,0 +1,137 @@
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+com.xiamu.agent.V6Checks:
+INSTRUMENTATION_STATUS: test=taskUsesSharedMessagesToolsComposerAndAttachmentSendWithFailuresPreserved
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=taskUsesSharedMessagesToolsComposerAndAttachmentSendWithFailuresPreserved
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cardsUseFullHeightAndNativeSwipesFollowTheRequiredOrder
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cardsUseFullHeightAndNativeSwipesFollowTheRequiredOrder
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=groupedJobsLoadTheNextCursorThroughTheList
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=groupedJobsLoadTheNextCursorThroughTheList
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=allSkinsPersistAndSixNativeScreensMatchHtmlSkinAtDocumentStart
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=allSkinsPersistAndSixNativeScreensMatchHtmlSkinAtDocumentStart
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V6Checks.offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt$lambda$41(V6Checks.kt:170)
+	at com.xiamu.agent.V6Checks.$r8$lambda$BQXZweEGLz_uOZvm0NkItBT5O-s(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda3.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt(V6Checks.kt:162)
+
+INSTRUMENTATION_STATUS: stream=
+Error in offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt(com.xiamu.agent.V6Checks):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V6Checks.offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt$lambda$41(V6Checks.kt:170)
+	at com.xiamu.agent.V6Checks.$r8$lambda$BQXZweEGLz_uOZvm0NkItBT5O-s(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda3.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt(V6Checks.kt:162)
+
+INSTRUMENTATION_STATUS: test=offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=healthRendersNullsSyncsAndOpensOldWeeklyBriefAndMemoryRecord
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=healthRendersNullsSyncsAndOpensOldWeeklyBriefAndMemoryRecord
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.xiamu.agent.V6Checks
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=historyStaysPutForMessagesAndKeyboardThenReturnsAndSendingFollows
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 40.25
+There was 1 failure:
+1) offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt(com.xiamu.agent.V6Checks)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.xiamu.agent.V6Checks.offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt$lambda$41(V6Checks.kt:170)
+	at com.xiamu.agent.V6Checks.$r8$lambda$BQXZweEGLz_uOZvm0NkItBT5O-s(Unknown Source:0)
+	at com.xiamu.agent.V6Checks$$ExternalSyntheticLambda3.invoke(D8$$SyntheticClass:0)
+	at com.xiamu.agent.V6Checks.review(V6Checks.kt:50)
+	at com.xiamu.agent.V6Checks.offlineCardStillBlocksRequestsAndActualButtonSendsChinesePrompt(V6Checks.kt:162)
+
+FAILURES!!!
+Tests run: 7,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

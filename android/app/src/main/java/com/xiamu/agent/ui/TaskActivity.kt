@@ -47,12 +47,12 @@ internal fun ReplyActivity() {
     if (!Chat.busy.value) return
     Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         CircularProgressIndicator(Modifier.size(12.dp), color = Pal.Gold, strokeWidth = 1.5.dp)
-        Text(replyLabel(Chat.reason.value), fontSize = 12.sp, color = Pal.Muted, maxLines = 1,
+        Text(replyLabel(Chat.reason.value), fontSize = Type.Label, color = Pal.Muted, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).weight(1f))
         Row(Modifier.clip(RoundedCornerShape(14.dp)).background(Pal.Quiet).tap { Chat.interrupt() }
             .padding(horizontal = 10.dp, vertical = 7.dp).testTag("interrupt"), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Stop, null, tint = Pal.QuietText, modifier = Modifier.size(14.dp))
-            Text("停止回复", fontSize = 11.sp, color = Pal.QuietText, modifier = Modifier.padding(start = 4.dp))
+            Text("停止回复", fontSize = Type.Tiny, color = Pal.QuietText, modifier = Modifier.padding(start = 4.dp))
         }
     }
 }
@@ -64,11 +64,11 @@ internal fun BackgroundTasks() {
     var open by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(open) { while (open) { now = System.currentTimeMillis(); delay(1000) } }
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xA6EDF2F7))) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(18.dp)).background(Pal.Background)) {
         Row(Modifier.fillMaxWidth().tap { open = !open }.padding(horizontal = 12.dp, vertical = 10.dp).testTag("background-tasks"),
             verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(12.dp), color = Pal.Gold, strokeWidth = 1.5.dp)
-            Text("后台还有 ${tasks.size} 个任务在跑", fontSize = 12.sp, color = Pal.Ink, modifier = Modifier.padding(start = 9.dp).weight(1f))
+            Text("后台还有 ${tasks.size} 个任务在跑", fontSize = Type.Label, color = Pal.Ink, modifier = Modifier.padding(start = 9.dp).weight(1f))
             Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (open) "收起后台任务" else "展开后台任务",
                 tint = Pal.Muted, modifier = Modifier.size(18.dp))
         }
@@ -79,12 +79,12 @@ internal fun BackgroundTasks() {
                     Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).testTag("task:${task.id}")) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Column(Modifier.weight(1f)) {
-                                Text(task.description, fontSize = 13.sp, lineHeight = 19.sp, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text("已运行 ${elapsed(task.startedAt, now)}", fontSize = 11.sp, color = Pal.Muted, modifier = Modifier.padding(top = 3.dp))
+                                Text(task.description, fontSize = Type.Secondary, lineHeight = Type.SecondaryLine, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text("已运行 ${elapsed(task.startedAt, now)}", fontSize = Type.Tiny, color = Pal.Muted, modifier = Modifier.padding(top = 3.dp))
                             }
                             TaskStopButton(task)
                         }
-                        if (task.error.isNotBlank()) Text(task.error, fontSize = 11.sp, lineHeight = 17.sp, color = Pal.Danger, modifier = Modifier.padding(top = 6.dp))
+                        if (task.error.isNotBlank()) Text(task.error, fontSize = Type.Tiny, lineHeight = Type.SecondaryLine, color = Pal.Danger, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
             }
@@ -98,6 +98,6 @@ internal fun TaskStopButton(task: BackgroundTask) {
         .padding(horizontal = 12.dp, vertical = 8.dp).testTag("stop-task:${task.id}")
         .semantics { contentDescription = "停止${task.description}" }, verticalAlignment = Alignment.CenterVertically) {
         if (task.stopping) CircularProgressIndicator(Modifier.padding(end = 6.dp).size(10.dp), color = Pal.Muted, strokeWidth = 1.dp)
-        Text(if (task.stopping) "停止中…" else "停止", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (task.stopping) Pal.Faint else Pal.QuietText)
+        Text(if (task.stopping) "停止中…" else "停止", fontSize = Type.Label, fontWeight = FontWeight.Medium, color = if (task.stopping) Pal.Faint else Pal.QuietText)
     }
 }

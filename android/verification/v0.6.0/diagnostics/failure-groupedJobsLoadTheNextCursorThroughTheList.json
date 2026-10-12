@@ -1,0 +1,55 @@
+{
+  "error": "expected:<1> but was:<2>",
+  "tab": 2,
+  "segment": 0,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "\/ws"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/history"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/profile"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/state"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs"
+    },
+    {
+      "method": "GET",
+      "path": "\/api\/jobs"
+    }
+  ]
+}
