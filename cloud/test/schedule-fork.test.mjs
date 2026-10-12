@@ -170,7 +170,7 @@ test("guard validates exact fork/background values, excludes child and isolated 
     assert.equal(main.scheduleFork.dispatched, true);
     assert.deepEqual(h.checkScheduleFork(bash), {});
   }
-  // MiMo sends the boolean as a string; the CLI still runs it in the background.
+  // Some models send the boolean as a string; the CLI still runs it in the background.
   h.beginMainTurn(main, null, "schedule");
   assert.deepEqual(h.checkScheduleFork({ tool_name: "Agent", tool_input: { subagent_type: "fork", run_in_background: "true" } }), {});
   h.beginMainTurn(main, null, "schedule");

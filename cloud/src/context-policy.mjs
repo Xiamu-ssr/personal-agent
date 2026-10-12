@@ -4,7 +4,7 @@ export const CLI_OUTPUT_RESERVE = 20_000;
 export const CLI_SUMMARY_RESERVE = 13_000;
 // The three product models share the same CLI profile. Provider ids remain unchanged on the wire.
 export const CLI_MODEL_PROFILE = "claude-haiku-5-5";
-const PRODUCT_MODELS = new Set(["anthropic/claude-haiku-5.5", "xiaomi/mimo-v2.6-pro", "z-ai/glm-5.3-flashx"]);
+const PRODUCT_MODELS = new Set(["anthropic/claude-haiku-5.5", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flashx"]);
 
 export function contextPolicy(model) {
   if (!PRODUCT_MODELS.has(model)) throw new Error("不支持的模型");

@@ -7,7 +7,7 @@ import render from "dom-serializer";
 import { dateIn } from "./store.mjs";
 
 export const BRIEF_MAX_BYTES = 80 * 1024;
-export const BRIEF_MAX_HEIGHT = 560;
+export const BRIEF_MAX_HEIGHT = 960;
 const BASE_CSS = fs.readFileSync(new URL("./brief-base.css", import.meta.url), "utf8");
 const BUTTON_SCRIPT = fs.readFileSync(new URL("./brief-button.js", import.meta.url), "utf8");
 const SCRIPT_HASH = crypto.createHash("sha256").update(BUTTON_SCRIPT).digest("base64");
@@ -24,18 +24,31 @@ export function estimateCardHeight(node, width=312) {
   const children=elements(node), count=chars(textOf(node));
   const lines=(size=14) => Math.max(1,Math.ceil(count / Math.max(6,width/size)));
   let h;
-  if (hasClass(node,"chip")) h=32;
-  else if (hasClass(node,"title") || node.name==="h1") h=lines(21)*29+10;
+  if (hasClass(node,"chip")) h=26;
+  else if (hasClass(node,"title") || node.name==="h1") h=lines(17)*25+10;
   else if (node.name==="h2" || node.name==="h3") h=lines(node.name==="h2"?17:13)*(node.name==="h2"?24:19)+6;
   else if (hasClass(node,"summary")) h=lines(13)*22+16;
   else if (hasClass(node,"note")) h=lines(12)*20+32;
   else if (node.name==="button") h=lines(12)*18+24;
   else if (["svg","img"].includes(node.name)) h=Number(node.attribs?.height)||120;
-  else if (["timeline","tiles","metrics"].some((c)=>hasClass(node,c))) {
+  else if (hasClass(node,"compare")) {
+    const rows=allNodes(node).filter((n)=>n.name==="tr");
+    h=rows.reduce((sum,row)=> {
+      const cells=elements(row), w=width/Math.max(1,cells.length)-16;
+      return sum+Math.max(18,...cells.map((c)=>Math.max(1,Math.ceil(chars(textOf(c))/Math.max(4,w/12)))*18))+16;
+    },24);
+  } else if (hasClass(node,"steps")) {
+    h=children.reduce((sum,c)=>sum+(c.name==="li" ? Math.max(1,Math.ceil(chars(textOf(c))/Math.max(6,(width-75)/14)))*22+20 : estimateCardHeight(c,width)),24);
+  } else if (hasClass(node,"progress")) h=14;
+  else if (hasClass(node,"buttons")) h=Math.max(0,...children.map((c)=>estimateCardHeight(c,width/Math.max(1,children.length)-6)))+12;
+  else if (["dates","timeline","tiles","metrics"].some((c)=>hasClass(node,c))) {
     const w=Math.max(50,(width-(children.length-1)*8)/Math.max(1,children.length));
-    h=Math.max(0,...children.map((c)=>estimateCardHeight(c,w)))+28;
-  } else if (hasClass(node,"metric")) h=88+Math.max(0,lines(11)-6)*17;
-  else if (hasClass(node,"tile")) h=children.reduce((n,c)=>n+estimateCardHeight(c,width-20),0)+24;
+    h=Math.max(0,...children.map((c)=>estimateCardHeight(c,w)))+24;
+  } else if (hasClass(node,"day")) h=76;
+  else if (hasClass(node,"metric")) h=88+Math.max(0,lines(11)-6)*17;
+  else if (hasClass(node,"tile")) h=children.reduce((n,c)=>n+estimateCardHeight(c,width-20),0)+20;
+  else if (hasClass(node,"label") || hasClass(node,"desc") || hasClass(node,"delta")) h=lines(11)*17+3;
+  else if (hasClass(node,"value")) h=lines(25)*31+4;
   else if (["p","li"].includes(node.name) || !children.length || children.every((c)=>["span","b","strong","em","small","br","a"].includes(c.name))) h=lines()*22+(node.name==="li"?18:node.name==="p"?10:0);
   else {
     h=children.reduce((n,c)=>n+estimateCardHeight(c,width),0);
@@ -46,7 +59,7 @@ export function estimateCardHeight(node, width=312) {
   return Math.ceil(Math.max(h,Number(explicit?.[1])||0)+(hasClass(node,"card")?40:0));
 }
 
-// Height is checked when the agent writes a brief; serving skips it because the App scrolls inside tall cards.
+// Height is checked on writes; serving leaves measurement to the App's outer card list.
 export function validateBrief(html,{height=true}={}) {
   if (typeof html!=="string") return {error:"简报必须是 HTML 文本"};
   if (Buffer.byteLength(html,"utf8")>BRIEF_MAX_BYTES) return {error:"简报文件超过 80KB，请缩短内容"};
@@ -67,8 +80,8 @@ export function validateBrief(html,{height=true}={}) {
   }
   const styles=nodes.filter((n)=>n.name==="style").map((n)=>render(n,{encodeEntities:"utf8"})).join("\n");
   for (let i=0;i<cards.length;i++) {
-    const h=estimateCardHeight(cards[i]);
-    if (height&&(h>BRIEF_MAX_HEIGHT||allNodes(cards[i]).filter((n)=>n.name).length>120)) return {error:`第 ${i+1} 张卡片内容过高（粗估 ${h}px，上限 560px），请精简文字、减少元素或拆成两张卡片`};
+    const h=height?estimateCardHeight(cards[i]):0;
+    if (height&&(h>BRIEF_MAX_HEIGHT||allNodes(cards[i]).filter((n)=>n.name).length>240)) return {error:`第 ${i+1} 张卡片内容过高（粗估 ${h}px，上限约 960px），请精简文字、减少元素，保持一个主题一张卡片`};
   }
   const meta=(key)=>nodes.find((n)=>n.name==="meta"&&n.attribs?.name===key)?.attribs?.content;
   const time=meta("brief-time");
@@ -76,12 +89,12 @@ export function validateBrief(html,{height=true}={}) {
   return {brief:{name:meta("brief-name"),time,cards:cards.map((n)=>({html:cardDocument(render(n,{encodeEntities:"utf8"}),styles)}))}};
 }
 
-function cardDocument(card,styles) {
+export function cardDocument(card,styles="") {
   const csp=`default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'; connect-src 'none'; base-uri 'none'; form-action 'none'`;
   return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>${BASE_CSS}</style>${styles}</head><body>${card}<script>${BUTTON_SCRIPT}</script></body></html>`;
 }
 
-export const isBriefPath=(rel)=>/^data\/briefs\/\d{4}-\d{2}-\d{2}\/.+\.html$/.test(rel);
+export const isBriefPath=(rel)=>typeof rel==="string"&&!rel.includes("\\")&&!rel.split("/").includes("..")&&/^data\/briefs\/\d{4}-\d{2}-\d{2}\/.+\.html$/.test(rel);
 export const isOutputPath=(rel)=>isBriefPath(rel)||/^data\/sites\/.+\.html$/.test(rel);
 export function readBrief(root,rel,options) {
   try {
@@ -93,6 +106,11 @@ export function readBrief(root,rel,options) {
     if (result.brief) { result.brief.name||=path.basename(file,".html"); result.brief.time||=fs.statSync(file).mtime.toISOString(); }
     return result;
   } catch {return {error:"简报 HTML 文件无法读取"};}
+}
+
+export function briefItem(root,rel) {
+  const {brief}=readBrief(root,rel,{height:false});
+  return brief?{date:rel.split("/")[2],name:brief.name,time:brief.time,path:rel,cards:brief.cards}:null;
 }
 
 export function listBriefs(root,{days=7,timezone="Asia/Shanghai",now=new Date()}={}) {

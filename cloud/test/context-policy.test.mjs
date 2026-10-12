@@ -14,7 +14,7 @@ test("200K CLI window reserves 20K output and 13K summary for a 167K trigger", (
 });
 
 test("only the three settings models use a fixed 200K policy; obsolete env overrides have no effect", () => {
-  for (const model of ["anthropic/claude-haiku-5.5", "xiaomi/mimo-v2.6-pro", "z-ai/glm-5.3-flashx"]) {
+  for (const model of ["anthropic/claude-haiku-5.5", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flashx"]) {
     const p = contextPolicy(model, { AGENT_CONTEXT_INPUT_LIMIT: "1", AGENT_MAX_OUTPUT_TOKENS: "1" });
     assert.equal(p.windowTokens, 200000);
     assert.equal(p.triggerTokens, 167000);

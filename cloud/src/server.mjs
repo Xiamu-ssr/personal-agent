@@ -10,7 +10,10 @@ import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
 import { ConnectorManager } from "./connectors.mjs";
 import { runScheduledTask } from "./scheduler.mjs";
-import { listBriefs } from "./briefs.mjs";
+import { listBriefs, briefItem } from "./briefs.mjs";
+import { paginateJobs } from "./task-history.mjs";
+import { validateMessage } from "./attachments.mjs";
+import { HealthSync } from "./health.mjs";
 import { getProfile, putProfile } from "./profile.mjs";
 import { getAppSettings, putAppSettings } from "./app-settings.mjs";
 
@@ -108,7 +111,7 @@ async function pair(req, res) {
   return json(res, 200, { token: config.token });
 }
 
-export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), listen = config }) {
+export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), health = new HealthSync({root:config.root,hub,timezone:config.timezone}), listen = config }) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
     const p = url.pathname;
@@ -134,6 +137,14 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       const days = Number(url.searchParams.get("days") || 7);
       if (!Number.isInteger(days) || days < 1 || days > 365) return json(res, 400, { error: "days 必须是 1 到 365 的整数" });
       return json(res, 200, { items: listBriefs(config.root, { days, timezone: config.timezone }) });
+    }
+    if(p==="/api/briefs/item"&&req.method==="GET") {
+      const item=briefItem(config.root,url.searchParams.get("path"));
+      return item?json(res,200,item):json(res,404,{error:"没有这份简报"});
+    }
+    if(p==="/api/health"&&req.method==="GET"||p==="/api/health/sync"&&req.method==="POST") {
+      try{return json(res,200,await health.sync());}
+      catch{ return json(res,500,{error:"健康同步暂不可用，请稍后重试"}); }
     }
     if (p === "/api/profile") {
       if (req.method === "GET") return json(res, 200, getProfile(config.root));
@@ -161,10 +172,11 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       return json(res, 200, { items: tailJsonl(config.chatLog, Number(url.searchParams.get("n") || 200)) });
     }
     if (p === "/api/send" && req.method === "POST") {
-      const { text, attachments } = await readBody(req);
-      if (!text?.trim() && !attachments?.length) return json(res, 400, { error: "empty" });
-      const id = await harness.send((text || "").trim(), "http", attachments || []);
-      return json(res, 200, { ok: true, id });
+      try {
+        const body=JSON.parse((await readRaw(req,64*1024)).toString("utf8")),message=validateMessage(config.root,body?.text??"",body?.attachments??[]);
+        const id = await harness.send(message.text, "http", message.attachments);
+        return json(res, 200, { ok: true, id });
+      }catch(e){return json(res,400,{error:e instanceof SyntaxError?"请提交有效的 JSON 消息":e.message});}
     }
     const taskStop = p.match(/^\/api\/tasks\/([^/]+)\/stop$/);
     if (taskStop && req.method === "POST") {
@@ -187,7 +199,10 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
           let body;
           try { body=JSON.parse((await readRaw(req,40*1024)).toString("utf8")); }
           catch { return json(res,400,{error:"请提交有效的 JSON 续聊消息",code:"invalid_task_text"}); }
-          await harness.sendTask(id,body?.text);
+          let message;
+          try{message=validateMessage(config.root,body?.text??"",body?.attachments??[]);}
+          catch(e){return json(res,400,{error:e.message,code:"invalid_task_text"});}
+          await harness.sendTask(id,message.text,message.attachments);
           return json(res,200,{ok:true,id});
         }
         return json(res,405,{error:"不支持这个任务操作"});
@@ -242,11 +257,10 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       try { return json(res, 200, hub.forget(decodeURIComponent(deviceRoute[1]))); }
       catch (e) { return json(res, e.status || 400, { error: e.message || "设备移除失败" }); }
     }
-    if (p === "/api/jobs") {
-      return json(res, 200, {
-        running: harness.runningJobs?.() || [],
-        recent: harness.recentJobs?.() || [],
-      });
+    if (p === "/api/jobs"&&req.method==="GET") {
+      const limit=Number(url.searchParams.get("limit")??30),cursor=url.searchParams.get("before"),before=cursor===null?undefined:Number(cursor);
+      if(!Number.isInteger(limit)||limit<1||limit>100||before!==undefined&&(!Number.isSafeInteger(before)||before<1))return json(res,400,{error:"limit 要 1–100 的整数，before 要毫秒时间戳"});
+      return json(res, 200, {running:before===undefined?harness.runningJobs?.()||[]:[],...paginateJobs(harness.recentJobs?.()||[],{before,limit})});
     }
     if (p === "/api/skills") return json(res, 200, { skills: skills() });
     // Raw body upload into data/uploads/<date>/; the App then sends the returned path as an attachment.
@@ -360,8 +374,11 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       } catch {
         return;
       }
-      if (msg.t === "send" && (msg.text?.trim() || msg.attachments?.length)) {
-        harness.send((msg.text || "").trim(), "app", msg.attachments || []).catch((e) => log("send failed:", e.message));
+      if (msg.t === "send") {
+        try {
+          const message=validateMessage(config.root,msg.text??"",msg.attachments??[]);
+          harness.send(message.text,"app",message.attachments).catch((e)=>{if(ws.readyState===1)ws.send(JSON.stringify({t:"error",error:connectors.redact(e.message)}));});
+        }catch(e){if(ws.readyState===1)ws.send(JSON.stringify({t:"error",error:e.message}));}
       }
       if (msg.t === "interrupt") harness.interrupt();
       if (["unqueue", "edit_queued"].includes(msg.t)) {
@@ -409,7 +426,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     for (const ws of apps) if (ws.readyState === 1) ws.send(s);
     // Devices show these as notifications when the App isn't open.
     if (ev.t === "turn_end" && ev.text) hub.broadcast({ t: "event", kind: "reply", text: ev.text.slice(0, 300) });
-    if (ev.t === "job" && ev.phase === "done" && ev.outputs?.length) hub.broadcast({ t: "event", kind: "job", text: ev.title });
+    if (ev.t === "job" && ev.phase === "done" && (ev.outputs?.length||ev.taskContinuation)) hub.broadcast({ t: "event", kind: "job", text: ev.title });
   });
 
   const heartbeat = setInterval(() => {

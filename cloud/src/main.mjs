@@ -7,6 +7,8 @@ import { Harness } from "./agent.mjs";
 import { ConnectorManager } from "./connectors.mjs";
 import { startScheduler } from "./scheduler.mjs";
 import { startServer } from "./server.mjs";
+import { HealthSync } from "./health.mjs";
+import { migrateV06 } from "./migrate-v06.mjs";
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
@@ -17,7 +19,7 @@ if (!config.token) {
 
 // First boot: lay out the three zones and copy seed files that don't exist yet.
 function seed() {
-  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "workspace", "system/connectors", "system/sync", "system/sessions", ".claude/skills"]) {
+  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "data/health", "workspace", "system/connectors", "system/sync", "system/sessions", ".claude/skills"]) {
     fs.mkdirSync(path.join(config.root, d), { recursive: true });
   }
   const seedDir = path.join(CODE, "seed");
@@ -41,8 +43,11 @@ const listeners = new Set();
 const bus = { on: (fn) => listeners.add(fn), emit: (ev) => listeners.forEach((fn) => fn(ev)) };
 
 seed();
+migrateV06({root:config.root,seedDir:path.join(CODE,"seed"),timezone:config.timezone});
 const hub = new DeviceHub();
 const connectors = new ConnectorManager();
+for(const failure of await connectors.initialize())log(`connector skills unavailable: ${failure.name} ${failure.error}`);
+const health=new HealthSync({root:config.root,hub,timezone:config.timezone});
 const harness = new Harness({ hub, bus, log, connectors });
 
 hub.onChange = () => bus.emit({ t: "devices", devices: hub.online() });
@@ -55,7 +60,7 @@ hub.onReconnect = (info) => {
 };
 
 harness.startMain();
-startScheduler({ harness, log });
-startServer({ harness, hub, bus, log, connectors });
+startScheduler({ harness, log, health });
+startServer({ harness, hub, bus, log, connectors, health });
 
 process.on("unhandledRejection", (e) => log("unhandledRejection:", e?.message || e));

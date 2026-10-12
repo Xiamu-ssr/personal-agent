@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 
 export const MODELS = [
   { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", note: "消耗约 1×；输入超过 100K 后约 5×" },
-  { id: "xiaomi/mimo-v2.6-pro", label: "MiMo V2.6 Pro", note: "输入约 4.35×，输出约 1.74×；缓存读约 0.36×" },
+  { id: "z-ai/glm-5.3-flash", label: "GLM 5.3 Flash", note: "输入约 1.5×，输出约 1×；缓存读约 3×" },
   { id: "z-ai/glm-5.3-flashx", label: "GLM 5.3 FlashX", note: "输入约 3.75×，输出约 2.5×；缓存读约 7.5×" },
 ];
 export const PERMISSION_MODES = [
@@ -49,6 +49,11 @@ export function readAppSettings(root) {
   let value;
   try { value = JSON.parse(fs.readFileSync(file, "utf8")); }
   catch { throw new Error("模型设置损坏，请检查 system/app-settings.json"); }
+  if (value && typeof value === "object" && !Array.isArray(value) && !MODELS.some((m)=>m.id===value.model)) {
+    value.model=DEFAULT_SETTINGS.model;
+    validate(value);
+    save(file,value);
+  }
   return { ...validate(value) };
 }
 

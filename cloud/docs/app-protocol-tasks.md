@@ -1,4 +1,4 @@
-# 豆豆云端协议（v0.5）：后台任务、HTML 简报与设置
+# 豆豆云端协议（v0.6）：后台任务、HTML 简报与设置
 
 接口沿用现有 Bearer / cookie 鉴权。下面路径是云端服务路径；反向代理对外仍可加 `/agent`。本文是当前协议；简报只认 HTML，设置只接受以下三个模型和两种权限。
 
@@ -115,12 +115,12 @@ HTTP 手动运行返回 202 `{"ok":true,"mode":"alarm"}`，表示已经排队。
 - items 按 time 倒序；默认近 7 个本地自然日（含今天），days 是 1–365 的整数，错误 400；无简报是空 items。
 - 只读 `data/briefs/<日期>/**/*.html`；JSON、无效 HTML、符号链接不列出。可选 `meta name="brief-name"` / `brief-time` 提供名称和 ISO 时间；未写时用文件名 / mtime。
 - 每个 html 都是独立完整文档：基础 CSS、原文件公共 style、一张顶层 section.card，以及云端按钮脚本。客户端直接加载。
-- 四套配色：silver（默认银蓝 + 香槟金）、mist、mint、dusk，在 section 上用 data-palette 选。
+- App 在 document start 设置 html[data-skin=silver|paper|night]，默认 silver；每套皮肤都有 silver/mist/mint/dusk 四个卡片配色。paper 标题用宋体，其余正文用系统黑体。
 - 按钮用 `<button data-prompt="用户消息">文案</button>`。脚本点击后跳到 `doudou://prompt?text=<urlencoded>`；App 拦截、解码，发送用户消息并切到聊天。
 - App 拦掉其他一切跳转和网络请求。云端也注入离线 CSP；不执行模型提供的 script / 事件属性，不允许外部资源。
-- 加载后 App 读取 document.documentElement.scrollHeight，高度上限为屏幕的 75%，超出部分在卡片内部滚动。
+- 加载后 App 读取 document.documentElement.scrollHeight，卡片跟随内容高度，无内部滚动；安全上限为两倍屏高。
 
-主会话、fork、隔离任务共用 Write/Edit 的 PostToolUse 校验：1–6 个顶层 section.card、80KB 上限、无外部资源/导入，依据文字量和元素粗估每卡 ≤560px。错误用中文反馈模型；无效文件不计 outputs。Bash 等绕过文件 hook 的写入不会自动生成卡片。
+主会话、fork、隔离任务共用 Write/Edit 的 PostToolUse 校验：1–6 个顶层 section.card、80KB 上限、无外部资源/导入，依据文字量和元素粗估每卡 ≤960px、最多 240 个元素。错误用中文反馈模型；无效文件不计 outputs。Bash 等绕过文件 hook 的写入不会自动生成卡片。
 
 完成事件与聊天历史：
 
@@ -135,7 +135,7 @@ id 是任务 id。path 是该次运行第一份有效 HTML 简报；name/time �
 `GET /api/settings` 与 `PUT /api/settings {model?,permissionMode?}` 返回同一结构：
 
 ```json
-{"model":"anthropic/claude-haiku-5.5","permissionMode":"auto","models":[{"id":"anthropic/claude-haiku-5.5","label":"Claude Haiku 5.5","note":"消耗约 1×；输入超过 100K 后约 5×"},{"id":"xiaomi/mimo-v2.6-pro","label":"MiMo V2.6 Pro","note":"输入约 4.35×，输出约 1.74×；缓存读约 0.36×"},{"id":"z-ai/glm-5.3-flashx","label":"GLM 5.3 FlashX","note":"输入约 3.75×，输出约 2.5×；缓存读约 7.5×"}],"permissionModes":[{"id":"auto","label":"自动","note":"不问用户，自动拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}
+{"model":"anthropic/claude-haiku-5.5","permissionMode":"auto","models":[{"id":"anthropic/claude-haiku-5.5","label":"Claude Haiku 5.5","note":"消耗约 1×；输入超过 100K 后约 5×"},{"id":"z-ai/glm-5.3-flash","label":"GLM 5.3 Flash","note":"输入约 1.5×，输出约 1×；缓存读约 3×"},{"id":"z-ai/glm-5.3-flashx","label":"GLM 5.3 FlashX","note":"输入约 3.75×，输出约 2.5×；缓存读约 7.5×"}],"permissionModes":[{"id":"auto","label":"自动","note":"不问用户，自动拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}
 ```
 
 - 原子保存 system/app-settings.json，权限 600。默认 Haiku 5.5 + auto。model/permissionMode 之外的字段及未知值 400，不修改原设置；JSON 格式错误 400。
@@ -149,21 +149,21 @@ id 是任务 id。path 是该次运行第一份有效 HTML 简报；name/time �
 `GET /api/tasks/<URL 编码 id>/history`：
 
 ```json
-{"id":"task-id","title":"报价简报","status":"running","items":[{"kind":"prompt","text":"整理今天的报价","time":"2026-10-11T07:30:00Z"},{"kind":"tool","tool":"Read","text":"读取 data/memory/work/报价.md","time":"2026-10-11T07:30:01Z"},{"kind":"text","text":"已找到两份报价。","time":"2026-10-11T07:30:02Z"}]}
+{"id":"task-id","title":"报价简报","status":"running","items":[{"kind":"prompt","from":"agent","text":"整理今天的报价","time":"2026-10-11T07:30:00Z"},{"kind":"tool","tool":"Read","text":"读取 data/memory/work/报价.md","time":"2026-10-11T07:30:01Z"},{"kind":"text","text":"已找到两份报价。","time":"2026-10-11T07:30:02Z"}]}
 ```
 
 status 只有 running/done/error/stopped；items.kind 只有 prompt/text/tool/result。记录取子任务 transcript（隔离维护取自己的 session transcript）；过滤 thinking 和原始工具输出。工具只返回一行摘要，所有文本走 redact。运行中 SendMessage 可能被 CLI 合并到工具回合，运行层保留用户提交原文的脱敏副本，补齐记录中的 prompt；不据此生成模型步骤或结果。
 
-`POST /api/tasks/<id>/send {text}` 成功 200 `{"ok":true,"id":"task-id"}`，表示已经接受续聊；text 去首尾空白，不能为空，UTF-8 上限 32KB。
+`POST /api/tasks/<id>/send {text,attachments?}` 成功 200 `{"ok":true,"id":"task-id"}`，表示已经接受续聊；text 去首尾空白，UTF-8 上限 32KB；text 和 attachments 不能同时为空，附件校验/图片消息块与主聊天共用。
 
 - 原生后台任务使用 SendMessage，to=原任务 id，message=用户原文。运行中交给同一 agent；已结束任务由 CLI 自动恢复原 transcript，保持 task_id、产生新的 run_id，继续在后台执行并照常原生通知主会话。
 - 运行层守卫只允许对指定任务发送原文，防止新建任务或由主会话代做。
 - 独立维护任务以原 sessionId resume 自己的 query，沿原上下文执行；进行中的独立维护任务续聊会排在其当前回合之后。
-- 任务元数据与 id 持久化在 system/task-index.json，600 权限。`/api/state.tasks` 是当前原生后台任务；`/api/jobs` 返回 `{running:[{id,label,started}],recent:[{id,label,title,status,ok,ts,outputs,path?}]}`，每项均有可查记录的 id。recent 最多 50 项，history 可按仍保存的 id 查更早记录。
+- 任务元数据与 id 持久化在 system/task-index.json，600 权限。`/api/state.tasks` 是当前原生后台任务；`/api/jobs` 返回 `{running:[{id,label,started}],recent:[{id,label,title,status,ok,ts,outputs,path?}],next:<ts>|null}`，每项均有可查记录的 id。recent 通过 before 毫秒游标分页（默认 limit=30，范围 1–100），没有总条数上限；before 不传才返回 running；同一毫秒的记录整组返回，可能略超 limit，避免漏项。
 - App 打开的任务若 status=running，每 3 秒刷新 history；结束后停止轮询。
 - 查询进程重建时先清当前活动列表；未结束的记录标 stopped，恢复后的原生活动更新回 running，避免显示幽灵任务。
 
-错误使用 `{error:"中文原因",code:"..."}`：id 格式错误 400，消息格式错误 400，不存在 404，原主会话暂不可用 503，其他 SDK 操作失败 502。若上下文故障恢复已经创建全新的主 session，原子任务仍可查记录；续聊需要原父 session，目前返回 503，不擅自复制成新任务。
+错误使用 `{error:"中文原因",code:"..."}`：id 格式错误 400，消息格式错误 400，不存在 404，其他 SDK 操作失败 502。原父会话不可用或消息有附件时，以隔离后台 query 带原标题、交代、步骤摘要和结果继续，图片直接作为消息块；所有续聊记录与完成事件仍挂原任务 id。隔离 transcript 会保留到任务索引中，不覆盖旧记录。
 
 ## 其他 HTTP 与设备图片格式
 
@@ -179,7 +179,7 @@ status 只有 running/done/error/stopped；items.kind 只有 prompt/text/tool/re
 
 连接器账号 CRUD/test 继续使用 `POST /api/connectors/<name>/accounts {values}`（201）、`PUT .../accounts/<id> {values}`（200）、`DELETE .../accounts/<id>`（200 `{ok:true}`）和 `POST .../accounts/<id>/test`。添加/修改验证成功返回 `{id,label,status,error,checkedAt}`；失败 400 `{error}` 不保存。重新测试失败为 400，仍返回账号状态 `{id,label,status:"error",error,checkedAt}`。secret 省略或为 `••••` 保留原值。
 
-稳定连接器 id：qq-mail、netease-163、netease-126、gmail、exmail、aliyun-mail、imap、tavily、weread。邮箱 values 为 `{address,password,label?}`，imap 另需 `{host,port?}`（默认 993）；没有 preset。Tavily/微信读书为 `{apiKey}`，各支持一个账号。
+稳定连接器 id：qq-mail、netease-163、netease-126、gmail、exmail、aliyun-mail、imap、tavily、weread、wind。邮箱 values 为 `{address,password,label?}`，imap 另需 `{host,port?}`（默认 993）；没有 preset。Tavily/微信读书/Wind AI 为 `{apiKey}`，各支持一个账号。
 
 设备的 WS result 在 data 中返回一个或多个 `{image:base64,mime}`，可以带 width/height 等元数据：
 
@@ -189,3 +189,12 @@ status 只有 running/done/error/stopped；items.kind 只有 prompt/text/tool/re
 ```
 
 云端转换为 MCP `{content:[{type:"image",data:base64,mimeType:mime},...]}`；元数据另外作为 text 内容。单张解码后上限 5 MiB，超出返回中文 isError，不把 base64 文本送给模型。支持 PNG/JPEG/WebP/GIF。Mac computer_use/browser 截图共用这条链路。
+
+## 0.6 单项简报、健康和自查
+
+- `GET /api/briefs/item?path=<data/briefs/...html>` 返回与列表里相同的单项 `{date,name,time,path,cards:[{html}]}`，不限定日期；没有或路径不合法返回 404。
+- `GET /api/health`（打开页面时同步）与 `POST /api/health/sync`（手动同步）最多等待 20 秒，返回 `{syncedAt,device,note,days,weekly,records}`。days 为含今天的最近 7 天升序，缺失值 null；weekly 读取全部健康周报，records 读取健康 Markdown 文件。离线/未开启/超时仍返回已有数据和中文 note。每 3 小时的 health-sync 直接调用设备，不经过模型。
+- 每条 history prompt 都有 from，首条 agent，其后 user；用户续聊附件是 `[{path,name,kind}]`，不返回图片 base64。
+- 启动回填私有会话目录里缺失的子任务；已有索引不覆盖。启动时迁移旧模型、角色说话习惯、健康定时项，并删除旧指标文件。
+- in-process `mcp__page__screenshot({path,skin?})` 仅截 data/briefs 的 HTML 和 data/sites 本地页面。390px，简报卡片依次拼接、站点最多三屏，JPEG ≤300KiB；全进程串行，30秒超时，浏览器每次启停。所有公网请求均被拦截，本地站点资源仅限站点目录。
+- Wind 只常驻 call/list_tools/list_skills/install_skill/ask_alice，密钥只在连接器中；官方技能下载和缓存位于数据根，仓库不含技能正文。

@@ -6,7 +6,6 @@ import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { config, MEMORY_CATEGORIES } from "./config.mjs";
 import { readJson, appendJsonl, nowIn } from "./store.mjs";
-import { transcribe, audioFormat } from "./transcribe.mjs";
 import { ConnectorManager, writePrivateJson } from "./connectors.mjs";
 import { checkConnectorAccess, CONNECTOR_GUARD_TOOLS } from "./connector-guard.mjs";
 import { inputUsage, contextPolicy, CLI_MODEL_PROFILE } from "./context-policy.mjs";
@@ -15,13 +14,16 @@ import { TaskHistory } from "./task-history.mjs";
 import { contextFailure, humanError, recoveryContext, withRecovery, RECOVERY_NOTICE } from "./conversation-recovery.mjs";
 import { BackgroundTasks, TaskError } from "./background-tasks.mjs";
 import { isBriefPath, isOutputPath, readBrief } from "./briefs.mjs";
+import { validateMessage, prepareAttachments, userContent } from "./attachments.mjs";
+import { checkDataAccess } from "./data-guard.mjs";
+import { calendarContext } from "./calendar-context.mjs";
+import { PageScreenshot } from "./page-screenshot.mjs";
+import { estimateUsageCost } from "./usage-pricing.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const SCHEDULE_FORK_REASON = '定时简报请先用 Agent（subagent_type: "fork"，run_in_background: true）派到后台，再简短回复用户';
 // Some models send tool booleans as strings; the CLI accepts both.
 const isTrue = (v) => v === true || v === "true";
-const IMAGE_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
-const KIND_LABEL = { image: "图片", file: "文件", voice: "语音笔记" };
 
 // An async iterable the SDK reads user messages from (streaming input mode).
 class Inbox {
@@ -75,7 +77,6 @@ function rel(p) {
 // "data/memory/<category>/<topic>.md", one level, known categories only.
 function memoryPathError(r) {
   if (!r.startsWith("data/memory/")) return null;
-  if (r === "data/memory/health/latest.json") return null;
   const parts = r.split("/");
   if (parts.length !== 4 || !parts[3].endsWith(".md")) {
     return `记忆路径必须是 data/memory/<分类>/<主题>.md（只有一层目录），你写的是 ${r}`;
@@ -111,6 +112,7 @@ export class Harness {
     this.busy = false;
     this.running = new Map(); // id -> { label, started } (isolated jobs, queued or running)
     this.history = new TaskHistory({ root: config.root, sessions: config.sessions, redact: (s) => connectors.redact(s) });
+    this.pages = new PageScreenshot({root:config.root});
   }
 
   compactionControl(getQuery = () => undefined) {
@@ -154,6 +156,7 @@ export class Harness {
       allowedTools: [
         "mcp__devices__list_devices", "mcp__devices__call_device", "mcp__devices__read_since", "mcp__devices__sync_commit",
         "mcp__connectors__list", "mcp__connectors__add_account", "mcp__connectors__update_account", "mcp__connectors__remove_account",
+        "mcp__page__screenshot",
         ...[...this.connectors.definitions.keys()].map((name) => "mcp__" + name + "__*"),
       ],
       thinking: { type: "adaptive" },
@@ -167,7 +170,7 @@ export class Harness {
         precomputeCompactionEnabled: false,
         idleCompaction: false,
       },
-      mcpServers: { devices: this.hub.mcpServer(), ...this.connectors.mcpServers() },
+      mcpServers: { devices: this.hub.mcpServer(), page:this.pages.mcpServer(), ...this.connectors.mcpServers() },
       includePartialMessages: !isolated,
       agentProgressSummaries: true,
       perTaskStopAffordance: !isolated, // The App's per-task stop controls target the open main query.
@@ -198,6 +201,7 @@ export class Harness {
         SubagentStop: [{ hooks: [compaction.restore] }],
         PreToolUse: [
           { matcher: CONNECTOR_GUARD_TOOLS, hooks: [async (input) => checkConnectorAccess(input)] },
+          { matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash", hooks: [async (input)=>checkDataAccess(input)] },
           { matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] },
           ...(!isolated ? [{ hooks: [async (input) => this.checkScheduleFork(input), async (input) => this.checkTaskContinuation(input)] }] : []),
         ],
@@ -222,7 +226,7 @@ export class Harness {
     return {
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: `当前时间：${nowIn(config.timezone)}（${config.timezone}）\n在线设备：${devText}` +
+        additionalContext: `当前时间：${nowIn(config.timezone)}（${config.timezone}） · ${calendarContext({timezone:config.timezone})}\n在线设备：${devText}` +
           (!isolated && !agentId && this.main?.reason === "schedule" ? "\n这份定时任务请放到后台做，完成后通知用户。" : "") +
           (!isolated && !agentId && this.main?.active?.taskContinuation ? `\n用户在继续任务 ${this.main.active.taskContinuation.id}。请只用 SendMessage，to 为这个任务 id，message 原样使用用户这条消息；任务继续在后台做，简短确认即可。` : ""),
       },
@@ -291,6 +295,7 @@ export class Harness {
   }
 
   taskCard(task, notification) {
+    if(this.history.records.get(task.id)?.detached)return;
     const outputs = this.validOutputs(task.outputs);
     const briefFields = this.briefCardFields(outputs);
     const entry = { role: "card", id: task.id, label: task.description, title: (briefFields.name || task.description) + (notification.status === "completed" ? "" : "（未完成）"),
@@ -459,16 +464,25 @@ export class Harness {
 
   taskHistory(id) { return this.history.history(id); }
 
-  async sendTask(id, text) {
+  async sendTask(id, text="", attachments=[]) {
     const task = this.history.get(id);
-    if (typeof text !== "string" || !text.trim() || Buffer.byteLength(text,"utf8") > 32*1024) throw new TaskError("续聊消息不能为空且不能超过 32KB",400,"invalid_task_text");
-    text = text.trim();
-    if (task.kind === "isolated") {
-      this.history.rememberPrompt(id,text);
-      this.runIsolated(task.title, text, { id, resumeTask: id }).catch((e) => this.log("task continuation failed:", this.connectors.redact(e.message)));
+    let message;
+    try {message=validateMessage(config.root,text,attachments);}
+    catch(e) {throw new TaskError(e.message,400,"invalid_task_text");}
+    text=message.text;
+    const atts=await prepareAttachments(config.root,message.attachments);
+    const originalAvailable=this.main&&!this.main.ended&&task.sessionId===this.main.sessionId;
+    if(atts.length&&originalAvailable&&this.main.tasks.list().some((t)=>t.id===id)) {
+      // Move image continuations to an isolated query without leaving the original worker writing in parallel.
+      try{await this.stopTask(id);}catch(e){if(e.code!=="task_ended")throw e;}
+    }
+    if (task.kind === "isolated" || !originalAvailable || atts.length) {
+      const context=this.history.continuationContext(id);
+      this.history.rememberPrompt(id,text,atts);
+      // SendMessage accepts text only. Uploaded images use an isolated background message with image blocks.
+      this.runIsolated(task.title, text, { id, resumeTask:id, attachments:atts, continuationContext:context }).catch((e) => this.log("task continuation failed:", this.connectors.redact(e.message)));
       return id;
     }
-    if (!this.main || this.main.ended || task.sessionId !== this.main.sessionId) throw new TaskError("原任务会话暂不可用，请恢复原主会话后再试",503,"session_unavailable");
     this.history.rememberPrompt(id,text);
     this.turnQueue.push({ source: "task", taskContinuation: { id, text },
       input: { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } });
@@ -476,7 +490,11 @@ export class Harness {
     return id;
   }
 
-  runningJobs() { return [...this.running].map(([id,job]) => ({ id, ...job })); }
+  runningJobs() {
+    const jobs=new Map([...this.running].map(([id,job])=>[id,{id,...job}]));
+    for(const task of this.backgroundTasks())if(!this.history.records.get(task.id)?.detached)jobs.set(task.id,{id:task.id,label:task.description,title:task.description,started:task.startedAt});
+    return [...jobs.values()];
+  }
   recentJobs() { return this.history.recent(); }
 
   onMainMessage(m, main = this.main) {
@@ -557,6 +575,7 @@ export class Harness {
       if (m.message?.usage) {
         const tokens = inputUsage(m.message.usage);
         this.log(`[context] input=${tokens} target=${config.context.inputLimit} trigger=${config.context.triggerTokens}`);
+        this.log(`[usage] estimated_usd=${estimateUsageCost(main.settings?.model||config.model,m.message.usage).toFixed(6)}`);
       }
       for (const b of m.message?.content || []) {
         if (b.type === "text") main.reply += (main.reply ? "\n\n" : "") + b.text;
@@ -625,25 +644,13 @@ export class Harness {
   // attachments: [{ path: "data/uploads/...", name, kind: "image" | "file" | "voice" }], already uploaded.
   async send(text, source = "app", attachments = []) {
     if (!this.main) throw new Error("main thread not ready");
-    const atts = [];
-    for (const a of attachments) {
-      const abs = path.resolve(config.root, a.path || "");
-      if (!abs.startsWith(path.join(config.data, "uploads") + path.sep) || !fs.existsSync(abs)) continue;
-      const att = { path: path.relative(config.root, abs), name: a.name || path.basename(abs), kind: KIND_LABEL[a.kind] ? a.kind : "file" };
-      if (att.kind === "voice") {
-        try {
-          att.transcript = await transcribe(fs.readFileSync(abs), audioFormat(abs));
-          fs.writeFileSync(abs.replace(/\.[^.]+$/, "") + ".txt", att.transcript + "\n");
-        } catch (e) {
-          att.transcript = `（转写失败：${e.message}）`;
-        }
-      }
-      atts.push(att);
-    }
+    const message=validateMessage(config.root,text,attachments);
+    text=message.text;
+    const atts=await prepareAttachments(config.root,message.attachments);
     const id = crypto.randomUUID();
     const entry = { role: "user", id, text, ts: Date.now(), source };
     if (atts.length) entry.attachments = atts;
-    this.turnQueue.push({ id, entry, source, input: { type: "user", message: { role: "user", content: userContent(text, atts) }, parent_tool_use_id: null } });
+    this.turnQueue.push({ id, entry, source, input: { type: "user", message: { role: "user", content: userContent(config.root,text, atts) }, parent_tool_use_id: null } });
     this.bus.emit({ t: "user", id, text, source, ts: entry.ts, attachments: atts });
     await this.scheduleDispatch();
     return id;
@@ -666,7 +673,7 @@ export class Harness {
       const turn = this.turnQueue[index];
       if (typeof text !== "string" || (!text.trim() && !turn.entry.attachments?.length)) throw new Error("排队消息不能为空");
       turn.entry.text = text.trim();
-      turn.input.message.content = userContent(turn.entry.text, turn.entry.attachments || []);
+      turn.input.message.content = userContent(config.root,turn.entry.text, turn.entry.attachments || []);
       event = { t: "queue_update", id, state: "edited", text: turn.entry.text };
     }
     // All connected Apps observe the same queue; too_late is returned only to the requester.
@@ -705,14 +712,19 @@ export class Harness {
 
   // ---------- isolated sessions (cron, catch-up, night tidy) ----------
 
-  runIsolated(label, prompt, { id = crypto.randomUUID(), resumeTask } = {}) {
-    this.history.put(id, { kind: "isolated", title: label, status: "running" });
+  runIsolated(label, prompt, { id = crypto.randomUUID(), resumeTask, attachments=[], continuationContext } = {}) {
+    const prior=resumeTask&&this.history.get(resumeTask);
+    this.history.put(id, { title: label, status: "running",...(prior?{detached:true}:{kind:"isolated",instruction:prompt}) });
     this.running.set(id, { label, started: Date.now() });
     const run = async () => {
       const job = { label, outputs: new Set(), text: "" };
       const started = Date.now();
+      const current=resumeTask&&this.history.get(resumeTask);
+      const resume=current?.kind==="isolated"&&this.history.transcript(current).length?current.sessionId:null;
+      const backgroundContext=!resume&&continuationContext?this.history.continuationContext(id):null;
+      const transcripts=current&&!resume?[...(current.transcripts||[]),{kind:current.kind,sessionId:current.sessionId,continuation:current.continuation}]:current?.transcripts||[];
       this.running.set(id, { label, started });
-      this.history.put(id, { status: "running", startedAt: started });
+      this.history.put(id, { kind:"isolated",status: "running",...(current&&{transcripts,continuation:!resume||current.continuation}),...(current&&!resume&&{sessionId:null}),...(!prior&&{startedAt:started}) });
       this.bus.emit({ t: "job", phase: "started", id, label });
       this.log(`job start: ${label}`);
       let q;
@@ -720,10 +732,10 @@ export class Harness {
       const compaction = this.compactionControl(() => q);
       try {
         // Streaming input permits live effort control in PreCompact, just as in the main session.
-        const resume = resumeTask && this.history.get(resumeTask).sessionId;
-        if (resumeTask && !resume) throw new Error("任务原会话记录暂不可用，无法续聊");
-        q = this.queryFactory({ prompt: inbox, options: { ...this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), compaction }), ...(resume && { resume }) } });
-        inbox.push({ type: "user", message: { role: "user", content: prompt }, parent_tool_use_id: null });
+        const options={...this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), compaction }),...(resume&&{resume})};
+        q = this.queryFactory({ prompt: inbox, options });
+        const text=backgroundContext?`${backgroundContext}\n\n本次用户消息：\n${prompt}`:prompt;
+        inbox.push({ type: "user", message: { role: "user", content: userContent(config.root,text,attachments) }, parent_tool_use_id: null });
         for await (const m of q) {
           if (m.type === "system" && m.subtype === "init") this.history.put(id, { sessionId: m.session_id });
           if (m.type === "system" && m.subtype === "compact_boundary") job.error = undefined;
@@ -731,6 +743,7 @@ export class Harness {
             job.error = `Error during compaction: ${m.compact_error || "unknown"}`;
           }
           if (m.type === "assistant" && !m.parent_tool_use_id) {
+            if(m.message?.usage)this.log(`[usage] estimated_usd=${estimateUsageCost(options.model,m.message.usage).toFixed(6)}`);
             for (const b of m.message?.content || []) if (b.type === "text") {
               if (m.error || (m.message?.model === "<synthetic>" && contextFailure(b.text))) job.error = b.text;
               else job.text = b.text;
@@ -755,8 +768,8 @@ export class Harness {
       }
       const outputs = this.validOutputs(job.outputs);
       const briefFields = this.briefCardFields(outputs);
-      const entry = { role: "card", id, label, title: (briefFields.name || label) + (job.ok ? "" : "（未完成）"), outputs, ...briefFields, ok: !!job.ok, ts: Date.now() };
-      this.history.put(id, { status: job.ok ? "done" : "error", endedAt: entry.ts, outputs, ...this.briefCardFields(outputs) });
+      const entry = { role: "card", id, label, title: (briefFields.name || label) + (job.ok ? "" : "（未完成）"), outputs, ...briefFields, ok: !!job.ok, ts: Date.now(),...(prior&&{taskContinuation:true}) };
+      this.history.put(id, { status: job.ok ? "done" : "error", endedAt: entry.ts, latestResult:this.connectors.redact(job.text), outputs:[...new Set([...(prior?.outputs||[]),...outputs])], ...this.briefCardFields(outputs) });
       appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - started });
       if (outputs.length) appendJsonl(config.chatLog, entry);
       this.bus.emit({ t: "job", phase: "done", ...entry });
@@ -769,25 +782,6 @@ export class Harness {
     this.jobChain = p.catch(() => {});
     return p;
   }
-}
-
-// Text plus a list of attachment paths; images also go in as image blocks so the model sees them right away.
-function userContent(text, atts) {
-  if (!atts.length) return text;
-  const lines = atts.map((a) => {
-    if (a.kind === "voice") return `- ${a.path}（语音笔记，转写：${a.transcript || "空"}）`;
-    if (a.kind === "image") return `- ${a.path}（图片，已附在本条消息里）`;
-    return `- ${a.path}（文件，需要时自己读）`;
-  });
-  const body = `${text || (atts.every((a) => a.kind === "voice") ? "（一段语音笔记）" : "（发来了附件）")}\n\n[附件]\n${lines.join("\n")}`;
-  const blocks = [{ type: "text", text: body }];
-  for (const a of atts) {
-    const type = IMAGE_TYPES[path.extname(a.path).toLowerCase()];
-    if (a.kind !== "image" || !type) continue;
-    const buf = fs.readFileSync(path.join(config.root, a.path));
-    if (buf.length <= 5 * 1024 * 1024) blocks.push({ type: "image", source: { type: "base64", media_type: type, data: buf.toString("base64") } });
-  }
-  return blocks;
 }
 
 function toolHint(b) {

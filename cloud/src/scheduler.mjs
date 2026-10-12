@@ -50,7 +50,8 @@ export function cleanWorkspace(log) {
 }
 
 // Cron and /api/run share the same routing. Maintenance deliberately has no main-session context.
-export async function runScheduledTask(harness, job) {
+export async function runScheduledTask(harness, job, {health}={}) {
+  if(job.kind==="health-sync") {await health.sync();return "health-sync";}
   const label = job.name || job.id;
   if (/^\[(?:补读|夜间整理)\]/.test(job.prompt || "")) {
     harness.runIsolated(label, job.prompt).catch((e) => harness.log("scheduled maintenance failed:", harness.connectors.redact(e.message)));
@@ -61,7 +62,7 @@ export async function runScheduledTask(harness, job) {
   return "alarm";
 }
 
-export function startScheduler({ harness, log, clock = () => new Date() }) {
+export function startScheduler({ harness, log, health, clock = () => new Date() }) {
   let lastKey = "";
   const tick = () => {
     const now = clock();
@@ -84,7 +85,7 @@ export function startScheduler({ harness, log, clock = () => new Date() }) {
       } else if (job.kind === "cleanup") {
         cleanWorkspace(log);
       } else {
-        runScheduledTask(harness, job).catch((e) => log("cron failed:", harness.connectors.redact(e.message)));
+        runScheduledTask(harness, job,{health}).catch((e) => log("cron failed:", harness.connectors.redact(e.message)));
       }
     }
   };

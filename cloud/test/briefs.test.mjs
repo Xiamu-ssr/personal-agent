@@ -33,9 +33,9 @@ test("validation rejects resources, scripts, oversize files and clearly tall con
     assert.match(validateBrief(`<section class="card">${source}</section>`).error,/外部|脚本|事件/);
   }
   assert.equal(validateBrief('<section class="card"><img src="data:image/png;base64,AA=="><svg><use href="#shape"/></svg></section>').error,undefined);
-  assert.match(validateBrief(minimal("文".repeat(600))).error,/内容过高.*560px/);
+  assert.match(validateBrief(minimal("文".repeat(1200))).error,/内容过高.*960px/);
   assert.match(validateBrief('<section class="card">'+"文".repeat(30_000)+'</section>').error,/80KB/);
-  assert.match(validateBrief('<section class="card" style="min-height:900px">长</section>').error,/内容过高/);
+  assert.match(validateBrief('<section class="card" style="min-height:1100px">长</section>').error,/内容过高/);
 });
 
 test("button bridge URL-encodes the user's original text and ignores unrelated clicks",()=>{
@@ -75,7 +75,7 @@ test("PostToolUse validates main/fork/isolated HTML writes, removes invalid outp
     const hook=options.hooks.PostToolUse[0].hooks[0];
     try {
       for(const agent_id of [undefined,"local-child"]) {
-        fs.writeFileSync(file,minimal("文".repeat(600)));
+        fs.writeFileSync(file,minimal("文".repeat(1200)));
         assert.match((await hook({tool_input:{file_path:file},agent_id})).reason,/简报校验失败.*内容过高/);
         assert.equal(outputs.size,0);fs.writeFileSync(file,minimal());
         assert.deepEqual(await hook({tool_input:{file_path:file},agent_id}),{});assert.ok(outputs.has(rel));

@@ -53,10 +53,10 @@ test("real CLI main/fork/isolated Write+Edit get Chinese brief errors, repair HT
     if (hasInput(body, "task-notification")) return textReply("后台 HTML 完成");
     const mode = isFork(body) ? "FORK" : hasInput(body, "ISOLATED_WRITE") ? "ISOLATED" : "MAIN";
     const step = (states.get(mode) || 0) + 1; states.set(mode, step);
-    if (step === 1) return toolReply(`bad_${mode}`, "Write", { file_path: path.join(config.root, paths[mode]), content: brief("文".repeat(500)) });
+    if (step === 1) return toolReply(`bad_${mode}`, "Write", { file_path: path.join(config.root, paths[mode]), content: brief("文".repeat(1200)) });
     if (step === 2) {
       assert.match(JSON.stringify(body.messages), /简报校验失败.*内容过高/);
-      return toolReply(`fix_${mode}`, "Edit", { file_path: path.join(config.root, paths[mode]), old_string: "文".repeat(500), new_string: "修正后的结论" });
+      return toolReply(`fix_${mode}`, "Edit", { file_path: path.join(config.root, paths[mode]), old_string: "文".repeat(1200), new_string: "修正后的结论" });
     }
     return textReply(mode + " HTML 完成");
   });

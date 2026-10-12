@@ -1,0 +1,517 @@
+v20.19.4
+
+> personal-agent-cloud@0.6.0 test
+> node --test --test-concurrency=2 test/*.test.mjs
+
+TAP version 13
+# Subtest: 1–6 HTML cards become complete independent offline documents with shared and custom styles
+ok 1 - 1–6 HTML cards become complete independent offline documents with shared and custom styles
+  ---
+  duration_ms: 3.024416
+  ...
+# Subtest: validation rejects resources, scripts, oversize files and clearly tall content in Chinese
+ok 2 - validation rejects resources, scripts, oversize files and clearly tall content in Chinese
+  ---
+  duration_ms: 3.195042
+  ...
+# Subtest: button bridge URL-encodes the user's original text and ignores unrelated clicks
+ok 3 - button bridge URL-encodes the user's original text and ignores unrelated clicks
+  ---
+  duration_ms: 0.843167
+  ...
+# Subtest: listing reads only valid HTML, sorts timestamps, respects local days, ignores JSON and symlinks
+ok 4 - listing reads only valid HTML, sorts timestamps, respects local days, ignores JSON and symlinks
+  ---
+  duration_ms: 25.308458
+  ...
+# Subtest: PostToolUse validates main/fork/isolated HTML writes, removes invalid outputs, and rejects JSON writes
+ok 5 - PostToolUse validates main/fork/isolated HTML writes, removes invalid outputs, and rejects JSON writes
+  ---
+  duration_ms: 14.179583
+  ...
+# Subtest: released catalog has seven independent mail providers plus Tavily/WeRead, real icon files and no legacy/custom/builtin fields
+ok 6 - released catalog has seven independent mail providers plus Tavily/WeRead, real icon files and no legacy/custom/builtin fields
+  ---
+  duration_ms: 2.090958
+  ...
+# Subtest: every independent mail provider uses the shared read-only IMAP wire code and keeps account/cursor namespaces separate
+ok 7 - every independent mail provider uses the shared read-only IMAP wire code and keeps account/cursor namespaces separate
+  ---
+  duration_ms: 301.6795
+  ...
+# Subtest: Tavily fake HTTP uses Bearer, free usage test, search depth mapping and full extract; masks secrets and handles failures
+ok 8 - Tavily fake HTTP uses Bearer, free usage test, search depth mapping and full extract; masks secrets and handles failures
+  ---
+  duration_ms: 47.49325
+  ...
+# Subtest: official WeRead fake gateway verifies smallest notebook page and five tools with flat exact-case params/version, pagination, auth and upgrade errors
+ok 9 - official WeRead fake gateway verifies smallest notebook page and five tools with flat exact-case params/version, pagination, auth and upgrade errors
+  ---
+  duration_ms: 20.486
+  ...
+# Subtest: validate before test/save, atomic private persistence, multiple accounts and no credential outputs
+ok 10 - validate before test/save, atomic private persistence, multiple accounts and no credential outputs
+  ---
+  duration_ms: 23.58725
+  ...
+# Subtest: masked or omitted secret survives update; failed test never saves; concurrent edits retain both changes
+ok 11 - masked or omitted secret survives update; failed test never saves; concurrent edits retain both changes
+  ---
+  duration_ms: 27.3545
+  ...
+# Subtest: test updates safe status, restart hardens permissions, removing last account unmounts MCP and clears state
+ok 12 - test updates safe status, restart hardens permissions, removing last account unmounts MCP and clears state
+  ---
+  duration_ms: 24.353
+  ...
+# Subtest: legacy directories are not opened, removed custom connectors and unconfigured directories are never read
+ok 13 - legacy directories are not opened, removed custom connectors and unconfigured directories are never read
+  ---
+  duration_ms: 0.888125
+  ...
+# Subtest: all four management tools return no values; tested failures mask staged credentials
+ok 14 - all four management tools return no values; tested failures mask staged credentials
+  ---
+  duration_ms: 20.73875
+  ...
+# Subtest: known broken config and symlink paths fail closed without being overwritten
+ok 15 - known broken config and symlink paths fail closed without being overwritten
+  ---
+  duration_ms: 0.688625
+  ...
+# Subtest: 200K CLI window reserves 20K output and 13K summary for a 167K trigger
+ok 16 - 200K CLI window reserves 20K output and 13K summary for a 167K trigger
+  ---
+  duration_ms: 0.549042
+  ...
+# Subtest: only the three settings models use a fixed 200K policy; obsolete env overrides have no effect
+ok 17 - only the three settings models use a fixed 200K policy; obsolete env overrides have no effect
+  ---
+  duration_ms: 0.170625
+  ...
+# Subtest: input usage counts cached reads/writes exactly once and takes the last server-side iteration
+ok 18 - input usage counts cached reads/writes exactly once and takes the last server-side iteration
+  ---
+  duration_ms: 0.120959
+  ...
+# Subtest: wire IMAP search pagination is by date with stable ties, filters, snapshots and all-account results
+ok 19 - wire IMAP search pagination is by date with stable ties, filters, snapshots and all-account results
+  ---
+  duration_ms: 235.853333
+  ...
+# Subtest: read decodes MIME/HTML, lists and saves attachments, caps body at 20k and leaves every flag unchanged
+ok 20 - read decodes MIME/HTML, lists and saves attachments, caps body at 20k and leaves every flag unchanged
+  ---
+  duration_ms: 88.3935
+  ...
+# Subtest: read_since is a UID prefix, uncommitted batches repeat, commit survives query/process recreation and never regresses
+ok 21 - read_since is a UID prefix, uncommitted batches repeat, commit survives query/process recreation and never regresses
+  ---
+  duration_ms: 142.132083
+  ...
+# Subtest: account changes invalidate outstanding cursors and authentication/network errors are Chinese
+ok 22 - account changes invalidate outstanding cursors and authentication/network errors are Chinese
+  ---
+  duration_ms: 90.666667
+  ...
+# Subtest: 163 and 126 send a second ID after login, even when the first ID returned full server information
+ok 23 - 163 and 126 send a second ID after login, even when the first ID returned full server information
+  ---
+  duration_ms: 47.117959
+  ...
+# Subtest: connector guard rejects config paths for every specified file tool; data remains accessible
+ok 24 - connector guard rejects config paths for every specified file tool; data remains accessible
+  ---
+  duration_ms: 3.124291
+  ...
+# Subtest: Bash rejects literal configuration access, including accounts.json outside the usual path
+ok 25 - Bash rejects literal configuration access, including accounts.json outside the usual path
+  ---
+  duration_ms: 0.13775
+  ...
+# Subtest: existing symlink aliases and newly created files beneath them are guarded
+ok 26 - existing symlink aliases and newly created files beneath them are guarded
+  ---
+  duration_ms: 0.351583
+  ...
+# Subtest: active turn finishes; queued next turn uses rebuilt MCP and resumes same session; pending messages survive
+ok 27 - active turn finishes; queued next turn uses rebuilt MCP and resumes same session; pending messages survive
+  ---
+  duration_ms: 60.748833
+  ...
+# Subtest: harness hooks enforce secret isolation and each main/isolated query gets distinct SDK transports
+ok 28 - harness hooks enforce secret isolation and each main/isolated query gets distinct SDK transports
+  ---
+  duration_ms: 3.44125
+  ...
+# Subtest: a message arriving after the SDK query ended is dispatched to a new query, not a closed inbox
+ok 29 - a message arriving after the SDK query ended is dispatched to a new query, not a closed inbox
+  ---
+  duration_ms: 3.190917
+  ...
+# Subtest: withdrawing the last queued message while compaction restore awaits cannot dispatch an empty queue
+ok 30 - withdrawing the last queued message while compaction restore awaits cannot dispatch an empty queue
+  ---
+  duration_ms: 1.793208
+  ...
+# Subtest: main, isolated and subagent env share the model cap and the 167K estimated input trigger
+ok 31 - main, isolated and subagent env share the model cap and the 167K estimated input trigger
+  ---
+  duration_ms: 3.556041
+  ...
+# Subtest: stuck resumed conversation resets once, replays only a turn without tools, and keeps queued turns/data/state
+ok 32 - stuck resumed conversation resets once, replays only a turn without tools, and keeps queued turns/data/state
+  ---
+  duration_ms: 18.7625
+  ...
+# Subtest: fallback has a bounded retry and does not repeat a turn that already used tools
+ok 33 - fallback has a bounded retry and does not repeat a turn that already used tools
+  ---
+  duration_ms: 34.592084
+  ...
+# Subtest: ordinary API errors become Chinese without erasing a resumable session
+ok 34 - ordinary API errors become Chinese without erasing a resumable session
+  ---
+  duration_ms: 1.848667
+  ...
+# Subtest: manual compaction failure opens a fresh session without replaying /compact
+ok 35 - manual compaction failure opens a fresh session without replaying /compact
+  ---
+  duration_ms: 10.973291
+  ...
+# Subtest: a normal answer discussing a past API error does not reset the session
+ok 36 - a normal answer discussing a past API error does not reset the session
+  ---
+  duration_ms: 1.548875
+  ...
+# Subtest: a process ending during a turn releases busy state and reports a Chinese failure
+ok 37 - a process ending during a turn releases busy state and reports a Chinese failure
+  ---
+  duration_ms: 1.664
+  ...
+# Subtest: native task-result turn resets stale state, stays busy until idle, and queues users in order
+ok 38 - native task-result turn resets stale state, stays busy until idle, and queues users in order
+  ---
+  duration_ms: 5.141542
+  ...
+# Subtest: a spontaneous context failure uses recovery without replaying a notification or an old user
+ok 39 - a spontaneous context failure uses recovery without replaying a notification or an old user
+  ---
+  duration_ms: 16.234667
+  ...
+# Subtest: background level replaces activity, stop targets one task, and process end clears activity
+ok 40 - background level replaces activity, stop targets one task, and process end clears activity
+  ---
+  duration_ms: 46.373667
+  ...
+# Subtest: an alarm joins the same queue, retains its source, and native turn during restore cannot interleave it
+ok 41 - an alarm joins the same queue, retains its source, and native turn during restore cannot interleave it
+  ---
+  duration_ms: 6.357375
+  ...
+# Subtest: authenticated HTTP/WS task stop has clear errors and manual briefs use schedule alarms
+ok 42 - authenticated HTTP/WS task stop has clear errors and manual briefs use schedule alarms
+  ---
+  duration_ms: 88.693875
+  ...
+# Subtest: isolated HTTP CRUD/test/catalog via curl, safe errors, permissions and online/offline device deletion
+ok 43 - isolated HTTP CRUD/test/catalog via curl, safe errors, permissions and online/offline device deletion
+  ---
+  duration_ms: 375.012833
+  ...
+# Subtest: real SDK MCP initialize/list/call exchange: management is safe and rebuilt email tools run against local IMAP
+ok 44 - real SDK MCP initialize/list/call exchange: management is safe and rebuilt email tools run against local IMAP
+  ---
+  duration_ms: 173.551417
+  ...
+# Subtest: migration converts every JSON component, dry run is read only, apply backs up originals and reruns do nothing
+ok 45 - migration converts every JSON component, dry run is read only, apply backs up originals and reruns do nothing
+  ---
+  duration_ms: 19.501084
+  ...
+# Subtest: migration preserves invalid JSON and conflicting HTML; exact generated HTML lets an interrupted migration finish
+ok 46 - migration preserves invalid JSON and conflicting HTML; exact generated HTML lets an interrupted migration finish
+  ---
+  duration_ms: 4.04125
+  ...
+# Subtest: page screenshot path limits are enforced before browser launch, including traversal and symlink escape; no browser gives Chinese reason
+ok 47 - page screenshot path limits are enforced before browser launch, including traversal and symlink escape; no browser gives Chinese reason
+  ---
+  duration_ms: 2.126916
+  ...
+# Subtest: local Chrome screenshots have bounded JPEG size, skin colors, no card blank screens, block external HTTP/WebSocket and only serve local site assets
+ok 48 - local Chrome screenshots have bounded JPEG size, skin colors, no card blank screens, block external HTTP/WebSocket and only serve local site assets
+  ---
+  duration_ms: 1345.702625
+  ...
+# Subtest: screenshot timeout closes its browser and releases the single-call slot
+ok 49 - screenshot timeout closes its browser and releases the single-call slot
+  ---
+  duration_ms: 2368.849417
+  ...
+# Subtest: all twelve skin/palette combinations have readable variables, paper title font and picked table column, without horizontal overflow at 320px
+ok 50 - all twelve skin/palette combinations have readable variables, paper title font and picked table column, without horizontal overflow at 320px
+  ---
+  duration_ms: 521.18775
+  ...
+# Subtest: business prompt keeps persona/memory, removes format and duplicate Agent instructions; guide is appended only to brief schedules
+ok 51 - business prompt keeps persona/memory, removes format and duplicate Agent instructions; guide is appended only to brief schedules
+  ---
+  duration_ms: 3.976209
+  ...
+# Subtest: compaction/overflow errors become Chinese; ordinary auth/rate/output errors do not trigger a reset
+ok 52 - compaction/overflow errors become Chinese; ordinary auth/rate/output errors do not trigger a reset
+  ---
+  duration_ms: 0.859667
+  ...
+# Subtest: bounded recovery preserves recent intent, attachments and memory/todo pointers without modifying data
+ok 53 - bounded recovery preserves recent intent, attachments and memory/todo pointers without modifying data
+  ---
+  duration_ms: 1.205333
+  ...
+# Subtest: tail reads discard incomplete records and do not allocate the whole archive
+ok 54 - tail reads discard incomplete records and do not allocate the whole archive
+  ---
+  duration_ms: 0.533916
+  ...
+# Subtest: real CLI main/fork/isolated Write+Edit get Chinese brief errors, repair HTML and complete with valid path cards
+ok 55 - real CLI main/fork/isolated Write+Edit get Chinese brief errors, repair HTML and complete with valid path cards
+  ---
+  duration_ms: 1144.7315
+  ...
+# Subtest: real SDK queue can edit/remove via WS across Apps, reconnect restores pending attachments, dispatch alone writes final text and too_late is requester-only
+ok 56 - real SDK queue can edit/remove via WS across Apps, reconnect restores pending attachments, dispatch alone writes final text and too_late is requester-only
+  ---
+  duration_ms: 358.650833
+  ...
+# Subtest: authenticated HTTP profile round-trips all 16 avatars privately, state exposes names and briefs are independent HTML documents with bounded days
+ok 57 - authenticated HTTP profile round-trips all 16 avatars privately, state exposes names and briefs are independent HTML documents with bounded days
+  ---
+  duration_ms: 189.569208
+  ...
+# Subtest: device image MCP content supports one/multiple/mixed images, keeps metadata and rejects >5MB or malformed data in Chinese
+ok 58 - device image MCP content supports one/multiple/mixed images, keeps metadata and rejects >5MB or malformed data in Chinese
+  ---
+  duration_ms: 21.630041
+  ...
+# 2026-10-12T14:44:23.811Z device call: fake-mac computer_use ok image 0ms
+# Subtest: real SDK sends device screenshot as an Anthropic image block and Tavily/WeRead MCP requests never expose credentials to the model
+ok 59 - real SDK sends device screenshot as an Anthropic image block and Tavily/WeRead MCP requests never expose credentials to the model
+  ---
+  duration_ms: 275.516833
+  ...
+# Subtest: schedule guard denies main Bash in Chinese, permits fork's Bash/Write, and native completion wakes main with a card
+ok 60 - schedule guard denies main Bash in Chinese, permits fork's Bash/Write, and native completion wakes main with a card
+  ---
+  duration_ms: 1832.4225
+  ...
+# Subtest: three denied schedule calls fail open on the fourth; the next schedule resets the guard
+ok 61 - three denied schedule calls fail open on the fourth; the next schedule resets the guard
+  ---
+  duration_ms: 1192.179042
+  ...
+# Subtest: user main Bash executes without the schedule guard
+ok 62 - user main Bash executes without the schedule guard
+  ---
+  duration_ms: 1151.553625
+  ...
+# Subtest: guard validates exact fork/background values, excludes child and isolated tools, and resets every turn
+ok 63 - guard validates exact fork/background values, excludes child and isolated tools, and resets every turn
+  ---
+  duration_ms: 6.743333
+  ...
+# Subtest: cron is an alarm for briefs; compact, cleanup, catch-up and night tidy keep their routing
+ok 64 - cron is an alarm for briefs; compact, cleanup, catch-up and night tidy keep their routing
+  ---
+  duration_ms: 14.2415
+  ...
+# Subtest: actual SDK child inherits 128K; cached total below 167K stays; above 167K compacts at low effort
+ok 65 - actual SDK child inherits 128K; cached total below 167K stays; above 167K compacts at low effort
+  ---
+  duration_ms: 293.168458
+  ...
+# Subtest: isolated SDK query uses the same real wire cap and compaction controls
+ok 66 - isolated SDK query uses the same real wire cap and compaction controls
+  ---
+  duration_ms: 249.227417
+  ...
+# Subtest: native subagent inherits 128K and compacts after cached input crosses 167K
+ok 67 - native subagent inherits 128K and compacts after cached input crosses 167K
+  ---
+  duration_ms: 319.3415
+  ...
+# Subtest: CLI prompt-too-long compaction retry trims old history and can self-rescue
+ok 68 - CLI prompt-too-long compaction retry trims old history and can self-rescue
+  ---
+  duration_ms: 284.546459
+  ...
+# Subtest: actual resumed SDK session escapes failed compaction, keeps data, hides English, and isolated jobs complete
+ok 69 - actual resumed SDK session escapes failed compaction, keeps data, hides English, and isolated jobs complete
+  ---
+  duration_ms: 876.182875
+  ...
+# Subtest: real streaming CLI forks from an alarm, interrupt spares it, and its notification wakes a queued main turn with a brief card
+ok 70 - real streaming CLI forks from an alarm, interrupt spares it, and its notification wakes a queued main turn with a brief card
+  ---
+  duration_ms: 553.394667
+  ...
+# Subtest: real CLI stopTask stops only the selected fork and reports stopped; another fork completes
+ok 71 - real CLI stopTask stops only the selected fork and reports stopped; another fork completes
+  ---
+  duration_ms: 363.518958
+  ...
+# Subtest: 真实 SDK 切换后三模型下一轮的 wire model 改变，原会话和内置系统提示词保留
+ok 72 - 真实 SDK 切换后三模型下一轮的 wire model 改变，原会话和内置系统提示词保留
+  ---
+  duration_ms: 696.443625
+  ...
+# Subtest: 三模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用内置压缩并恢复 max
+    # Subtest: anthropic/claude-haiku-5.5
+    ok 1 - anthropic/claude-haiku-5.5
+      ---
+      duration_ms: 308.753166
+      ...
+    # Subtest: z-ai/glm-5.3-flash
+    ok 2 - z-ai/glm-5.3-flash
+      ---
+      duration_ms: 303.110209
+      ...
+    # Subtest: z-ai/glm-5.3-flashx
+    ok 3 - z-ai/glm-5.3-flashx
+      ---
+      duration_ms: 302.011708
+      ...
+    1..3
+ok 73 - 三模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用内置压缩并恢复 max
+  ---
+  duration_ms: 914.467959
+  ...
+# Subtest: 真实 SendMessage 恢复已完成 fork：同一任务 id、原始上下文、新结果和 transcript history
+ok 74 - 真实 SendMessage 恢复已完成 fork：同一任务 id、原始上下文、新结果和 transcript history
+  ---
+  duration_ms: 584.271292
+  ...
+# Subtest: 真实 SDK 权限切换在下一轮生效，保留主会话且不发 App 授权请求
+ok 75 - 真实 SDK 权限切换在下一轮生效，保留主会话且不发 App 授权请求
+  ---
+  duration_ms: 303.942292
+  ...
+# Subtest: 隔离任务用选中的模型和 preset+append，续聊 resume 原会话而且原结果仍在上下文
+ok 76 - 隔离任务用选中的模型和 preset+append，续聊 resume 原会话而且原结果仍在上下文
+  ---
+  duration_ms: 504.775917
+  ...
+# Subtest: 切模型时运行中的 fork 以原 id 恢复，新模型请求仍包含任务上下文
+ok 77 - 切模型时运行中的 fork 以原 id 恢复，新模型请求仍包含任务上下文
+  ---
+  duration_ms: 2532.09225
+  ...
+# Subtest: 运行中的 fork 接收续聊，在后续请求中保留原 prompt 和用户新消息
+ok 78 - 运行中的 fork 接收续聊，在后续请求中保留原 prompt 和用户新消息
+  ---
+  duration_ms: 464.340125
+  ...
+# Subtest: real SDK restart continuation carries original context and uploaded image, denies health write, stores a new transcript under the original task and notifies
+ok 79 - real SDK restart continuation carries original context and uploaded image, denies health write, stores a new transcript under the original task and notifies
+  ---
+  duration_ms: 294.087167
+  ...
+# Subtest: settings defaults, partial updates, persisted private file and strict validation ignore obsolete env choices
+ok 80 - settings defaults, partial updates, persisted private file and strict validation ignore obsolete env choices
+  ---
+  duration_ms: 17.960375
+  ...
+# Subtest: history reads only task transcript text, one-line tool summaries and final result; thinking, outputs and secrets never leave
+ok 81 - history reads only task transcript text, one-line tool summaries and final result; thinking, outputs and secrets never leave
+  ---
+  duration_ms: 13.676375
+  ...
+# Subtest: authenticated settings/history/send APIs validate bodies, preserve task id, and expose ids on job lists
+ok 82 - authenticated settings/history/send APIs validate bodies, preserve task id, and expose ids on job lists
+  ---
+  duration_ms: 33.315958
+  ...
+# Subtest: v0.6 guide, three-column six-row comparison and steps pass; horizontal groups share height; >960px and >240 elements fail
+ok 83 - v0.6 guide, three-column six-row comparison and steps pass; horizontal groups share height; >960px and >240 elements fail
+  ---
+  duration_ms: 5.943333
+  ...
+# Subtest: startup backfills subagents only once, infers result status and paginates all history beyond 50 with stable timestamp ties
+ok 84 - startup backfills subagents only once, infers result status and paginates all history beyond 50 with stable timestamp ties
+  ---
+  duration_ms: 358.720208
+  ...
+# Subtest: restart continuation runs in an isolated background query with old instructions, steps/result and real image blocks under the original id
+ok 85 - restart continuation runs in an isolated background query with old instructions, steps/result and real image blocks under the original id
+  ---
+  duration_ms: 73.234959
+  ...
+# Subtest: message attachment validation is shared, rejects traversal/symlinks/kinds and allows empty text with uploads
+ok 86 - message attachment validation is shared, rejects traversal/symlinks/kinds and allows empty text with uploads
+  ---
+  duration_ms: 0.846792
+  ...
+# Subtest: health merges partial readings, rounds numeric values, keeps 90 days, fills seven API days and reads all weekly briefs/records
+ok 87 - health merges partial readings, rounds numeric values, keeps 90 days, fills seven API days and reads all weekly briefs/records
+  ---
+  duration_ms: 23.070125
+  ...
+# Subtest: health sync uses a shared 20-second budget, deduplicates concurrent sync and explains disabled capability
+ok 88 - health sync uses a shared 20-second budget, deduplicates concurrent sync and explains disabled capability
+  ---
+  duration_ms: 34.154042
+  ...
+# Subtest: health and managed skills are read-only through hooks, including symlink and Bash mutations
+ok 89 - health and managed skills are read-only through hooks, including symlink and Bash mutations
+  ---
+  duration_ms: 2.442667
+  ...
+# Subtest: startup migrations delete obsolete health metrics, append only speaking habits, migrate unknown models and add missing sync without changing other schedules
+ok 90 - startup migrations delete obsolete health metrics, append only speaking habits, migrate unknown models and add missing sync without changing other schedules
+  ---
+  duration_ms: 7.743792
+  ...
+# Subtest: calendar uses package lunar/holiday/shift dates and only mentions the day's solar term
+ok 91 - calendar uses package lunar/holiday/shift dates and only mentions the day's solar term
+  ---
+  duration_ms: 1.540834
+  ...
+# Subtest: authenticated brief item, paginated jobs, attachments and health HTTP contracts use local files and mocks
+ok 92 - authenticated brief item, paginated jobs, attachments and health HTTP contracts use local files and mocks
+  ---
+  duration_ms: 39.936167
+  ...
+# Subtest: health startup migration fails closed for a damaged schedule and readonly programmatic health reads remain available
+ok 93 - health startup migration fails closed for a damaged schedule and readonly programmatic health reads remain available
+  ---
+  duration_ms: 0.456875
+  ...
+# Subtest: running jobs include native tasks, and attachment continuation stops the original worker before the isolated query writes
+ok 94 - running jobs include native tasks, and attachment continuation stops the original worker before the isolated query writes
+  ---
+  duration_ms: 31.018584
+  ...
+# Subtest: history keeps the original agent prompt when a user repeats it, and does not label followups as agent after an archived transcript disappears
+ok 95 - history keeps the original agent prompt when a user repeats it, and does not label followups as agent after an archived transcript disappears
+  ---
+  duration_ms: 17.683292
+  ...
+# Subtest: Wind mock initializes/lists/tests seven services, forwards calls privately, truncates and handles Alice SSE with the same Key
+ok 96 - Wind mock initializes/lists/tests seven services, forwards calls privately, truncates and handles Alice SSE with the same Key
+  ---
+  duration_ms: 160.768125
+  ...
+# Subtest: Wind install rewrites credential/CLI/discovery instructions, keeps domain references, marks ownership, protects own skills and checks version on startup
+ok 97 - Wind install rewrites credential/CLI/discovery instructions, keeps domain references, marks ownership, protects own skills and checks version on startup
+  ---
+  duration_ms: 56.653334
+  ...
+1..97
+# tests 100
+# suites 0
+# pass 100
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 15515.227209

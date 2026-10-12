@@ -13,7 +13,7 @@ test("business prompt keeps persona/memory, removes format and duplicate Agent i
   assert.match(prompt,/data\/memory\/profile\/总档\.md/);assert.match(prompt,/只记事实/);
   const guide=fs.readFileSync(new URL("../../spec/prompts/brief-guide.md",import.meta.url),"utf8");
   assert.equal(validateBrief(guide.match(/```html\n([\s\S]*?)\n```/)[1]).error,undefined);
-  for(const term of ["360px","320–480px","560px","mist","mint","dusk","chip","timeline","tiles","metrics","note","data-prompt"]) assert.ok(guide.includes(term));
+  for(const term of ["360px","320–480px","960px","mist","mint","dusk","chip","timeline","tiles","metrics","note","data-prompt"]) assert.ok(guide.includes(term));
   const jobs=JSON.parse(fs.readFileSync(new URL("../seed/system/schedule.json",import.meta.url),"utf8"));
   const sent=[];const h={send:async(...args)=>sent.push(args)};
   for(const id of ["morning","evening","health-weekly"]) {

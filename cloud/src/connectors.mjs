@@ -5,31 +5,15 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import registry from "../connectors/index.mjs";
-import { config } from "./config.mjs";
+import { writePrivateJson } from "./private-json.mjs";
+import { config, VERSION } from "./config.mjs";
 
 export const SECRET_MASK = "••••";
 export class ConnectorError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
 }
 
-// Unique temporary files avoid colliding writers. The new inode is private even before rename.
-export function writePrivateJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomUUID()}.tmp`);
-  let fd;
-  try {
-    fd = fs.openSync(tmp, "wx", 0o600);
-    fs.fchmodSync(fd, 0o600);
-    fs.writeFileSync(fd, JSON.stringify(value, null, 2) + "\n");
-    fs.fsyncSync(fd);
-    fs.closeSync(fd);
-    fd = undefined;
-    fs.renameSync(tmp, file);
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-    fs.rmSync(tmp, { force: true });
-  }
-}
+export { writePrivateJson } from "./private-json.mjs";
 
 function readPrivateJson(file, fallback) {
   try {
@@ -69,6 +53,16 @@ export class ConnectorManager {
       this.pending.set(definition.name, new Map());
       if (configured) this.readState(definition.name); // Unconfigured legacy directories (including their state) are ignored.
     }
+  }
+
+  // Connector lifecycle hooks can install/version-check official skills without exposing credentials.
+  async initialize() {
+    const failures=[];
+    for(const definition of this.definitions.values())if(this.accounts.get(definition.name).length&&definition.install) {
+      try{await this.enqueue(definition.name,()=>definition.install(this.context(definition.name,this.accounts.get(definition.name))));}
+      catch(e){failures.push({name:definition.name,error:this.redact(e.message)});}
+    }
+    return failures;
   }
 
   definition(name) {
@@ -198,6 +192,7 @@ export class ConnectorManager {
       if (!this.definition(name).multiAccount && accounts.length) throw new ConnectorError("这个连接器只支持一个账号");
       await this.check(name, values);
       const record = { id: crypto.randomUUID().slice(0, 8), label: this.redact(this.definition(name).label(values), this.secrets(name, [values])), values, status: "ok", checkedAt: Date.now(), error: null };
+      if(this.definition(name).install)await this.definition(name).install(this.context(name,[...accounts,record]));
       // Create state.json on first account as well, with the same private, atomic write guarantees.
       this.writeState(name, this.readState(name));
       this.save(name, [...accounts, record]);
@@ -211,6 +206,7 @@ export class ConnectorManager {
       const values = this.values(name, patch, old.values);
       await this.check(name, values);
       const record = { ...old, label: this.redact(this.definition(name).label(values), this.secrets(name, [values])), values, status: "ok", checkedAt: Date.now(), error: null };
+      if(this.definition(name).install)await this.definition(name).install(this.context(name,this.accounts.get(name).map((a)=>a.id===id?record:a)));
       // A different mailbox under the same account id must never inherit its previous UID cursor.
       if (old.values.address !== values.address || old.values.host !== values.host || old.values.port !== values.port) {
         const state = this.readState(name);
@@ -225,6 +221,7 @@ export class ConnectorManager {
   removeAccount(name, id) {
     return this.enqueue(name, async () => {
       this.find(name, id);
+      if(this.accounts.get(name).length===1&&this.definition(name).uninstall)await this.definition(name).uninstall(this.context(name,this.accounts.get(name)));
       const state = this.readState(name);
       if (state.accounts) delete state.accounts[id];
       this.writeState(name, state);
@@ -247,7 +244,7 @@ export class ConnectorManager {
 
   context(name, accounts) {
     return {
-      root: this.root, workspace: path.join(this.root, "workspace"), timezone: config.timezone,
+      root: this.root, workspace: path.join(this.root, "workspace"), timezone: config.timezone,version:VERSION,
       redact: (value) => this.redact(value),
       readState: () => this.readState(name), writeState: (state) => this.writeState(name, state),
       pending: this.pending.get(name),
@@ -278,11 +275,11 @@ export class ConnectorManager {
   // Instances belong to ONE query: sharing an SDK MCP transport across main/isolated queries is unsafe.
   // Account mutations increment revision; the harness calls this again at the next turn boundary.
   mcpServers() {
-    const servers = { connectors: createSdkMcpServer({ name: "connectors", version: "0.3.0", tools: this.managementTools() }) };
+    const servers = { connectors: createSdkMcpServer({ name: "connectors", version: VERSION, tools: this.managementTools() }) };
     for (const definition of this.definitions.values()) {
       const accounts = structuredClone(this.accounts.get(definition.name));
       if (!accounts.length) continue;
-      servers[definition.name] = createSdkMcpServer({ name: definition.name, version: "0.3.0", tools: definition.tools(accounts, this.context(definition.name, accounts)) });
+      servers[definition.name] = createSdkMcpServer({ name: definition.name, version: VERSION, tools: definition.tools(accounts, this.context(definition.name, accounts)) });
     }
     return servers;
   }

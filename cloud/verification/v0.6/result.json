@@ -1,0 +1,32 @@
+{
+  "root": "/tmp/doudou-v06-verification-bdxsAy",
+  "briefItem": true,
+  "tool": "mcp__page__screenshot",
+  "cards": 3,
+  "files": [
+    {
+      "skin": "silver",
+      "file": "silver.jpg",
+      "bytes": 39486,
+      "path": "data/briefs/2026-10-12/新组件样例.html",
+      "width": 390,
+      "height": 1242
+    },
+    {
+      "skin": "paper",
+      "file": "paper.jpg",
+      "bytes": 39499,
+      "path": "data/briefs/2026-10-12/新组件样例.html",
+      "width": 390,
+      "height": 1242
+    },
+    {
+      "skin": "night",
+      "file": "night.jpg",
+      "bytes": 39935,
+      "path": "data/briefs/2026-10-12/新组件样例.html",
+      "width": 390,
+      "height": 1242
+    }
+  ]
+}

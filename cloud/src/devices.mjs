@@ -130,7 +130,7 @@ export class DeviceHub {
     for (const d of this.devices.values()) if (d.ws.readyState === 1) d.ws.send(s);
   }
 
-  call(deviceId, capability, args) {
+  call(deviceId, capability, args, {timeoutMs=callTimeout(args)}={}) {
     const d = this.devices.get(deviceId);
     if (!d) return Promise.reject(new Error("设备离线"));
     if (!capability.startsWith("__") && !enabledCaps(d.info).some((c) => c.name === capability)) {
@@ -145,7 +145,7 @@ export class DeviceHub {
         d.pending.delete(id);
         done("timeout");
         reject(new Error("设备超时"));
-      }, callTimeout(args));
+      }, timeoutMs);
       d.pending.set(id, {
         resolve: (v) => (clearTimeout(timer), done(v?.image ? "ok image" : "ok"), resolve(v)),
         reject: (e) => (clearTimeout(timer), done(`error: ${String(e?.message || e).slice(0, 80)}`), reject(e)),

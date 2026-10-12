@@ -1,0 +1,32 @@
+{
+  "root": "/tmp/wind-v06-live-install-EXz8xn",
+  "skillCount": 78,
+  "checks": [
+    {
+      "name": "wind-mcp-skill",
+      "bytes": 9966,
+      "removedCredentialInstructions": true,
+      "cliRemoved": true,
+      "marked": true
+    },
+    {
+      "name": "wind-find-finance-skill",
+      "bytes": 3690,
+      "removedCredentialInstructions": true,
+      "cliRemoved": true,
+      "marked": true
+    },
+    {
+      "name": "wind-alice",
+      "bytes": 8421,
+      "removedCredentialInstructions": true,
+      "cliRemoved": true,
+      "marked": true
+    }
+  ],
+  "extra": {
+    "name": "a-share-primary-theme-identification",
+    "path": ".claude/skills/wind-a-share-primary-theme-identification/SKILL.md",
+    "installed": true
+  }
+}
