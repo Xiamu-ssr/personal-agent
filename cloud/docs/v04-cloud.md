@@ -46,7 +46,9 @@ edited/removed 广播给所有在线 App；too_late 只回请求方。修改不�
 
 ## 连接器封装与官方依据
 
-稳定 id 为 `qq-mail`、`netease-163`、`netease-126`、`gmail`、`exmail`、`aliyun-mail`、`imap`、`tavily`、`weread`。邮箱 values 为 `{address,password,label?}`，imap 另需 host、可选 port（默认 993）；不再有 preset。Tavily/微信读书 values 为 `{apiKey}`，multiAccount=false。
+稳定 id 为 `qq-mail`、`netease-163`、`netease-126`、`gmail`、`exmail`、`aliyun-mail`、`imap`、`tavily`、`weread`，后续新增 `wind`、`github`。邮箱 values 为 `{address,password,label?}`，imap 另需 host、可选 port（默认 993）；不再有 preset。Tavily/微信读书/Wind values 为 `{apiKey}`，GitHub 为 `{token}`，multiAccount=false。
+
+GitHub 只读工具为 `repos({visibility?,affiliation?,sort?,per_page?,page?})`、`repo({owner,repo})`、`issues({owner,repo,state?,labels?,assignee?,since?,per_page?,page?})`、`issue({owner,repo,number,comments_limit?})`、`notifications({all?,participating?,since?,per_page?,page?})`。列表每页默认 30、最大 100，页码从 1 开始；issue 评论仅取第一页，默认 20、最大 50。列表正文最多 1000 字，详情正文最多 6000 字，每条评论最多 2000 字，返回截断标记。所有请求均为 GET（验证为 `/user`），通知不标记已读，结果按有用字段投影并脱敏。[官方通知文档](https://docs.github.com/en/rest/activity/notifications#list-notifications-for-the-authenticated-user) 要求 classic PAT，不支持 fine-grained PAT；公开仓库和通知用 `notifications`，私有仓库及其 issue 还需 `repo`（已包含通知权限）。classic scope 本身含写权限，连接器仅使用读取能力。
 
 Tavily 工具为 `search({query,depth?,max_results?,time_range?})`、`extract({urls})`；depth 映射为官方 search_depth，max_results 最大 20、urls 最多 20 个 HTTP(S) URL。`test()` 调 `GET /usage`，不触发搜索或正文提取。依据 [官方 Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)、[Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract)、[Usage](https://docs.tavily.com/documentation/api-reference/endpoint/usage)。
 
@@ -74,6 +76,7 @@ Tavily 工具为 `search({query,depth?,max_results?,time_range?})`、`extract({u
 | 阿里企业邮 | [官网 favicon](https://qiye.aliyun.com/static/0.2.9/images/favicon.ico) | 32×32 |
 | Tavily | [官网 apple icon](https://tavily.com/apple-icon.png?apple-icon.2rsjznomrsf77.png) | 180×180 |
 | 微信读书 | [官网 apple-touch-icon](https://rescdn.qqmail.com/node/wr/wrpage/style/images/independent/appleTouchIcon/apple-touch-icon-152x152.png) | 152×152 |
+| GitHub | `@primer/octicons` 19.40.0 的官方 mark-github SVG，MIT；来源和许可见 `connectors/github/ICON-SOURCE.md` | 180×180 PNG，透明留白 |
 | 其他邮箱 | `connectors/imap/icon.svg`，中性信封 | 192×192 SVG |
 
 腾讯企业邮/阿里企业邮的公开官网资源目前只取得 32 像素 favicon，未伪造高清图；Gmail 使用 Google 官方高清产品图标资源。可在后续取得更高清官方资源后替换对应文件。

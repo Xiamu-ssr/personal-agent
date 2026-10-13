@@ -1573,6 +1573,12 @@ connectors:
       multiAccount: false
       setup:
         - API Key
+    - id: github
+      name: GitHub
+      description: 查看仓库、issue、评论和通知（只读，不标记通知已读）
+      multiAccount: false
+      setup:
+        - 个人访问令牌（classic PAT）：公开仓库和通知勾选 notifications；私有仓库还需 repo
 prompts:
   - id: p_system
     name: 系统提示词

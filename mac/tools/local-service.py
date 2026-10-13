@@ -111,7 +111,7 @@ for n, title in enumerate(['给今天留一点空白', '书架上的小发现', 
 
 mail_fields = [dict(key='address', label='邮箱地址', type='text', required=True, placeholder='name@example.com'), dict(key='password', label='授权码', type='secret', required=True, help='在邮箱服务商设置里开启 IMAP，生成客户端专用授权码。'), dict(key='label', label='备注', type='text', required=False)]
 manual_fields = copy.deepcopy(mail_fields) + [dict(key='host', label='IMAP 服务器', type='text', required=True, placeholder='imap.example.com'), dict(key='security', label='连接加密', type='select', required=True, default='ssl', options=[dict(value='ssl', label='SSL'), dict(value='starttls', label='STARTTLS')]), dict(key='port', label='端口', type='number', required=True, default=993, showIf={'security':'ssl'})]
-names = [('qq-mail', 'QQ 邮箱'), ('netease-163', '163 邮箱'), ('netease-126', '126 邮箱'), ('gmail', 'Gmail'), ('exmail', '腾讯企业邮'), ('aliyun-mail', '阿里企业邮'), ('imap', '其他邮箱'), ('tavily', 'Tavily'), ('weread', '微信读书')]
+names = [('qq-mail', 'QQ 邮箱'), ('netease-163', '163 邮箱'), ('netease-126', '126 邮箱'), ('gmail', 'Gmail'), ('exmail', '腾讯企业邮'), ('aliyun-mail', '阿里企业邮'), ('imap', '其他邮箱'), ('tavily', 'Tavily'), ('weread', '微信读书'), ('wind', 'Wind AI'), ('github', 'GitHub')]
 accounts = {name: [] for name, _ in names}
 accounts['qq-mail'] = [dict(id='qq-a', label='个人 QQ 邮箱（本地）', status='ok', error=None, checkedAt=anchor-180000, values=dict(address='fixture@qq.com', password='••••', label='个人 QQ 邮箱（本地）')), dict(id='qq-b', label='工作 QQ 邮箱（本地）', status='error', error='授权码需要更新（本地模拟）', checkedAt=anchor-360000, values=dict(address='work@qq.com', password='••••', label='工作 QQ 邮箱（本地）'))]
 devices = [dict(id='offline-phone', name='备用手机（本地）', kind='android', online=False, lastSeen=anchor-3600000, capabilities=[dict(name='battery', title='电量', description='读取电量', enabled=True)]), dict(id='online-phone', name='测试手机（本地）', kind='android', online=True, lastSeen=anchor, capabilities=[])]
@@ -121,10 +121,13 @@ def connector_data():
     for name, title in names:
         fields = manual_fields if name == 'imap' else mail_fields
         description = '读取邮件（只读 IMAP）'
-        if name in ('tavily', 'weread'):
+        if name in ('tavily', 'weread', 'wind'):
             fields = [dict(key='apiKey', label='API Key', type='secret', required=True, help='在服务的个人设置页生成 API Key。')]
-            description = '深入搜索和网页提取' if name == 'tavily' else '读取书架、阅读统计、划线和想法'
-        c = dict(name=name, title=title, description=description, fields=fields, multiAccount=name not in ('tavily','weread'), icon=f'/api/connectors/{name}/icon', accounts=accounts[name])
+            description = {'tavily': '深入搜索和网页提取', 'weread': '读取书架、阅读统计、划线和想法', 'wind': '万得股票、基金、指数、债券、公告研报、宏观和量化数据'}[name]
+        if name == 'github':
+            fields = [dict(key='token', label='个人访问令牌（PAT）', type='secret', required=True, help='https://github.com/settings/tokens → Generate new token (classic)。公开仓库和通知勾选 notifications；私有仓库还需 repo。通知 API 不支持 fine-grained token；连接器只读。')]
+            description = '查看仓库、issue 和通知（只读）'
+        c = dict(name=name, title=title, description=description, fields=fields, multiAccount=name not in ('tavily','weread','wind','github'), icon=f'/api/connectors/{name}/icon', accounts=accounts[name])
         (installed if accounts[name] else catalog).append(c)
     return dict(cloud=dict(id='cloud', name='云电脑（本地假服务）', kind='cloud', online=True, installed=installed, catalog=catalog), devices=devices)
 

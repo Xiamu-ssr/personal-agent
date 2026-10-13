@@ -130,3 +130,10 @@ export default {
 - 用微信读书 2026-05-17 发布的官方 Agent Gateway，个人 API Key 是 `wrk-` 开头，`Authorization: Bearer <key>`。
 - 字段：API Key（secret），`help` 写清在哪里生成。
 - 工具按官方接口封装：书架、阅读统计、划线、想法、书籍搜索。接口细节以官方 Skill 文档为准。
+
+### GitHub
+
+- 查看当前用户可访问的仓库、单个仓库、issue 列表、issue 正文和评论，以及通知列表。仓库和 issue 可筛选、翻页；列表里的 PR 会明确标注，过长正文和评论会提示截断。
+- 只读：不创建或修改仓库、issue、评论，不把通知标记为已读。只连接一个账号。
+- 在 [GitHub 令牌设置](https://github.com/settings/tokens) 选择「Generate new token (classic)」，将个人访问令牌填进 App。公开仓库和通知勾选 `notifications`；要读取私有仓库及其 issue，还需 `repo`（已包含通知权限）。classic scope 本身包含写权限，连接器只使用读取能力。
+- [通知 API 官方文档](https://docs.github.com/en/rest/activity/notifications#list-notifications-for-the-authenticated-user) 明确不支持 fine-grained PAT，只支持 classic PAT；所需 scope 为 `notifications` 或 `repo`。权限范围见 [GitHub 官方 scope 说明](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)，生成步骤见 [官方令牌指南](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic)。
