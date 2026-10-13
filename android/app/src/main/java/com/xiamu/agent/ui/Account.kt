@@ -165,7 +165,7 @@ fun LoginScreen() {
             Text("登录豆豆", fontSize = Type.Large, fontFamily = Type.titleFamily, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.padding(top = 26.dp))
             Text("你的个人 agent，住在你自己的云主机上", fontSize = Type.Secondary, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
             Column(Modifier.padding(top = 32.dp).fillMaxWidth().card(radius = 24.dp).padding(horizontal = 20.dp)) {
-                LoginField("账号", server, { server = it }, "云端地址", KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next))
+                LoginField("账号", server, { server = it }, "https://你的服务器/agent", KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next))
                 Hairline()
                 LoginField(
                     "密码", password, { password = it }, "6 位配对码或口令",

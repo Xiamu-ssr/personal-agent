@@ -21,7 +21,7 @@ object Prefs {
     )
 
     var server: String
-        get() = sp.getString("server", DEFAULT_SERVER)!!.trimEnd('/')
+        get() = (sp.getString("server", "") ?: "").trim().trimEnd('/')
         set(v) = sp.edit().putString("server", v.trim().trimEnd('/')).apply()
 
     var token: String
@@ -48,6 +48,4 @@ object Prefs {
     fun markHealthSeen(path: String, at: Long = System.currentTimeMillis()) { sp.edit().putLong("health.seen.$path", at).apply() }
 
     val configured: Boolean get() = token.isNotBlank() && server.isNotBlank()
-
-    const val DEFAULT_SERVER = "https://127.0.0.1/agent"
 }

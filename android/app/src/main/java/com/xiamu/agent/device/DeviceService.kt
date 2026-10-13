@@ -99,7 +99,8 @@ class DeviceService : Service() {
 
     private fun connect() {
         if (!Prefs.configured || !running) return
-        ws = Api.http.newWebSocket(Api.wsRequest("device"), object : WebSocketListener() {
+        val request = Api.wsRequest("device") ?: return
+        ws = Api.http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 main.post {
                     if (ws !== webSocket || !running || !Prefs.configured) return@post

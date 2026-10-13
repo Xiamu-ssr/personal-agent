@@ -34,7 +34,6 @@ import com.xiamu.agent.Api
 import com.xiamu.agent.Prefs
 import kotlinx.coroutines.*
 import java.io.File
-import java.net.URI
 import java.net.URLEncoder
 import kotlin.coroutines.resume
 
@@ -82,6 +81,7 @@ fun SiteCard(entry: Api.Entry, modifier: Modifier = Modifier) {
 /** Hidden WebView behind the opaque app canvas, with a phone viewport; destroyed after capture. */
 @SuppressLint("SetJavaScriptEnabled")
 internal suspend fun captureSite(context: android.content.Context, path: String): Bitmap? = withContext(Dispatchers.Main) {
+    val base = Api.serverUri() ?: return@withContext null
     withTimeoutOrNull(12_000) {
         suspendCancellableCoroutine { cont ->
             val metrics = context.resources.displayMetrics
@@ -111,7 +111,6 @@ internal suspend fun captureSite(context: android.content.Context, path: String)
             parent?.addView(web,0,FrameLayout.LayoutParams(width,height))
             web.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
             web.layout(0,0,width,height)
-            val base = URI(Prefs.server)
             web.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = request.url.host != base.host || request.url.port != base.port
                 override fun onPageFinished(view: WebView, url: String?) {

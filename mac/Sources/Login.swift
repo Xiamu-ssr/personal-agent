@@ -57,7 +57,7 @@ struct LoginView: View {
                 }
                 VStack(alignment: .leading, spacing: 14) {
                     field("账号", hint: "云端地址") {
-                        TextField(Prefs.defaultServer, text: $server).textFieldStyle(.plain)
+                        TextField("https://你的服务器/agent", text: $server).textFieldStyle(.plain)
                     }
                     field("密码", hint: "6 位配对码，或口令") {
                         SecureField("配对码或口令", text: $password).textFieldStyle(.plain).onSubmit(login)
@@ -69,7 +69,7 @@ struct LoginView: View {
                         Text(checking ? "登录中…" : "登录").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(GoldButtonStyle(height: 44))
-                    .disabled(checking || password.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(checking || server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.defaultAction)
                     .padding(.top, 4)
                 }
@@ -102,7 +102,8 @@ struct LoginView: View {
     private func login() {
         let secret = password.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !secret.isEmpty, !checking else { return }
-        let address = server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Prefs.defaultServer : server.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let address = server.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !address.isEmpty else { error = "请填写云端地址"; return }
         checking = true
         error = ""
         Task { @MainActor in

@@ -63,7 +63,6 @@ import com.xiamu.agent.connectors.ConnectorAccount
 import com.xiamu.agent.media.Images
 import kotlinx.coroutines.CancellationException
 import java.io.File
-import java.net.URI
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -152,6 +151,16 @@ fun RoutePage(r: Route) {
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun WebPage(r: Route.Web) {
+    val base = Api.serverUri()
+    if (base == null) {
+        Screen {
+            Column {
+                SubHeader(r.title, Nav::back)
+                ErrorNote(if (Prefs.server.isBlank()) "请填写云端地址" else "云端地址不对")
+            }
+        }
+        return
+    }
     var web by remember { mutableStateOf<WebView?>(null) }
     var canBack by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -165,7 +174,6 @@ private fun WebPage(r: Route.Web) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize().clipToBounds(),
                     factory = { ctx ->
-                        val base = URI(Prefs.server)
                         WebView(ctx).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true

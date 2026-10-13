@@ -29,6 +29,7 @@ fun ConnectorLogo(name: String, size: Dp = 36.dp) {
     val c = ctx()
     val server = Prefs.server
     val (bitmap, _) = load("connector-logo:$server:$name") {
+        if (Api.serverUri(server) == null) return@load null
         withContext(Dispatchers.IO) {
             val file = File(c.cacheDir, "connector-icons/${cacheKey("$server/$name")}.png")
             val cached = if (file.exists()) BitmapFactory.decodeFile(file.path) else null

@@ -16,6 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.net.URI
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -32,7 +33,18 @@ object Api {
 
     val authHeader: Map<String, String> get() = mapOf("Authorization" to "Bearer ${Prefs.token}")
 
-    fun url(path: String) = Prefs.server + path
+    internal fun serverUri(server: String = Prefs.server): URI? {
+        val parsed = server.toHttpUrlOrNull() ?: return null
+        if (parsed.query != null || parsed.fragment != null || parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) return null
+        return parsed.toUri()
+    }
+
+    fun url(path: String): String {
+        val server = Prefs.server
+        require(server.isNotBlank()) { "请填写云端地址" }
+        require(serverUri(server) != null) { "账号请填写完整的云端地址" }
+        return server + path
+    }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
@@ -40,8 +52,9 @@ object Api {
     fun filePath(dataPath: String) = "/files/" + dataPath.split("/").joinToString("/") { enc(it) }
     fun fileUrl(dataPath: String) = url(filePath(dataPath))
 
-    fun wsRequest(role: String): Request {
-        val base = Prefs.server.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
+    fun wsRequest(role: String): Request? {
+        val base = serverUri()?.toASCIIString()?.trimEnd('/')
+            ?.replaceFirst("https://", "wss://")?.replaceFirst("http://", "ws://") ?: return null
         return Request.Builder().url("$base/ws?role=$role").header("Authorization", "Bearer ${Prefs.token}").build()
     }
 
@@ -178,8 +191,8 @@ object Api {
      */
     suspend fun login(server: String, password: String): JSONObject {
         val base = server.trim().trimEnd('/')
-        val parsed = base.toHttpUrlOrNull()
-        require(parsed != null && parsed.query == null && parsed.fragment == null && parsed.username.isEmpty() && parsed.password.isEmpty()) { "账号请填写完整的云端地址" }
+        require(base.isNotBlank()) { "请填写云端地址" }
+        require(serverUri(base) != null) { "账号请填写完整的云端地址" }
         val pw = password.trim()
         val token = if (pw.matches(Regex("\\d{6}"))) {
             val body = JSONObject().put("code", pw).toString().toRequestBody("application/json".toMediaType())

@@ -68,7 +68,8 @@ object Chat {
         if (!Prefs.configured) return
         wanted = true
         if (ws != null) return
-        ws = Api.http.newWebSocket(Api.wsRequest("app"), Listener())
+        val request = Api.wsRequest("app") ?: return
+        ws = Api.http.newWebSocket(request, Listener())
     }
 
     fun disconnect() {

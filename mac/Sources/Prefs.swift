@@ -1,13 +1,12 @@
 import Foundation
 
 enum Prefs {
-    static let defaultServer = "https://127.0.0.1/agent"
     private static let d = UserDefaults.standard
     /// Local acceptance keeps UI preferences separate from the installed app.
     static var uiDefaults: UserDefaults { LocalVerification.explicitLoopback ? UserDefaults(suiteName: "Doudou.LocalVerification")! : .standard }
 
     static var server: String {
-        get { trim(d.string(forKey: "server") ?? defaultServer) }
+        get { trim(d.string(forKey: "server") ?? "") }
         set { d.set(trim(newValue), forKey: "server") }
     }
 

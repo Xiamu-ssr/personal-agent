@@ -25,9 +25,18 @@ enum Api {
         config.httpShouldSetCookies = false
         return URLSession(configuration: config)
     }()
+
+    static func serverURL(_ server: String = Prefs.server) -> URL? {
+        guard let u = URL(string: server), ["https", "http"].contains(u.scheme?.lowercased() ?? ""),
+              let host = u.host, !host.isEmpty, u.user == nil, u.password == nil, u.query == nil, u.fragment == nil else { return nil }
+        return u
+    }
+
     static func request(_ path: String, method: String = "GET", body: [String: Any]? = nil,
                         server: String = Prefs.server, token: String = Api.authToken) throws -> URLRequest {
-        guard let u = URL(string: server + path) else { throw ApiError(code: 0, message: "云端地址不对") }
+        guard serverURL(server) != nil, let u = URL(string: server + path) else {
+            throw ApiError(code: 0, message: server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "请填写云端地址" : "云端地址不对")
+        }
         var r = URLRequest(url: u, timeoutInterval: 20)
         r.httpMethod = method
         if !token.isEmpty { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
@@ -68,9 +77,8 @@ enum Api {
 
     /// Validate credentials without changing the saved account on failure.
     static func authenticate(server: String, password: String) async throws -> String {
-        guard let u = URL(string: server), ["https", "http"].contains(u.scheme?.lowercased() ?? ""),
-              u.host != nil, u.user == nil, u.password == nil, u.query == nil, u.fragment == nil else {
-            throw ApiError(code: 0, message: "云端地址不对")
+        guard serverURL(server) != nil else {
+            throw ApiError(code: 0, message: server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "请填写云端地址" : "云端地址不对")
         }
         var token = password
         if password.count == 6 && password.allSatisfy({ $0.isASCII && $0.isNumber }) {
@@ -159,9 +167,11 @@ enum Api {
     }
 
     static func wsRequest(_ role: String) -> URLRequest? {
-        var base = Prefs.server
-        if base.hasPrefix("https://") { base = "wss://" + base.dropFirst(8) } else if base.hasPrefix("http://") { base = "ws://" + base.dropFirst(7) }
-        guard let u = URL(string: "\(base)/ws?role=\(role)") else { return nil }
+        guard let base = serverURL(), var parts = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
+        parts.scheme = base.scheme?.lowercased() == "https" ? "wss" : "ws"
+        parts.percentEncodedPath += "/ws"
+        parts.queryItems = [URLQueryItem(name: "role", value: role)]
+        guard let u = parts.url else { return nil }
         var r = URLRequest(url: u)
         r.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         return r
@@ -172,7 +182,10 @@ enum Api {
         return "/files/" + dataPath.split(separator: "/").map { $0.addingPercentEncoding(withAllowedCharacters: allowed) ?? String($0) }.joined(separator: "/") + (dataPath.hasSuffix("/") ? "/" : "")
     }
 
-    static func fileURL(_ dataPath: String) -> URL? { URL(string: Prefs.server + filePath(dataPath)) }
+    static func fileURL(_ dataPath: String) -> URL? {
+        guard let base = serverURL() else { return nil }
+        return URL(string: base.absoluteString + filePath(dataPath))
+    }
 
     /// Download a data/ file and open it with the default app (PDFs, documents the window can't show).
     static func openExternally(_ dataPath: String) async throws {
