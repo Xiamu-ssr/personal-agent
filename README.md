@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/latest"><img src="https://img.shields.io/badge/Release-v0.6.0-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Release v0.6.0"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/latest"><img src="https://img.shields.io/badge/Release-v0.6.1-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Release v0.6.1"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Android · macOS · Cloud">
   <a href="https://github.com/anthropics/claude-agent-sdk-typescript"><img src="https://img.shields.io/badge/Built%20with-Claude%20Agent%20SDK-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Built with Claude Agent SDK"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="MIT License"></a>
