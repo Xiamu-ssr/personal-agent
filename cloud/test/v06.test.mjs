@@ -79,7 +79,7 @@ test("restart continuation runs in an isolated background query with old instruc
   assert.equal(calls.length,1);assert.equal(calls[0].resume,undefined);assert.equal(inputs[0].message.content[1].type,"image");
   assert.match(inputs[0].message.content[0].text,/原任务交代：对比耳机/);assert.match(inputs[0].message.content[0].text,/读取 data\/memory\/preferences\/耳机.md/);assert.match(inputs[0].message.content[0].text,/原结果：轻量款更合适/);
   assert.equal(h.history.get(id).status,"done");assert.equal(events.find((e)=>e.phase==="done").id,id);
-  const history=h.taskHistory(id);assert.equal(history.items[0].from,"agent");const user=history.items.find((i)=>i.from==="user");assert.equal(user.text,"再看这张图");assert.deepEqual(user.attachments,attachments);assert.ok(history.items.some((i)=>i.text==="续聊已经完成"));
+  const history=h.taskHistory(id);assert.equal(history.items[0].from,"agent");const user=history.items.find((i)=>i.from==="user");assert.equal(user.text,"再看这张图");assert.deepEqual(user.attachments,attachments.map((a)=>({...a,size:fs.statSync(path.join(config.root,a.path)).size})));assert.ok(history.items.some((i)=>i.text==="续聊已经完成"));
   assert.ok(!history.items.some((i)=>i.text.startsWith("[任务续聊上下文]")));
   await h.sendTask(id,"",[{path:file,name:"参数.txt",kind:"file"}]);await h.jobChain;assert.equal(h.taskHistory(id).items.filter((i)=>i.from==="user").length,2);
   await assert.rejects(h.sendTask(id,"",[]),(e)=>e.status===400);
@@ -165,7 +165,7 @@ test("authenticated brief item, paginated jobs, attachments and health HTTP cont
   const second=(await req("/api/jobs?before="+first.next+"&limit=40")).body;assert.equal(second.recent.length,40);assert.equal(second.running.length,0);const last=(await req("/api/jobs?before="+second.next)).body;assert.equal(last.recent.length,11);assert.equal(last.next,null);
   for(const q of ["limit=0","limit=101","before=bad","before=0","limit=1.5"])assert.equal((await req("/api/jobs?"+q)).status,400);
   const upload="data/uploads/2026-10-12/http.txt";put(config.root,upload,"file");const att={path:upload,name:"http.txt",kind:"file"};
-  assert.deepEqual((await req("/api/tasks/job1/send","POST",{attachments:[att]})).body,{ok:true,id:"job1"});assert.deepEqual(sent.at(-1),["job1","",[att]]);
+  assert.deepEqual((await req("/api/tasks/job1/send","POST",{attachments:[att]})).body,{ok:true,id:"job1"});assert.deepEqual(sent.at(-1),["job1","",[{...att,size:fs.statSync(path.join(config.root,upload)).size}]]);
   assert.equal((await req("/api/send","POST",{attachments:[att]})).status,200);
   for(const route of ["/api/tasks/job1/send","/api/send"])assert.equal((await req(route,"POST",{text:"bad",attachments:[{path:"system/private",kind:"file"}]})).status,400);
 });

@@ -9,6 +9,7 @@ import java.net.URLEncoder
 class AgentProtocolTest {
     private fun settings() = JSONObject("""{"model":"haiku","permissionMode":"auto","models":[{"id":"haiku","label":"Haiku","note":"消耗约 1×"},{"id":"mimo","label":"MiMo","note":"消耗约 2×"}],"permissionModes":[{"id":"auto","label":"自动","note":"拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}""")
     private fun history(status: String = "running") = JSONObject("""{"id":"任务 /A?","title":"整理采购资料","status":"$status","items":[{"kind":"prompt","from":"agent","text":"整理采购资料","time":1791675360000},{"kind":"text","text":"先核对已有记录。","time":"2026-10-11T07:36:00+08:00"},{"kind":"tool","text":"读取 data/memory/总档.md","tool":"Read","time":1791675360000},{"kind":"result","text":"## 结果\n\n**交期已核对**","time":1791675360000}]}""")
+    private fun media() = JSONArray("""[{"path":"data/files/演示 1.mp4","name":"演示视频","kind":"video","mime":"video/mp4","size":4294967296},{"path":"data/files/chart.png","name":"报价曲线","kind":"image","mime":"image/png","size":20311}]""")
     private fun brief(cards: Int = 2) = JSONObject().put("date","2026-10-11").put("name","晨报").put("time","2026-10-11T07:36:00+08:00")
         .put("path","data/briefs/2026-10-11/晨报.html").put("cards",JSONArray((1..cards).map { JSONObject().put("html","<!doctype html><html><head><style>h1{color:blue}</style></head><body><section class='card'>卡片 $it</section></body></html>") }))
 
@@ -43,6 +44,34 @@ class AgentProtocolTest {
     @Test fun historySupportsAllFourTerminalAndRunningStates() {
         TaskStatus.entries.forEach { assertEquals(it,TaskHistory.from(history(it.wire)).status) }
         assertThrows(Exception::class.java) { TaskHistory.from(history("completed")) }
+    }
+    @Test fun completedTaskResultPreservesOrderedMediaAndMarkdown() {
+        val input = history("done").apply { getJSONArray("items").getJSONObject(3).put("media",media()) }
+        val result = TaskHistory.from(input).results.single()
+        assertEquals("## 结果\n\n**交期已核对**",result.text)
+        assertEquals(listOf("video","image"),result.media.map { it.kind })
+        assertEquals(ReplyMedia("data/files/演示 1.mp4","演示视频","video","video/mp4",4294967296),result.media.first())
+        assertEquals(ReplyMedia("data/files/chart.png","报价曲线","image","image/png",20311),result.media.last())
+    }
+    @Test fun oldTaskResultsWithoutMediaRemainMarkdown() {
+        val result = TaskHistory.from(history("done")).results.single()
+        assertEquals("## 结果\n\n**交期已核对**",result.text)
+        assertTrue(result.media.isEmpty())
+    }
+    @Test fun nonResultTaskEntriesIgnoreMedia() {
+        val input = history("done").apply { getJSONArray("items").objects().forEach { it.put("media",media()) } }
+        val result = TaskHistory.from(input)
+        assertEquals(setOf(TaskItemKind.Prompt,TaskItemKind.Text,TaskItemKind.Tool),result.items.filter { it.kind != TaskItemKind.Result }.map { it.kind }.toSet())
+        assertTrue(result.items.filter { it.kind != TaskItemKind.Result }.all { it.media.isEmpty() })
+        assertEquals(2,result.results.single().media.size)
+    }
+    @Test fun unfinishedFailedAndStoppedTasksIgnoreResultMedia() {
+        for (status in listOf(TaskStatus.Running,TaskStatus.Error,TaskStatus.Stopped)) {
+            val input = history(status.wire).apply { getJSONArray("items").getJSONObject(3).put("media",media()) }
+            val result = TaskHistory.from(input).results.single()
+            assertTrue(status.wire,result.media.isEmpty())
+            assertEquals("## 结果\n\n**交期已核对**",result.text)
+        }
     }
     @Test fun historyTimeHandlesBothExplicitIsoAndEpochValues() {
         val result = TaskHistory.from(history())

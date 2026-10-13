@@ -3,6 +3,7 @@ package com.xiamu.agent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.ensureActive
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Response
@@ -39,8 +40,7 @@ object Api {
         return parsed.toUri()
     }
 
-    fun url(path: String): String {
-        val server = Prefs.server
+    fun url(path: String, server: String = Prefs.server): String {
         require(server.isNotBlank()) { "请填写云端地址" }
         require(serverUri(server) != null) { "账号请填写完整的云端地址" }
         return server + path
@@ -50,7 +50,7 @@ object Api {
 
     /** `/files/<path under the repo root>`, each segment URL-encoded. Paths look like `data/briefs/...`. */
     fun filePath(dataPath: String) = "/files/" + dataPath.split("/").joinToString("/") { enc(it) }
-    fun fileUrl(dataPath: String) = url(filePath(dataPath))
+    fun fileUrl(dataPath: String, server: String = Prefs.server) = url(filePath(dataPath), server)
 
     fun wsRequest(role: String): Request? {
         val base = serverUri()?.toASCIIString()?.trimEnd('/')
@@ -158,9 +158,18 @@ object Api {
         putJson("/api/profile", JSONObject().put("avatar", JSONObject().put("shape", choice.shape).put("palette", choice.palette)))
     }
 
-    suspend fun download(dataPath: String, dest: File) {
-        val b = bytes(dataPath)
-        withContext(Dispatchers.IO) { dest.parentFile?.mkdirs(); dest.writeBytes(b) }
+    suspend fun download(dataPath: String, dest: File) = withContext(Dispatchers.IO) {
+        dest.parentFile?.mkdirs()
+        val temp = File.createTempFile("download-", ".part", dest.parentFile)
+        try {
+            val request = Request.Builder().url(fileUrl(dataPath)).apply { authHeader.forEach { (key, value) -> header(key, value) } }.build()
+            fetch(request, http) { response ->
+                val body = response.body ?: throw IOException("文件不可用")
+                body.byteStream().use { input -> temp.outputStream().use { output -> input.copyTo(output) } }
+            }
+            coroutineContext.ensureActive()
+            check(temp.renameTo(dest)) { "文件不可用" }
+        } finally { temp.delete() }
     }
 
     suspend fun tree(dir: String): List<Entry> {

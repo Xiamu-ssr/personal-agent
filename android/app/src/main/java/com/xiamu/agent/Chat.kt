@@ -134,13 +134,6 @@ object Chat {
         main.post(block)
     }
 
-    private fun parseItem(h: JSONObject): ChatItem? = when (h.optString("role")) {
-        "user" -> incomingUser(h.optString("text"), h.optString("source"), h.optJSONArray("attachments").objects().map(Attachment::from), h.optLong("ts"), h.optString("id"))
-        "assistant" -> ChatItem.Assistant(h.optString("text"), h.optLong("ts"))
-        "card" -> ChatItem.Card(h.optString("title"), h.optString("label"), h.optString("path").ifBlank { h.optJSONArray("outputs").strings().firstOrNull() }, h.optLong("ts"))
-        else -> null
-    }
-
     /** The server is the source of truth for what's running; called on every (re)connect. */
     fun refreshRunning() {
         refreshTasks()
@@ -186,7 +179,7 @@ object Chat {
         io.launch {
             runCatching { Api.getJson("/api/history?n=200") }.onSuccess { j ->
                 if (session != generation || revision != historyRevision) return@onSuccess
-                state.replaceHistory(j.optJSONArray("items").objects().mapNotNull(::parseItem))
+                state.replaceHistory(j.optJSONArray("items").objects().mapNotNull(::historyItem))
                 historyVersion.intValue++
             }
         }
@@ -198,7 +191,7 @@ object Chat {
                 generation++
                 tasksRevision++
                 historyRevision++
-                state.hello(m.optJSONArray("history").objects().mapNotNull(::parseItem), m.optBoolean("busy"), m.optString("reason"), parseTasks(m.optJSONArray("tasks")),
+                state.hello(m.optJSONArray("history").objects().mapNotNull(::historyItem), m.optBoolean("busy"), m.optString("reason"), parseTasks(m.optJSONArray("tasks")),
                     m.optJSONArray("queued").objects().map { incomingUser(it.optString("text"),it.optString("source"),it.optJSONArray("attachments").objects().map(Attachment::from),it.optLong("ts"),it.optString("id")) })
                 connected.value = true
                 historyVersion.intValue++
@@ -226,7 +219,7 @@ object Chat {
             "delta" -> state.delta(m.optString("text"))
             "tool" -> state.tool(toolLabel(m.optString("name"), m.optString("hint")))
             "turn_end" -> {
-                state.endTurn(m.opt("text") as? String, m.opt("error") as? String ?: "", System.currentTimeMillis())
+                state.endTurn(m, System.currentTimeMillis())
                 historyRevision++
             }
             "memory_updated" -> {

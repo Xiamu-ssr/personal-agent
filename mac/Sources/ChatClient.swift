@@ -7,14 +7,16 @@ struct Attachment: Hashable {
     var name: String
     /// image | file | voice
     var kind: String
+    var size: Int? = nil
     var transcript: String? = nil
 
     var json: [String: Any] { ["path": path, "name": name, "kind": kind] }
 
-    init(path: String, name: String, kind: String, transcript: String? = nil) {
+    init(path: String, name: String, kind: String, size: Int? = nil, transcript: String? = nil) {
         self.path = path
         self.name = name
         self.kind = kind
+        self.size = size
         self.transcript = transcript
     }
 
@@ -22,7 +24,39 @@ struct Attachment: Hashable {
         path = j["path"] as? String ?? ""
         name = j["name"] as? String ?? (path as NSString).lastPathComponent
         kind = j["kind"] as? String ?? "file"
+        size = j["size"] as? Int
         transcript = j["transcript"] as? String
+    }
+
+    static func merging(_ incoming: [Attachment], with known: [Attachment]) -> [Attachment] {
+        incoming.map { att in
+            var att = att
+            if att.size == nil { att.size = known.first { $0.path == att.path }?.size }
+            return att
+        }
+    }
+}
+
+struct MediaItem: Hashable {
+    enum Kind: String { case image, video, audio, file }
+    let path: String
+    let name: String
+    let kind: Kind
+    let mime: String
+    let size: Int
+
+    init?(_ row: [String: Any]) {
+        guard let path = row["path"] as? String, !path.isEmpty, let name = row["name"] as? String,
+              let mime = row["mime"] as? String, let size = row["size"] as? Int, size >= 0 else { return nil }
+        self.path = path
+        self.name = name.isEmpty ? (path as NSString).lastPathComponent : name
+        self.kind = Kind(rawValue: row["kind"] as? String ?? "") ?? .file
+        self.mime = mime
+        self.size = size
+    }
+
+    static func parse(_ value: Any?) -> [MediaItem] {
+        (value as? [[String: Any]] ?? []).compactMap(MediaItem.init)
     }
 }
 
@@ -32,6 +66,7 @@ struct ChatItem: Identifiable, Equatable {
     let kind: Kind
     var text: String
     var attachments: [Attachment] = []
+    var media: [MediaItem] = []
     /// Cards: what the job produced, and its label (e.g. 晨报).
     var outputs: [String] = []
     var label = ""
@@ -305,7 +340,7 @@ final class ChatClient {
         switch str(h["role"]) {
         case "user": return ChatItem(kind: str(h["source"]) == "schedule" ? .schedule : .user,
                                      text: str(h["text"]), attachments: atts, ts: date(h["ts"]), source: str(h["source"]), serverID: str(h["id"]))
-        case "assistant": return ChatItem(kind: .assistant, text: str(h["text"]), ts: date(h["ts"]))
+        case "assistant": return ChatItem(kind: .assistant, text: str(h["text"]), media: MediaItem.parse(h["media"]), ts: date(h["ts"]))
         case "card":
             let outputs = (h["path"] as? String).map { [$0] } ?? h["outputs"] as? [String] ?? []
             return ChatItem(kind: .card, text: str(h["title"]), outputs: outputs, label: str(h["label"]), ts: date(h["ts"]), taskID: str(h["taskId"]))
@@ -353,6 +388,7 @@ final class ChatClient {
                     item.id = same.id
                     item.queued = same.queued
                     item.pending = same.pending
+                    item.attachments = Attachment.merging(item.attachments, with: same.attachments)
                     used.insert(same.id)
                 }
                 return item
@@ -423,18 +459,18 @@ final class ChatClient {
             if !serverID.isEmpty, let i = items.firstIndex(where: { $0.serverID == serverID }) {
                 items[i].text = text
                 items[i].pending = false
-                if !atts.isEmpty { items[i].attachments = atts }
+                if !atts.isEmpty { items[i].attachments = Attachment.merging(atts, with: items[i].attachments) }
             } else if !scheduled, let i = items.firstIndex(where: { $0.pending && $0.text == text && $0.attachments.map(\.path) == atts.map(\.path) }) {
                 items[i].pending = false
                 items[i].serverID = serverID
-                if !atts.isEmpty { items[i].attachments = atts }
+                if !atts.isEmpty { items[i].attachments = Attachment.merging(atts, with: items[i].attachments) }
             } else if let i = items.firstIndex(where: { (snapshotEchoes[$0.id] ?? .distantPast) > receivedAt && $0.kind == (scheduled ? .schedule : .user) &&
                 $0.text == text && $0.attachments.map(\.path) == atts.map(\.path) }) {
                 snapshotEchoes.removeValue(forKey: items[i].id)
                 items[i].serverID = serverID
                 items[i].queued = !scheduled && (busy || !waitingInputs.isEmpty)
                 waitingInputs.append((items[i].id, scheduled))
-                if !atts.isEmpty { items[i].attachments = atts }
+                if !atts.isEmpty { items[i].attachments = Attachment.merging(atts, with: items[i].attachments) }
             } else {
                 let item = ChatItem(kind: scheduled ? .schedule : .user, text: text, attachments: atts, ts: Date(),
                                     queued: !scheduled && (busy || !waitingInputs.isEmpty), source: Self.str(m["source"]), serverID: serverID)
@@ -485,7 +521,10 @@ final class ChatClient {
         case "turn_end":
             cancelDeltas()
             let text = Self.str(m["text"])
-            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { add(ChatItem(id: streamID, kind: .assistant, text: text, ts: Date())) }
+            let media = m["error"] == nil && m["partial"] as? Bool != true ? MediaItem.parse(m["media"]) : []
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !media.isEmpty {
+                add(ChatItem(id: streamID, kind: .assistant, text: text, media: media, ts: Date()))
+            }
             streamID = UUID()
             if let err = m["error"] as? String { add(ChatItem(kind: .note, text: "这一轮出错了：\(err)")) }
             streaming = ""

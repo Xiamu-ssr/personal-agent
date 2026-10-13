@@ -19,6 +19,7 @@ import { checkDataAccess } from "./data-guard.mjs";
 import { calendarContext } from "./calendar-context.mjs";
 import { PageScreenshot } from "./page-screenshot.mjs";
 import { estimateUsageCost } from "./usage-pricing.mjs";
+import { replyMedia } from "./media.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const SCHEDULE_FORK_REASON = '定时简报请先用 Agent（subagent_type: "fork"，run_in_background: true）派到后台，再简短回复用户';
@@ -635,8 +636,9 @@ export class Harness {
     main.reply = "";
     main.active = null;
     main.turnOpen = false;
-    if (text) appendJsonl(config.chatLog, { role: "assistant", text, ts: Date.now(), ...(error && { error: true }) });
-    this.bus.emit({ t: "turn_end", text, error });
+    const media = !error && result.subtype === "success" && !result.is_error ? replyMedia(config.root, text) : [], fields = media.length ? { media } : {};
+    if (text) appendJsonl(config.chatLog, { role: "assistant", text, ts: Date.now(), ...(error && { error: true }), ...fields });
+    this.bus.emit({ t: "turn_end", text, error, ...fields });
     // Older/fake queries without state events retain the result fallback; 0.3.295 waits for native idle.
     if (!main.hasSessionStateSignal || main.sdkState === "idle") this.releaseMainTurn();
   }

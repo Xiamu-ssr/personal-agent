@@ -1,12 +1,10 @@
 package com.xiamu.agent.ui
 
 import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.webkit.CookieManager
-import android.webkit.MimeTypeMap
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
@@ -54,15 +52,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.FileProvider
 import com.xiamu.agent.Api
 import com.xiamu.agent.Chat
 import com.xiamu.agent.Prefs
+import com.xiamu.agent.FileOpening
+import com.xiamu.agent.fileOpening
 import com.xiamu.agent.connectors.ConnectorInfo
 import com.xiamu.agent.connectors.ConnectorAccount
 import com.xiamu.agent.media.Images
+import com.xiamu.agent.media.openSystemFile
 import kotlinx.coroutines.CancellationException
-import java.io.File
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -86,6 +85,7 @@ sealed interface Route {
     data class Web(val title: String, val path: String) : Route
     data class Doc(val title: String, val path: String, val pointers: Boolean = false) : Route
     data class Image(val path: String) : Route
+    data class Pdf(val title: String, val path: String) : Route
     data class MemoryCategory(val dir: String) : Route
     data object Diaries : Route
 }
@@ -130,6 +130,7 @@ fun RoutePage(r: Route) {
         is Route.Web -> WebPage(r)
         is Route.Doc -> DocPage(r)
         is Route.Image -> ImagePage(r.path)
+        is Route.Pdf -> PdfPage(r)
         Route.Settings -> SettingsScreen()
         Route.Skins -> SkinsScreen()
         Route.Doudou -> Screen { Column { SubHeader("豆豆", Nav::back); DouScreen(0.dp) } }
@@ -256,7 +257,7 @@ private fun ImagePage(path: String) {
     }
     Box(Modifier.fillMaxSize().background(Pal.Card)) {
         val b = bmp
-        if (failed) Text("图片加载失败，请返回重试", color = Pal.Card, modifier = Modifier.align(Alignment.Center))
+        if (failed) Text("文件不可用", color = Pal.Ink, modifier = Modifier.align(Alignment.Center))
         else if (b == null) Loading(Modifier.align(Alignment.Center))
         else Image(
             b.asImageBitmap(), null, contentScale = ContentScale.Fit,
@@ -267,33 +268,18 @@ private fun ImagePage(path: String) {
             Modifier.statusBarsPadding().padding(16.dp).size(40.dp).clip(CircleShape).background(Pal.Card).tap(onClick = Nav::back)
                 .align(Alignment.TopStart),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Outlined.Close, "关闭", tint = Pal.Card) }
+        ) { Icon(Icons.Outlined.Close, "关闭", tint = Pal.Icon) }
     }
 }
 
-private val webExt = setOf("html", "htm", "txt", "json", "csv", "svg")
-private val imageExt = setOf("jpg", "jpeg", "png", "webp", "gif")
-
-/** Open any file from data/: HTML/text in the WebView, Markdown as a doc, images full-screen, the rest in another app. */
-suspend fun openFile(ctx: Context, path: String, title: String = path.substringAfterLast('/')) {
-    val ext = path.substringAfterLast('.', "").lowercase()
-    when (ext) {
-        "md" -> Nav.open(Route.Doc(title.removeSuffix(".md"), path))
-        in imageExt -> Nav.open(Route.Image(path))
-        in webExt -> Nav.open(Route.Web(title, path))
-        "" -> Nav.open(Route.Web(title, path))
-        else -> {
-            val f = File(ctx.cacheDir, "open/${path.substringAfterLast('/')}")
-            Api.download(path, f)
-            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-            val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
-            val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            try {
-                ctx.startActivity(Intent.createChooser(i, title))
-            } catch (e: ActivityNotFoundException) {
-                Chat.error.value = "手机上没有能打开这个文件的应用"
-            }
-        }
+/** Shared by Sites, Markdown links and chat attachments. */
+suspend fun openFile(ctx: Context, path: String, title: String = path.substringAfterLast('/'), mime: String = "") {
+    when (fileOpening(path, mime)) {
+        FileOpening.Markdown -> Nav.open(Route.Doc(title.removeSuffix(".md"), path))
+        FileOpening.Image -> Nav.open(Route.Image(path))
+        FileOpening.Web -> Nav.open(Route.Web(title, path))
+        FileOpening.Pdf -> Nav.open(Route.Pdf(title, path))
+        FileOpening.System -> openSystemFile(ctx, path, title, mime)
     }
 }
 

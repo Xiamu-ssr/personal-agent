@@ -387,6 +387,8 @@ struct Verify {
         try check(!composer.transcribing && composer.retryAudio == raw, "failed hold-to-talk transcription must retain local audio")
         composer.reset(); shared.connected = false
         print("PASS: failed transcription retains audio without uploading or sending")
+        try await PasteFixtures.run()
+        try await MediaFixtures.run()
         try await TaskProtocolFixtures.run()
         try await ConnectorFixtures.run()
         try await V06Fixtures.run()

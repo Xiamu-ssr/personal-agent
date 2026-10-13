@@ -141,14 +141,15 @@ object VoicePlayer {
         val same = playing.value == path
         stop()
         if (same) return
+        playback.claim(this, ::stop)
         val p = MediaPlayer()
         mp = p
         playing.value = path
         try {
             p.setDataSource(ctx, Uri.parse(Api.fileUrl(path)), Api.authHeader)
-            p.setOnPreparedListener { it.start() }
-            p.setOnCompletionListener { stop() }
-            p.setOnErrorListener { _, _, _ -> stop(); true }
+            p.setOnPreparedListener { if (mp === it) it.start() }
+            p.setOnCompletionListener { if (mp === it) stop() }
+            p.setOnErrorListener { current, _, _ -> if (mp === current) stop(); true }
             p.prepareAsync()
         } catch (e: Exception) {
             stop()
@@ -156,8 +157,13 @@ object VoicePlayer {
     }
 
     fun stop() {
-        mp?.let { runCatching { it.stop() }; it.release() }
+        val old = mp
         mp = null
         playing.value = null
+        playback.release(this)
+        old?.let {
+            it.setOnPreparedListener(null); it.setOnCompletionListener(null); it.setOnErrorListener(null)
+            it.release()
+        }
     }
 }

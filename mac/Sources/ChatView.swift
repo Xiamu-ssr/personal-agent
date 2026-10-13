@@ -262,7 +262,7 @@ struct MessageRow: View, Equatable {
             Label(item.scheduleTitle, systemImage: "alarm")
                 .font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
                 .padding(.vertical, 3)
-        case .assistant: AssistantBubble(text: item.text, compact: compact, messageID: item.id)
+        case .assistant: AssistantBubble(text: item.text, compact: compact, messageID: item.id, media: item.media)
         case .note:
             Text(item.text).font(Theme.font(size: 11.5)).foregroundStyle(Theme.faint).frame(maxWidth: .infinity)
         case .card: CardMessage(item: item)
@@ -327,11 +327,15 @@ struct AssistantBubble: View, Equatable {
     let text: String
     var compact = false
     var messageID: UUID? = nil
+    var media: [MediaItem] = []
 
     var body: some View {
         HStack {
-            MarkdownView(text: text, size: compact ? 13 : Theme.bodySize, cacheID: messageID)
-                .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 10) {
+                MarkdownView(text: text, size: compact ? 13 : Theme.bodySize, cacheID: messageID)
+                    .textSelection(.enabled)
+                ForEach(media, id: \.path) { ReplyMediaView(item: $0) }
+            }
                 .padding(.horizontal, compact ? 4 : 8)
                 .padding(.vertical, 8)
             Spacer(minLength: compact ? 30 : 80)
@@ -385,7 +389,8 @@ struct AttachmentView: View {
             Button { Nav.shared.open(att.path, title: att.name) } label: {
                 HStack(spacing: 10) {
                     IconTile(icon: icon, size: 32)
-                    Text(att.name).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text(att.name + (att.size.map { " · " + Fmt.size($0) } ?? ""))
+                        .font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
                     Image(systemName: "arrow.up.right").font(Theme.font(size: 10, weight: .semibold)).foregroundStyle(Theme.faint)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 8)
@@ -413,6 +418,7 @@ struct AttachmentView: View {
 struct RemoteImage: View {
     let path: String
     var maxSide: CGFloat = 220
+    var failureText: String? = nil
     @State private var image: NSImage? = nil
     @State private var failed = false
 
@@ -426,25 +432,38 @@ struct RemoteImage: View {
             } else {
                 RoundedRectangle(cornerRadius: 14).fill(Theme.field)
                     .frame(width: maxSide * 0.7, height: maxSide * 0.5)
-                    .overlay(failed ? AnyView(Image(systemName: "photo").foregroundStyle(Theme.faint)) : AnyView(ActiveProgress().controlSize(.small)))
+                    .overlay {
+                        if failed {
+                            VStack(spacing: 6) {
+                                Image(systemName: "photo")
+                                if let failureText { Text(failureText).font(Theme.font(size: 12)) }
+                            }.foregroundStyle(Theme.faint)
+                        } else { ActiveProgress().controlSize(.small) }
+                    }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
         .contentShape(Rectangle())
         .task(id: path) {
-            do { image = NSImage(data: try await Api.cached(path)); failed = image == nil } catch { failed = true }
+            do {
+                let data = try await Api.cached(path)
+                try Task.checkCancellation()
+                image = NSImage(data: data); failed = image == nil
+            } catch is CancellationError {} catch { failed = true }
         }
     }
 }
 
 /// Play bar + the cloud's transcript.
-struct VoiceNote: View {
+@MainActor struct VoiceNote: View {
     let att: Attachment
     @State private var player: AVAudioPlayer? = nil
     @State private var playing = false
     @State private var progress = 0.0
     @State private var loading = false
+    @State private var playbackID = UUID()
+    @State private var work: Task<Void, Never>?
     @Environment(\.interactiveWindow) private var active
 
     var body: some View {
@@ -486,7 +505,9 @@ struct VoiceNote: View {
                 do { try await Task.sleep(nanoseconds: 100_000_000) } catch { break }
             }
         }
-        .onDisappear { player?.stop() }
+        .background(MediaVisibility { if !$0 { stop() } })
+        .onChange(of: active) { if !active { stop() } }
+        .onDisappear { stop() }
     }
 
     private var duration: String {
@@ -496,19 +517,31 @@ struct VoiceNote: View {
 
     private func toggle() {
         if let p = player {
-            if p.isPlaying { p.pause(); playing = false } else { p.play(); playing = true }
+            if p.isPlaying { p.pause(); playing = false; MediaPlaybackFocus.release(playbackID) } else { play(p) }
             return
         }
         loading = true
-        Task { @MainActor in
-            defer { loading = false }
-            guard let d = try? await Api.cached(att.path), let p = try? AVAudioPlayer(data: d) else {
+        work = Task { @MainActor in
+            defer { if !Task.isCancelled { loading = false } }
+            guard let d = try? await Api.cached(att.path), !Task.isCancelled, let p = try? AVAudioPlayer(data: d) else {
+                if Task.isCancelled { return }
                 Nav.shared.show("这段语音放不了")
                 return
             }
             player = p
-            p.play()
-            playing = true
+            play(p)
         }
+    }
+
+    private func play(_ player: AVAudioPlayer) {
+        MediaPlaybackFocus.claim(playbackID) { [weak player] in player?.pause(); playing = false }
+        player.play(); playing = true
+    }
+
+    private func stop() {
+        work?.cancel(); work = nil
+        player?.stop(); player = nil
+        playing = false; loading = false; progress = 0
+        MediaPlaybackFocus.release(playbackID)
     }
 }

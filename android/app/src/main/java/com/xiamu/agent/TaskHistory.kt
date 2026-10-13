@@ -13,18 +13,19 @@ enum class TaskItemKind(val wire: String) {
     companion object { fun from(value: String) = entries.firstOrNull { it.wire == value } ?: error("任务记录无法识别") }
 }
 data class TaskHistoryItem(val kind: TaskItemKind, val text: String, val tool: String?, val time: Long,
-    val from: String? = null, val attachments: List<Attachment> = emptyList()) {
+    val from: String? = null, val attachments: List<Attachment> = emptyList(), val media: List<ReplyMedia> = emptyList()) {
     val isUser: Boolean get() = kind == TaskItemKind.Prompt && from == "user"
     val isInstruction: Boolean get() = kind == TaskItemKind.Prompt && from == "agent"
     companion object {
-        fun from(j: JSONObject) = TaskHistoryItem(TaskItemKind.from(j.getString("kind")), j.getString("text"),
+        fun from(j: JSONObject, allowMedia: Boolean = true) = TaskHistoryItem(TaskItemKind.from(j.getString("kind")), j.getString("text"),
             if (j.isNull("tool")) null else j.getString("tool"),
             when (val time = j.get("time")) {
                 is Number -> time.toLong()
                 is String -> OffsetDateTime.parse(time).toInstant().toEpochMilli()
                 else -> error("任务时间无法识别")
             }, if (j.isNull("from")) null else j.getString("from"),
-            j.optJSONArray("attachments").objects().map(Attachment::from)).also {
+            j.optJSONArray("attachments").objects().map(Attachment::from),
+            if (allowMedia && j.getString("kind") == TaskItemKind.Result.wire) replyMedia(j) else emptyList()).also {
                 require(it.kind != TaskItemKind.Prompt || it.from in setOf("agent", "user")) { "任务消息缺少来源" }
             }
     }
@@ -36,8 +37,12 @@ data class TaskHistory(val id: String, val title: String, val status: TaskStatus
     val briefPath: String? get() = results.firstNotNullOfOrNull { briefPathInText(it.text) }
 
     companion object {
-        fun from(j: JSONObject) = TaskHistory(j.getString("id"), j.getString("title"), TaskStatus.from(j.getString("status")),
-            j.getJSONArray("items").objects().map(TaskHistoryItem::from)).also { require(it.id.isNotBlank()) { "任务缺少 id" } }
+        fun from(j: JSONObject): TaskHistory {
+            val status = TaskStatus.from(j.getString("status"))
+            return TaskHistory(j.getString("id"), j.getString("title"), status,
+                j.getJSONArray("items").objects().map { TaskHistoryItem.from(it, allowMedia = status == TaskStatus.Done) })
+                .also { require(it.id.isNotBlank()) { "任务缺少 id" } }
+        }
     }
 }
 

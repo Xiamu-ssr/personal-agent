@@ -12,9 +12,10 @@ struct TaskHistoryItem: Identifiable, Equatable {
     let tool: String?
     let time: Date?
     let attachments: [Attachment]
+    let media: [MediaItem]
     var message: ChatItem {
         ChatItem(id: id, kind: kind == .prompt && from == .user ? .user : .assistant,
-                 text: text, attachments: attachments, ts: time)
+                 text: text, attachments: attachments, media: media, ts: time)
     }
 }
 
@@ -40,7 +41,8 @@ struct TaskHistory: Equatable {
             let hash = Array(SHA256.hash(data: Data("\(id):\(index)".utf8)).prefix(16))
             let identity = hash.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) }
             return TaskHistoryItem(id: identity, kind: kind, from: from, text: text, tool: row["tool"] as? String,
-                                   time: ProductTime.date(row["time"]), attachments: (row["attachments"] as? [[String: Any]] ?? []).map(Attachment.init))
+                                   time: ProductTime.date(row["time"]), attachments: (row["attachments"] as? [[String: Any]] ?? []).map(Attachment.init),
+                                   media: MediaItem.parse(row["media"]))
         }
         guard items.count == raw.count else { throw ApiError(code: 0, message: "任务记录不完整，请重试") }
         return TaskHistory(id: id, title: title, status: status, items: items)

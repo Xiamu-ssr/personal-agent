@@ -154,7 +154,7 @@ id 是任务 id。path 是该次运行第一份有效 HTML 简报；name/time �
 
 status 只有 running/done/error/stopped；items.kind 只有 prompt/text/tool/result。记录取子任务 transcript（隔离维护取自己的 session transcript）；过滤 thinking 和原始工具输出。工具只返回一行摘要，所有文本走 redact。运行中 SendMessage 可能被 CLI 合并到工具回合，运行层保留用户提交原文的脱敏副本，补齐记录中的 prompt；不据此生成模型步骤或结果。
 
-`POST /api/tasks/<id>/send {text,attachments?}` 成功 200 `{"ok":true,"id":"task-id"}`，表示已经接受续聊；text 去首尾空白，UTF-8 上限 32KB；text 和 attachments 不能同时为空，附件校验/图片消息块与主聊天共用。
+`POST /api/tasks/<id>/send {text,attachments?}` 成功 200 `{"ok":true,"id":"task-id"}`，表示已经接受续聊；text 去首尾空白，UTF-8 上限 32KB；text 和 attachments 不能同时为空，附件校验/图片消息块与主聊天共用。附件条目带 size（字节），由云端按实际文件填写，客户端发送时可省略。
 
 - 原生后台任务使用 SendMessage，to=原任务 id，message=用户原文。运行中交给同一 agent；已结束任务由 CLI 自动恢复原 transcript，保持 task_id、产生新的 run_id，继续在后台执行并照常原生通知主会话。
 - 运行层守卫只允许对指定任务发送原文，防止新建任务或由主会话代做。
@@ -194,7 +194,7 @@ status 只有 running/done/error/stopped；items.kind 只有 prompt/text/tool/re
 
 - `GET /api/briefs/item?path=<data/briefs/...html>` 返回与列表里相同的单项 `{date,name,time,path,cards:[{html}]}`，不限定日期；没有或路径不合法返回 404。
 - `GET /api/health`（打开页面时同步）与 `POST /api/health/sync`（手动同步）最多等待 20 秒，返回 `{syncedAt,device,note,days,weekly,records}`。days 为含今天的最近 7 天升序，缺失值 null；weekly 读取全部健康周报，records 读取健康 Markdown 文件。离线/未开启/超时仍返回已有数据和中文 note。每 3 小时的 health-sync 直接调用设备，不经过模型。
-- 每条 history prompt 都有 from，首条 agent，其后 user；用户续聊附件是 `[{path,name,kind}]`，不返回图片 base64。
+- 每条 history prompt 都有 from，首条 agent，其后 user；用户续聊附件是 `[{path,name,kind,size?}]`，不返回图片 base64。size 为云端填写的字节数，旧记录没有 size 也照常工作。
 - 启动回填私有会话目录里缺失的子任务；已有索引不覆盖。启动时迁移旧模型、角色说话习惯、健康定时项，并删除旧指标文件。
 - in-process `mcp__page__screenshot({path,skin?})` 仅截 data/briefs 的 HTML 和 data/sites 本地页面。390px，简报卡片依次拼接、站点最多三屏，JPEG ≤300KiB；全进程串行，30秒超时，浏览器每次启停。所有公网请求均被拦截，本地站点资源仅限站点目录。
 - Wind 只常驻 call/list_tools/list_skills/install_skill/ask_alice，密钥只在连接器中；官方技能下载和缓存位于数据根，仓库不含技能正文。

@@ -1,12 +1,21 @@
 package com.xiamu.agent
 
+import org.json.JSONObject
+
 sealed class ChatItem {
     /** pending waits for the echo; queued waits for a user turn. They are independent. */
     data class User(val text: String, val attachments: List<Attachment> = emptyList(), val pending: Boolean = false, val ts: Long = 0, val queued: Boolean = false, val queueOrder: Long = 0, val id: String = "") : ChatItem()
-    data class Assistant(val text: String, val ts: Long = 0) : ChatItem()
+    data class Assistant(val text: String, val ts: Long = 0, val media: List<ReplyMedia> = emptyList()) : ChatItem()
     data class Alarm(val text: String, val ts: Long = 0) : ChatItem()
     data class Card(val title: String, val label: String, val path: String?, val ts: Long = 0) : ChatItem()
     data class Note(val text: String) : ChatItem()
+}
+
+internal fun historyItem(h: JSONObject): ChatItem? = when (h.optString("role")) {
+    "user" -> incomingUser(h.optString("text"), h.optString("source"), h.optJSONArray("attachments").objects().map(Attachment::from), h.optLong("ts"), h.optString("id"))
+    "assistant" -> ChatItem.Assistant(h.optString("text"), h.optLong("ts"), replyMedia(h))
+    "card" -> ChatItem.Card(h.optString("title"), h.optString("label"), h.optString("path").ifBlank { h.optJSONArray("outputs").strings().firstOrNull() }, h.optLong("ts"))
+    else -> null
 }
 
 /** Scheduled/isolated jobs are separate from the main query's background tasks. */
@@ -187,9 +196,13 @@ class Conversation(val items: MutableList<ChatItem> = mutableListOf()) {
         if (streaming.isNotBlank() && !streaming.endsWith("\n\n")) streaming += "\n\n"
     }
 
-    fun endTurn(text: String?, error: String, ts: Long) {
+    fun endTurn(event: JSONObject, ts: Long) =
+        endTurn(event.opt("text") as? String, (event.opt("error") as? String).orEmpty(), ts, replyMedia(event))
+
+    fun endTurn(text: String?, error: String, ts: Long, media: List<ReplyMedia> = emptyList()) {
         val reply = text ?: streaming
-        if (reply.isNotBlank()) items.add(ChatItem.Assistant(reply, ts))
+        val outputs = if (error.isBlank()) media else emptyList()
+        if (reply.isNotBlank() || outputs.isNotEmpty()) items.add(ChatItem.Assistant(reply, ts, outputs))
         if (error.isNotBlank()) items.add(ChatItem.Note("这一轮出错了：$error"))
         streaming = ""; toolHint = ""; turnClosed = true
         // Only status/hello change busy; a result can arrive before native idle.

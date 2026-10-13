@@ -16,7 +16,7 @@ export function validateMessage(root,text="",attachments=[]) {
     if(size>20*1024*1024)throw new Error("附件超过 20MB");
     if(a.kind==="image"&&(!IMAGE_TYPES[path.extname(file).toLowerCase()]||size>5*1024*1024))throw new Error("图片只支持 JPG、PNG、GIF、WebP，不能超过 5MB");
     if(a.name!==undefined&&(typeof a.name!=="string"||a.name.length>200||/[\x00-\x1f]/.test(a.name)))throw new Error("附件名字格式不正确");
-    return {path:path.relative(root,file),name:a.name||path.basename(file),kind:a.kind};
+    return {path:path.relative(root,file),name:a.name||path.basename(file),kind:a.kind,size};
   });
   if(!text.trim()&&!atts.length)throw new Error("文字和附件不能同时为空");
   return {text:text.trim(),attachments:atts};
@@ -30,10 +30,11 @@ export async function prepareAttachments(root,atts) {
   return atts;
 }
 // Images are message blocks; other uploads stay as explicit paths for Read.
+const fileSize=(size)=>size<1024?`${size} B`:size<1024*1024?`${Number((size/1024).toFixed(1))} KB`:`${Number((size/(1024*1024)).toFixed(1))} MB`;
 export function userContent(root,text,atts=[]) {
   if(!atts.length)return text;
   const lines=atts.map((a)=>a.kind==="voice"?`- ${a.path}（语音笔记，转写：${a.transcript||"空"}）`:
-    a.kind==="image"?`- ${a.path}（图片，已附在本条消息里）`:`- ${a.path}（文件，需要时自己读）`);
+    a.kind==="image"?`- ${a.path}（图片，已附在本条消息里）`:`- ${a.path}（文件，${Number.isFinite(a.size)?fileSize(a.size)+"，":""}需要时自己读）`);
   const content=[{type:"text",text:`${text||(atts.every((a)=>a.kind==="voice")?"（一段语音笔记）":"（发来了附件）")}\n\n[附件]\n${lines.join("\n")}`}];
   for(const a of atts)if(a.kind==="image")content.push({type:"image",source:{type:"base64",media_type:IMAGE_TYPES[path.extname(a.path).toLowerCase()],data:fs.readFileSync(localFile(root,a.path,"data/uploads")).toString("base64")}});
   return content;

@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 
 struct ApiError: LocalizedError {
     let code: Int
@@ -126,7 +127,7 @@ enum Api {
         let q = name.addingPercentEncoding(withAllowedCharacters: queryAllowed) ?? "file"
         let r = try await post("/api/upload?name=\(q)", raw: data)
         guard let path = r["path"] as? String else { throw ApiError(code: 0, message: "上传失败") }
-        return Attachment(path: path, name: r["name"] as? String ?? name, kind: kind)
+        return Attachment(path: path, name: r["name"] as? String ?? name, kind: kind, size: r["size"] as? Int)
     }
 
     /// Hold-to-talk: audio in, text out. Nothing is stored on the server.
@@ -182,18 +183,32 @@ enum Api {
         return "/files/" + dataPath.split(separator: "/").map { $0.addingPercentEncoding(withAllowedCharacters: allowed) ?? String($0) }.joined(separator: "/") + (dataPath.hasSuffix("/") ? "/" : "")
     }
 
-    static func fileURL(_ dataPath: String) -> URL? {
-        guard let base = serverURL() else { return nil }
+    static func fileURL(_ dataPath: String, server: String = Prefs.server) -> URL? {
+        guard let base = serverURL(server) else { return nil }
         return URL(string: base.absoluteString + filePath(dataPath))
     }
 
-    /// Download a data/ file and open it with the default app (PDFs, documents the window can't show).
-    static func openExternally(_ dataPath: String) async throws {
-        let d = try await data(filePath(dataPath))
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("doudou", isDirectory: true)
+    /// Stream downloads to disk; distinct server paths with the same filename do not collide.
+    static func download(_ dataPath: String, server: String = Prefs.server, token: String = Api.authToken) async throws -> URL {
+        var req = try request(filePath(dataPath), server: server, token: token)
+        req.timeoutInterval = 120
+        let (temporary, response) = try await session.download(for: req)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try validate(Data(), response)
+        try Task.checkCancellation()
+        let key = SHA256.hash(data: Data((server + "/" + dataPath).utf8)).map { String(format: "%02x", $0) }.joined()
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("com.xiamu.agent.mac/media", isDirectory: true).appendingPathComponent(key, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let f = dir.appendingPathComponent((dataPath as NSString).lastPathComponent)
-        try d.write(to: f)
-        _ = await MainActor.run { NSWorkspace.shared.open(f) }
+        let file = dir.appendingPathComponent((dataPath as NSString).lastPathComponent)
+        if FileManager.default.fileExists(atPath: file.path) { _ = try FileManager.default.replaceItemAt(file, withItemAt: temporary) }
+        else { try FileManager.default.moveItem(at: temporary, to: file) }
+        return file
+    }
+
+    /// Download a data/ file and open it with the default app.
+    static func openExternally(_ dataPath: String) async throws {
+        let file = try await download(dataPath)
+        guard await MainActor.run(body: { NSWorkspace.shared.open(file) }) else { throw ApiError(code: 0, message: "文件不可用") }
     }
 }

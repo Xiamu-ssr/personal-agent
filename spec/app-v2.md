@@ -36,9 +36,9 @@
 - `memory_updated {path}`、`files_changed {path}`、`devices {devices}`
 - `job {phase:"started"|"done", label, title?, outputs?}`、`task {phase,id,description,summary}`
 
-`role=app` 发：`{t:"send", text, attachments?:[{path,name,kind}]}`（kind = image | file | voice），`{t:"interrupt"}`。
+`role=app` 发：`{t:"send", text, attachments?:[{path,name,kind}]}`（kind = image | file | voice），`{t:"interrupt"}`。附件条目带 size（字节），由云端填写，客户端发送时可省略。
 
-**聊天记录条目**：`{role:"user", text, attachments?:[{path,name,kind,transcript?}]}`、`{role:"assistant", text}`、`{role:"card", label, title, outputs:[path]}`。
+**聊天记录条目**：`{role:"user", text, attachments?:[{path,name,kind,size?,transcript?}]}`、`{role:"assistant", text, media?:[{path,name,kind,mime,size}]}`、`{role:"card", label, title, outputs:[path]}`。附件条目带 size（字节），由云端填写；旧记录没有 size 也照常显示。
 
 `role=device`：
 - 连上后发 `{t:"register", device:{id, name, kind:"android"|"mac", capabilities:[…]}}`。**capabilities 要列出本机全部能力**，每项 `{name, title, description, args, sync, source, enabled, hint?}`，`enabled` 是用户有没有打开。agent 只看得到 enabled 的。开关变化后重连重新注册。
@@ -84,6 +84,7 @@
    - 登录成功后（仅首次）进入「开通本机能力」引导：列出本机能力开关，按钮「开始使用」。
 2. **聊天**：顶部左侧豆豆头像胶囊（显示在线状态小点 + 「在线 · 本机已接入」这类状态，忙的时候显示工具提示「在翻资料」），右侧搜索、设置。
    - 气泡：用户右侧浅蓝灰，豆豆左侧白卡片（Markdown：标题、列表、粗体、行内代码、表格至少能读）。附件在气泡里显示：图片缩略图（点开大图）、文件行（图标 + 文件名，点开用 WebView/系统打开）、语音笔记（播放条 + 转写文字）。
+   - 豆豆回复里的图片、音视频和文件在正文下方以预览、播放器或文件卡片显示，正文链接仍可点。协议细节见 `cloud/docs/app-protocol-media.md`。
    - 卡片消息（简报等）：白卡 + 文件图标 + 标题，点开 WebView。
    - 子任务/后台任务进度：聊天顶部下方一条可收起的细条。
    - 搜索：在本地已加载的聊天记录里搜关键词，结果点击滚动定位。

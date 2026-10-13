@@ -3,6 +3,7 @@ import path from "node:path";
 import { readJson } from "./store.mjs";
 import { writePrivateJson } from "./connectors.mjs";
 import { TaskError } from "./background-tasks.mjs";
+import { replyMedia } from "./media.mjs";
 
 export function taskId(id) {
   if (typeof id!=="string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new TaskError("任务 id 格式不对",400,"invalid_task_id");
@@ -172,6 +173,10 @@ export class TaskHistory {
     for(const item of items)if(item.kind==="prompt") {item.from||=first?"agent":"user";first=false;}
     const latest=record.latestResult&&maskCredentials(this.redact(record.latestResult));
     if (latest&&!items.some((i)=>i.text===latest))items.push({kind:record.status==="running"?"text":"result",text:latest,time:new Date(record.endedAt||record.startedAt).toISOString()});
+    if (record.status==="done") for (const item of items) if (item.kind==="result") {
+      const media=replyMedia(this.root,item.text);
+      if(media.length)item.media=media;
+    }
     return {id,title:record.title,status:record.status,items};
   }
   continuationContext(id) {

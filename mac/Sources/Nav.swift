@@ -110,27 +110,36 @@ final class Nav {
     private static let imageExts: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff"]
     private static let textExts: Set<String> = ["md", "txt", "csv", "json", "log"]
 
+    enum FilePresentation { case brief, image, text, web, external }
+    static func filePresentation(_ path: String) -> FilePresentation {
+        if path.hasPrefix("data/briefs/") { return .brief }
+        let ext = (path as NSString).pathExtension.lowercased()
+        if imageExts.contains(ext) { return .image }
+        if textExts.contains(ext) { return .text }
+        if ext.isEmpty || ["html", "htm", "svg", "pdf"].contains(ext) { return .web }
+        return .external
+    }
+
     /// Open a data/ path the best way we can: web view, Markdown page, image viewer, or the default app.
-    func open(_ path: String, title: String? = nil) {
-        if path.hasPrefix("data/briefs/") {
+    func open(_ path: String, title: String? = nil, onFailure: (() -> Void)? = nil) {
+        let name = title ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        switch Self.filePresentation(path) {
+        case .brief:
             guard BriefItem.validPath(path) else { show("这份简报暂时读不到"); return }
             stacks[.today] = []
             todaySection = 0
             tab = .today
             briefFocus = path
-            return
-        }
-        let ext = (path as NSString).pathExtension.lowercased()
-        let name = title ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension
-        if Self.imageExts.contains(ext) {
+        case .image:
             preview = path
-        } else if Self.textExts.contains(ext) {
+        case .text:
             push(.doc(title: name, path: path))
-        } else if ext.isEmpty || ext == "html" || ext == "htm" || ext == "svg" {
+        case .web:
             push(.web(title: name, path: path))
-        } else {
+        case .external:
             Task { @MainActor in
-                do { try await Api.openExternally(path) } catch { show("打不开：\(error.localizedDescription)") }
+                do { try await Api.openExternally(path) }
+                catch { if let onFailure { onFailure() } else { show("打不开：\(error.localizedDescription)") } }
             }
         }
     }

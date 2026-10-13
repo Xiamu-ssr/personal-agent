@@ -54,6 +54,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -105,6 +106,8 @@ fun ChatScreen(list: LazyListState, bottom: Dp, scroll: ConversationScrollState 
     val scope = rememberCoroutineScope()
     var headerH by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val visible by remember(list) { derivedStateOf { list.layoutInfo.visibleItemsInfo.map { it.index }.toSet() } }
+    val mediaActive = Nav.tab.intValue == 0 && Nav.stack.isEmpty()
     BindConversationScroll(list, scroll, items.count { it is ChatItem.User || it is ChatItem.Assistant } + if (streaming.isNotBlank()) 1 else 0,
         "${items.size}:${streaming.length}:$busy", Draft.sentVersion.intValue, bottom)
 
@@ -116,7 +119,7 @@ fun ChatScreen(list: LazyListState, bottom: Dp, scroll: ConversationScrollState 
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (items.isEmpty() && !busy) item { EmptyChat() }
-            itemsIndexed(items) { i, it -> ChatRow(it, highlight == i) }
+            itemsIndexed(items) { i, it -> ChatRow(it, highlight == i, mediaActive && i in visible) }
             if (extra == 1) item { Streaming(streaming, Chat.toolHint.value, busy && !Chat.turnClosed.value) }
         }
         ReturnToBottom(list, scroll, Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = bottom + 20.dp))
@@ -293,10 +296,15 @@ private fun EmptyChat() {
 }
 
 @Composable
-internal fun ChatRow(item: ChatItem, highlight: Boolean = false) {
+internal fun ChatRow(item: ChatItem, highlight: Boolean = false, mediaActive: Boolean = true) {
     when (item) {
-        is ChatItem.User -> UserBubble(item, highlight)
-        is ChatItem.Assistant -> Bubble(highlight) { SelectionContainer { Markdown(item.text, color = Pal.Ink) } }
+        is ChatItem.User -> UserBubble(item, highlight, mediaActive)
+        is ChatItem.Assistant -> Bubble(highlight) {
+            Column {
+                SelectionContainer { Markdown(item.text, color = Pal.Ink) }
+                MediaViews(item.media, mediaActive)
+            }
+        }
         is ChatItem.Alarm -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("schedule-message"),
             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Alarm, null, tint = Pal.Muted, modifier = Modifier.size(14.dp))
@@ -340,7 +348,7 @@ internal fun ChatRow(item: ChatItem, highlight: Boolean = false) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UserBubble(item: ChatItem.User, highlight: Boolean) {
+private fun UserBubble(item: ChatItem.User, highlight: Boolean, mediaActive: Boolean) {
     var menu by remember(item.id) { mutableStateOf(false) }
     var editing by remember(item.id) { mutableStateOf(false) }
     var text by remember(item.id,item.text) { mutableStateOf(item.text) }
@@ -352,7 +360,7 @@ private fun UserBubble(item: ChatItem.User, highlight: Boolean) {
                 .then(if(item.queued && item.id.isNotBlank()) Modifier.combinedClickable(onClick={},onLongClick={ menu=true }) else Modifier)
                 .testTag(if(item.queued) "queued-message" else "user-message").padding(horizontal=14.dp,vertical=11.dp),
                 verticalArrangement=Arrangement.spacedBy(8.dp),horizontalAlignment=Alignment.End) {
-                Attachments(item.attachments)
+                Attachments(item.attachments, mediaActive)
                 if(item.text.isNotBlank()) {
                     if(item.queued) Text(item.text,fontSize = Type.Body,lineHeight = Type.BodyLine,color=Pal.UserText.copy(alpha=.65f))
                     else SelectionContainer { Text(item.text,fontSize = Type.Body,lineHeight = Type.BodyLine,color=Pal.UserText) }
@@ -394,14 +402,14 @@ private fun Streaming(text: String, hint: String, active: Boolean) {
 }
 
 @Composable
-private fun Attachments(list: List<Attachment>) {
+private fun Attachments(list: List<Attachment>, active: Boolean) {
     if (list.isEmpty()) return
     val c = ctx()
     val scope = rememberCoroutineScope()
     list.forEach { a ->
         when (a.kind) {
             "image" -> RemoteImage(a.path, Modifier.sizeIn(maxWidth = 220.dp, maxHeight = 260.dp).clip(RoundedCornerShape(14.dp)).tap { Nav.open(Route.Image(a.path)) })
-            "voice" -> VoiceRow(a)
+            "voice" -> VoiceRow(a, active)
             else -> Row(
                 Modifier.widthIn(max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Card)
                     .tap { scope.launch { runCatching { openFile(c, a.path, a.name) }.onFailure { Chat.error.value = "打不开：${it.message}" } } }
@@ -416,12 +424,16 @@ private fun Attachments(list: List<Attachment>) {
 }
 
 @Composable
-private fun VoiceRow(a: Attachment) {
+private fun VoiceRow(a: Attachment, active: Boolean) {
     val c = ctx()
     val playing = VoicePlayer.playing.value == a.path
+    DisposableEffect(a.path, active) {
+        if (!active && VoicePlayer.playing.value == a.path) VoicePlayer.stop()
+        onDispose { if (VoicePlayer.playing.value == a.path) VoicePlayer.stop() }
+    }
     Column(Modifier.widthIn(min = 180.dp, max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Card).padding(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(34.dp).gold().tap { VoicePlayer.toggle(c, a.path) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(34.dp).gold().tap(active) { VoicePlayer.toggle(c, a.path) }, contentAlignment = Alignment.Center) {
                 Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "暂停" else "播放", tint = Pal.GoldInk, modifier = Modifier.size(20.dp))
             }
             Text("语音笔记", fontSize = Type.Secondary, fontWeight = FontWeight.Medium, color = Pal.Ink, modifier = Modifier.padding(start = 10.dp))

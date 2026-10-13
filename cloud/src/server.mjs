@@ -16,13 +16,8 @@ import { validateMessage } from "./attachments.mjs";
 import { HealthSync } from "./health.mjs";
 import { getProfile, putProfile } from "./profile.mjs";
 import { getAppSettings, putAppSettings } from "./app-settings.mjs";
-
-const TYPES = {
-  ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8", ".json": "application/json",
-  ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-  ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8",
-  ".ico": "image/x-icon", ".webp": "image/webp",
-};
+import { fileType } from "./media.mjs";
+import { localFile } from "./local-paths.mjs";
 
 function tokenOf(req) {
   const h = req.headers.authorization || "";
@@ -226,7 +221,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         const icon = path.resolve(dir, definition.icon);
         if (!icon.startsWith(dir + path.sep)) throw new Error("invalid icon");
         const body = fs.readFileSync(icon);
-        res.writeHead(200, { "content-type": TYPES[path.extname(icon)] || "application/octet-stream", "cache-control": "private, max-age=2592000" });
+        res.writeHead(200, { "content-type": fileType(icon).mime, "cache-control": "private, max-age=2592000" });
         return res.end(body);
       } catch { return json(res, 404, { error: "没有这个连接器图标" }); }
     }
@@ -330,17 +325,46 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       }
     }
     if (p.startsWith("/files/")) {
-      const abs = dataPath(decodeURIComponent(p.slice("/files/".length)));
+      let rel;
+      try { rel = decodeURIComponent(p.slice("/files/".length)); }
+      catch { return json(res, 400, { error: "invalid path" }); }
+      const abs = dataPath(rel);
       if (!abs) return json(res, 400, { error: "outside data/" });
-      if (abs.startsWith(path.join(config.data,"briefs")+path.sep) && path.extname(abs)===".json") return json(res,404,{error:"简报只提供 HTML"});
+      if (abs.startsWith(path.join(config.data,"briefs")+path.sep) && path.extname(abs).toLowerCase()===".json") return json(res,404,{error:"简报只提供 HTML"});
       let file = abs;
       try {
         if (fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
-        const body = fs.readFileSync(file);
-        res.writeHead(200, { "content-type": TYPES[path.extname(file).toLowerCase()] || "application/octet-stream", "cache-control": "no-cache" });
-        return res.end(body);
-      } catch {
-        return json(res, 404, { error: "not found" });
+        if (!fs.statSync(file).isFile()) return json(res, 404, { error: "not found" });
+        file = localFile(config.root, path.relative(config.root, file), "data");
+        const real = path.relative(fs.realpathSync(config.root), fs.realpathSync(file));
+        if (real.startsWith("data/briefs/") && path.extname(real).toLowerCase() === ".json") return json(res,404,{error:"简报只提供 HTML"});
+        const size = fs.statSync(file).size;
+        const headers = { "content-type": fileType(file).mime, "cache-control": "no-cache", "accept-ranges": "bytes" };
+        let start = 0, end = size - 1, status = 200;
+        if (req.headers.range !== undefined) {
+          const range = req.headers.range.trim().match(/^bytes=(\d*)-(\d*)$/);
+          if (range && (range[1] || range[2])) {
+            if (range[1]) { start = Number(range[1]); end = range[2] ? Number(range[2]) : size - 1; }
+            else { start = Math.max(0, size - Number(range[2])); }
+          }
+          if (!range || !(range[1] || range[2]) || !size || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+              start >= size || end < start || !range[1] && (!Number.isSafeInteger(Number(range[2])) || Number(range[2]) === 0)) {
+            res.writeHead(416, { ...headers, "content-range": `bytes */${size}`, "content-length": 0 });
+            return res.end();
+          }
+          end = Math.min(end, size - 1);
+          status = 206;
+          headers["content-range"] = `bytes ${start}-${end}/${size}`;
+        }
+        headers["content-length"] = status === 206 ? end - start + 1 : size;
+        if (req.method === "HEAD") { res.writeHead(status, headers); return res.end(); }
+        const stream = fs.createReadStream(file, status === 206 ? { start, end } : undefined);
+        stream.once("error", () => { if (res.headersSent) res.destroy(); else json(res, 404, { error: "not found" }); });
+        res.once("close", () => stream.destroy());
+        stream.once("open", () => { res.writeHead(status, headers); stream.pipe(res); });
+        return;
+      } catch (e) {
+        return json(res, e.code ? 404 : 400, { error: e.code ? "not found" : "outside data/" });
       }
     }
     json(res, 404, { error: "no route" });

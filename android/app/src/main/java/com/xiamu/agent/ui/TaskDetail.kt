@@ -27,6 +27,7 @@ fun TaskDetailScreen(route: Route.TaskDetail, draft: MessageDraft = remember(rou
     var loadError by remember { mutableStateOf("") }
     var revision by remember { mutableIntStateOf(0) }
     val list = rememberLazyListState()
+    val visible by remember(list) { derivedStateOf { list.layoutInfo.visibleItemsInfo.map { it.index }.toSet() } }
     val scroll = remember(route.id) { ConversationScrollState() }
     val ime = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(draft.sentVersion.intValue) { if (draft.sentVersion.intValue > 0) revision++ }
@@ -66,11 +67,11 @@ fun TaskDetailScreen(route: Route.TaskDetail, draft: MessageDraft = remember(rou
                     itemsIndexed(data?.items.orEmpty(), key = { index, item -> "${item.kind}:${item.time}:$index" }) { index, item ->
                         when {
                             item.kind == TaskItemKind.Tool -> ToolRow(item.tool ?: "工具", item.text, tag = "task-tool:$index")
-                            item.isUser -> ChatRow(ChatItem.User(item.text, item.attachments, ts = item.time, id = "task:$index"))
+                            item.isUser -> ChatRow(ChatItem.User(item.text, item.attachments, ts = item.time, id = "task:$index"), mediaActive = index in visible)
                             else -> Column {
                                 if (index == 0 && item.isInstruction) Text("豆豆交代的", style = Type.body(12), color = Pal.Muted,
                                     modifier = Modifier.padding(bottom = 6.dp).testTag("task-instruction"))
-                                ChatRow(ChatItem.Assistant(item.text, ts = item.time))
+                                ChatRow(ChatItem.Assistant(item.text, ts = item.time, media = item.media), mediaActive = index in visible)
                             }
                         }
                     }

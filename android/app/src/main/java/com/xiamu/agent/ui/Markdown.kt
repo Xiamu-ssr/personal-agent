@@ -26,6 +26,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +50,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
-import com.xiamu.agent.briefPathInText
+import com.xiamu.agent.isBriefPath
+import com.xiamu.agent.Chat
+import com.xiamu.agent.markdownFilePath
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 private sealed class Block {
     class Heading(val level: Int, val text: String) : Block()
@@ -137,7 +142,7 @@ fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink,
     Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         for (b in blocks) when (b) {
             is Block.Heading -> Text(
-                inline(b.text), fontWeight = FontWeight.SemiBold, fontFamily = Type.titleFamily, color = Pal.Ink,
+                inlineContent(b.text), fontWeight = FontWeight.SemiBold, fontFamily = Type.titleFamily, color = Pal.Ink,
                 fontSize = when (b.level) { 1 -> (fontSize + 4).sp; 2 -> (fontSize + 2).sp; else -> (fontSize + 1).sp },
                 lineHeight = (fontSize * 1.9f).sp, modifier = Modifier.padding(top = 4.dp),
             )
@@ -148,7 +153,7 @@ fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink,
             is Block.Para -> PointerText(b.text, b.pointers, body, lh, color, onPointer)
             is Block.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
                 Box(Modifier.width(3.dp).fillMaxHeight().padding(vertical = 2.dp).background(Pal.Muted, RoundedCornerShape(2.dp)))
-                Text(inline(b.text), fontSize = body, lineHeight = lh, color = Pal.Muted, modifier = Modifier.padding(start = 10.dp))
+                Text(inlineContent(b.text), fontSize = body, lineHeight = lh, color = Pal.Muted, modifier = Modifier.padding(start = 10.dp))
             }
             is Block.Code -> Text(
                 b.text, fontFamily = FontFamily.Monospace, fontSize = (fontSize - 3).sp, lineHeight = (fontSize * 1.3f).sp, color = Pal.Ink,
@@ -165,7 +170,7 @@ fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink,
 @Composable
 private fun PointerText(text: String, paths: List<String>, fontSize: TextUnit, lineHeight: TextUnit, color: Color, onPointer: ((String) -> Unit)?) {
     if (paths.isEmpty() || onPointer == null) {
-        Text(inline(text), fontSize = fontSize, lineHeight = lineHeight, color = color)
+        Text(inlineContent(text), fontSize = fontSize, lineHeight = lineHeight, color = color)
         return
     }
     val density = LocalDensity.current
@@ -186,9 +191,10 @@ private fun PointerText(text: String, paths: List<String>, fontSize: TextUnit, l
             }
         }
     }.toMap()
-    val annotated = remember(text, paths, SkinState.current.value) {
+    val content = inlineContent(text)
+    val annotated = remember(content, paths, SkinState.current.value) {
         buildAnnotatedString {
-            append(inline(text))
+            append(content)
             paths.forEachIndexed { i, p ->
                 append(' ')
                 appendInlineContent("pointer:$i", p.substringAfterLast('/').removeSuffix(".md"))
@@ -212,7 +218,7 @@ private fun MdTable(rows: List<List<String>>, fontSize: Int) {
             Row {
                 for (c in 0 until cols) {
                     Text(
-                        inline(row.getOrElse(c) { "" }), fontSize = (fontSize - 2).sp, lineHeight = (fontSize * 1.4f).sp,
+                        inlineContent(row.getOrElse(c) { "" }), fontSize = (fontSize - 2).sp, lineHeight = (fontSize * 1.4f).sp,
                         fontWeight = if (r == 0) FontWeight.SemiBold else FontWeight.Normal, color = Pal.Ink,
                         modifier = (if (wide) Modifier.width(120.dp) else Modifier.weight(1f).widthIn(min = 40.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
                     )
@@ -223,16 +229,31 @@ private fun MdTable(rows: List<List<String>>, fontSize: Int) {
 }
 
 private val linkStyle get() = TextLinkStyles(SpanStyle(color = Pal.Link, textDecoration = TextDecoration.Underline))
-private val markdownLink = Regex("""^\[([^\]]+)]\((https?://[^)\s]+|data/briefs/[^)\r\n]+\.html)\)""")
+private val markdownLink = Regex("""^!?\[([^\]]*)]\(\s*(<data/[^>\r\n]+>|data/[^)\r\n]+|https?://[^)\s]+)\s*\)""")
 
-fun inline(s: String): AnnotatedString = buildAnnotatedString {
+@Composable
+private fun inlineContent(text: String): AnnotatedString {
+    val context = ctx()
+    val scope = rememberCoroutineScope()
+    val open: (String, String) -> Unit = remember(context, scope) { { path, name ->
+        scope.launch {
+            try { openFile(context, path, name) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { Chat.error.value = "文件不可用" }
+        }
+        Unit
+    } }
+    return remember(text, SkinState.current.value, open) { inline(text, open) }
+}
+
+fun inline(s: String, onFile: ((String, String) -> Unit)? = null): AnnotatedString = buildAnnotatedString {
     var i = 0
     while (i < s.length) {
         val c = s[i]
         when {
             s.startsWith("**", i) && s.indexOf("**", i + 2) > i + 2 -> {
                 val end = s.indexOf("**", i + 2)
-                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(inline(s.substring(i + 2, end))) }
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(inline(s.substring(i + 2, end), onFile)) }
                 i = end + 2
             }
             c == '`' && s.indexOf('`', i + 1) > i -> {
@@ -242,14 +263,20 @@ fun inline(s: String): AnnotatedString = buildAnnotatedString {
                 }
                 i = end + 1
             }
-            c == '[' && markdownLink.find(s.substring(i)) != null -> {
+            (c == '[' || (c == '!' && s.getOrNull(i + 1) == '[')) && markdownLink.find(s.substring(i)) != null -> {
                 val m = markdownLink.find(s.substring(i))!!
                 val target = m.groupValues[2]
                 if (target.startsWith("http")) withLink(LinkAnnotation.Url(target, linkStyle)) { append(m.groupValues[1]) }
                 else {
-                    val brief = briefPathInText(m.value)
-                    if (brief == null) append(m.value)
-                    else withLink(LinkAnnotation.Clickable(brief, linkStyle) { Nav.brief(brief) }) { append(m.groupValues[1]) }
+                    val path = markdownFilePath(target)
+                    if (path == null) append(m.value)
+                    else {
+                        val brief = path.takeIf(::isBriefPath)
+                        val name = m.groupValues[1].ifBlank { path.substringAfterLast('/') }
+                        withLink(LinkAnnotation.Clickable(path, linkStyle) {
+                            if (brief != null) Nav.brief(brief) else onFile?.invoke(path, name)
+                        }) { append(name) }
+                    }
                 }
                 i += m.value.length
             }

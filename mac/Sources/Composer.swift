@@ -14,6 +14,22 @@ struct Draft: Identifiable {
     var uploaded: Attachment? = nil
 }
 
+enum PasteContent {
+    case files([URL]), image(NSImage), text
+
+    static func read(_ pb: NSPasteboard) -> PasteContent {
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            return .files(urls)
+        }
+        let imageFirst = pb.types?.first.flatMap { UTType($0.rawValue) }?.conforms(to: .image) == true
+        if let text = pb.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !imageFirst {
+            return .text
+        }
+        if let image = NSImage(pasteboard: pb) { return .image(image) }
+        return .text
+    }
+}
+
 /// The one input box shared by 聊天 · 今日 · 任务 · 记忆 (and its draft survives switching pages).
 @Observable
 final class Composer {
@@ -122,15 +138,15 @@ final class Composer {
 
     /// ⌘V with a picture or copied files on the pasteboard; returns false to let the text field paste text.
     func paste(_ pb: NSPasteboard = .general) -> Bool {
-        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+        switch PasteContent.read(pb) {
+        case .files(let urls):
             add(urls: urls)
             return true
-        }
-        if let img = NSImage(pasteboard: pb) {
-            add(image: img)
+        case .image(let image):
+            add(image: image)
             return true
+        case .text: return false
         }
-        return false
     }
 
     func drop(_ providers: [NSItemProvider]) -> Bool {
