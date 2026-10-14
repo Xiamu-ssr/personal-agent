@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/latest"><img src="https://img.shields.io/badge/Release-v0.7.0-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Release v0.7.0"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/latest"><img src="https://img.shields.io/badge/Release-v0.7.1-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Release v0.7.1"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Android · macOS · Cloud">
   <a href="https://github.com/anthropics/claude-agent-sdk-typescript"><img src="https://img.shields.io/badge/Built%20with-Claude%20Agent%20SDK-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="Built with Claude Agent SDK"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=0B1321" alt="MIT License"></a>
@@ -23,11 +23,11 @@
     <td width="240" align="center"><h3>3 端</h3>云端 · 安卓 · Mac</td>
     <td width="240" align="center"><h3>11 个</h3>内置云端连接器</td>
     <td width="240" align="center"><h3>3 套</h3>银蓝 · 纸墨 · 夜幕</td>
-    <td width="240" align="center"><h3>132 项</h3>v0.7.0 云端测试通过</td>
+    <td width="240" align="center"><h3>136 项</h3>v0.7.1 云端测试通过</td>
   </tr>
 </table>
 
-<p align="center"><sub>连接器数量来自<a href="cloud/connectors/index.mjs">注册表</a>；测试数字来自 <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.7.0">v0.7.0 发布记录</a>：云端 132 项、安卓 105 项单元测试，Mac 61 项本地校验。</sub></p>
+<p align="center"><sub>连接器数量来自<a href="cloud/connectors/index.mjs">注册表</a>；测试数字来自 <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.7.1">v0.7.1 发布记录</a>：云端 136 项、安卓 105 项单元测试，Mac 61 项本地校验。</sub></p>
 
 ## 功能
 
@@ -297,8 +297,8 @@ cd android
 ```bash
 # 首次构建，创建自己的本地签名身份（可能弹出钥匙串授权）
 bash mac/tools/make-signing-identity.sh
-VERSION=0.7.0 bash mac/build.sh
-# 产物：mac/build/doudou-0.7.0.dmg；Apple 芯片 + Intel 通用
+VERSION=0.7.1 bash mac/build.sh
+# 产物：mac/build/doudou-0.7.1.dmg；Apple 芯片 + Intel 通用
 ```
 
 Mac 安装包采用本地签名；另一台 Mac 首次打开可能需要右键「打开」。健康数据是否可读取决于 Health Connect 与厂商开放情况；Wind 真实账号查询、Mac 真实触控板手势和新功能完整真机流程的验证边界，见 [v0.6.0 发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.6.0)。

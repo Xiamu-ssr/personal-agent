@@ -1,6 +1,6 @@
 {
   "name": "personal-agent-cloud",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "type": "module",
   "description": "Personal Agent cloud body: Claude Agent SDK harness + scheduler + App/device gateway",
