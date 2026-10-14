@@ -134,6 +134,27 @@ test("startup migrations delete obsolete health metrics, append only speaking ha
   assert.deepEqual(MODEL_PRICES["z-ai/glm-5.3-flash"],{input:.15,cacheRead:.03,output:.5});assert.equal(estimateUsageCost("z-ai/glm-5.3-flash",{input_tokens:1_000_000,cache_read_input_tokens:1_000_000,output_tokens:1_000_000}),.68);assert.throws(()=>estimateUsageCost("xiaomi/mimo-v2.6-pro",{}));
 });
 
+test("Opus estimates use 4/0.2/20 prices and 5-minute or 1-hour cache writes without double counting",()=> {
+  const model="anthropic/claude-opus-5.5";
+  assert.deepEqual(MODEL_PRICES[model],{input:4,cacheRead:.2,output:20,cacheWrite:5,cacheWrite1h:8});
+  assert.equal(estimateUsageCost(model,{input_tokens:1_000_000,cache_read_input_tokens:1_000_000,output_tokens:1_000_000}),24.2);
+  assert.equal(estimateUsageCost(model,{cache_creation_input_tokens:1_000_000}),5);
+  assert.equal(estimateUsageCost(model,{cache_creation_input_tokens:1_000_000,cache_creation:{ephemeral_5m_input_tokens:0,ephemeral_1h_input_tokens:1_000_000}}),8);
+  assert.equal(estimateUsageCost(model,{input_tokens:1000,cache_read_input_tokens:2000,cache_creation_input_tokens:3000,output_tokens:4000,
+    cache_creation:{ephemeral_5m_input_tokens:2000,ephemeral_1h_input_tokens:1000}}),.1024);
+  assert.equal(estimateUsageCost(model,{}),0);
+});
+
+test("only Haiku gets the cache-inclusive 100K surcharge; Opus has no long-context multiplier",()=> {
+  const opus="anthropic/claude-opus-5.5",haiku="anthropic/claude-haiku-5.5";
+  for(const input of [100_000,100_001,200_000])assert.equal(estimateUsageCost(opus,{input_tokens:input}),input*4/1_000_000);
+  assert.equal(estimateUsageCost(opus,{input_tokens:50_000,cache_read_input_tokens:50_001}),.2100002);
+  assert.equal(estimateUsageCost(opus,{input_tokens:50_000,cache_creation_input_tokens:50_001}),.450005);
+  assert.equal(estimateUsageCost(haiku,{input_tokens:100_000}),.01);
+  assert.equal(estimateUsageCost(haiku,{input_tokens:100_001}),100_001*.1*5/1_000_000);
+  assert.equal(estimateUsageCost(haiku,{input_tokens:50_000,cache_read_input_tokens:50_001}),(50_000*.1+50_001*.01)*5/1_000_000);
+});
+
 test("calendar uses package lunar/holiday/shift dates and only mentions the day's solar term",()=> {
   const context=(date)=>calendarContext({now:new Date(date+"T04:00:00Z")});
   const national=context("2026-10-01");assert.match(national,/农历八月廿一/);assert.match(national,/法定节假日（国庆节）/);assert.equal(national.split("\n").length,2);

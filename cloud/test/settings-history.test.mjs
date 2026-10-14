@@ -14,6 +14,9 @@ import {config} from "../src/config.mjs";
 test("settings defaults, partial updates, persisted private file and strict validation ignore obsolete env choices",()=>{
   const root=fs.mkdtempSync(path.join(testRoot,"settings-"));
   const value=getAppSettings(root);assert.equal(value.model,DEFAULT_SETTINGS.model);assert.equal(value.permissionMode,"auto");
+  assert.equal(value.model,"anthropic/claude-haiku-5.5");
+  assert.deepEqual(value.models.map((m)=>m.id),["anthropic/claude-haiku-5.5","anthropic/claude-opus-5.5","z-ai/glm-5.3-flash","z-ai/glm-5.3-flashx"]);
+  assert.deepEqual(value.models[1],{id:"anthropic/claude-opus-5.5",label:"Claude Opus 5.5",note:"消耗约 40×；缓存读约 20×"});
   assert.deepEqual(value.models.map((m)=>m.id),MODELS.map((m)=>m.id));assert.ok(value.models.every((m)=>m.label&&m.note&&!m.note.includes("\n")));
   putAppSettings(root,{model:MODELS[1].id});assert.deepEqual(readAppSettings(root),{model:MODELS[1].id,permissionMode:"auto"});
   putAppSettings(root,{permissionMode:"bypassPermissions"});assert.equal(getAppSettings(root).permissionMode,"bypassPermissions");
@@ -59,7 +62,12 @@ test("authenticated settings/history/send APIs validate bodies, preserve task id
   assert.equal((await req("/api/settings","GET",undefined,false)).status,401);
   assert.equal((await req("/api/settings")).body.model,DEFAULT_SETTINGS.model);
   assert.equal((await req("/api/settings","PUT",{model:MODELS[2].id})).body.model,MODELS[2].id);assert.equal(changed,1);
+  const opus="anthropic/claude-opus-5.5",saved=await req("/api/settings","PUT",{model:opus});
+  assert.equal(saved.status,200);assert.equal(saved.body.model,opus);assert.equal(changed,2);
+  assert.equal((await req("/api/settings")).body.model,opus);assert.equal(readAppSettings(config.root).model,opus);
+  assert.deepEqual(saved.body.models[1],{id:opus,label:"Claude Opus 5.5",note:"消耗约 40×；缓存读约 20×"});
   assert.equal((await req("/api/settings","PUT","bad")).status,400);assert.equal((await req("/api/settings","PUT",{permissionMode:"default"})).status,400);
+  assert.equal((await req("/api/settings")).body.model,opus);assert.equal(changed,2);
   assert.equal((await req("/api/tasks/native-id/history")).body.status,"running");
   assert.deepEqual((await req("/api/tasks/native-id/send","POST",{text:"继续"})).body,{ok:true,id:"native-id"});assert.deepEqual(sent,[{id:"native-id",text:"继续"}]);
   assert.equal((await req("/api/tasks/native-id/send","POST",{text:""})).status,400);assert.equal((await req("/api/tasks/%E0/history")).status,400);

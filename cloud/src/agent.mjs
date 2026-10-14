@@ -8,7 +8,7 @@ import { config, MEMORY_CATEGORIES } from "./config.mjs";
 import { readJson, appendJsonl, nowIn } from "./store.mjs";
 import { ConnectorManager, writePrivateJson } from "./connectors.mjs";
 import { checkConnectorAccess, CONNECTOR_GUARD_TOOLS } from "./connector-guard.mjs";
-import { inputUsage, contextPolicy, CLI_MODEL_PROFILE } from "./context-policy.mjs";
+import { inputUsage, contextPolicy, CLI_MODEL_OVERRIDES } from "./context-policy.mjs";
 import { readAppSettings, MODELS, modelEnvironment } from "./app-settings.mjs";
 import { TaskHistory } from "./task-history.mjs";
 import { contextFailure, humanError, recoveryContext, withRecovery, RECOVERY_NOTICE } from "./conversation-recovery.mjs";
@@ -126,7 +126,7 @@ export class Harness {
         const q = getQuery();
         if (!q?.applyFlagSettings) throw new Error("SDK 缺少压缩 effort 控制接口，请使用锁定的 SDK 版本");
         // The CLI's compactor inherits thinking/effort. Change its live flag cap BEFORE its request.
-        // Keep adaptive thinking: Haiku at max cannot accept disabled thinking; low is sufficient here.
+        // Haiku 5.5 and Opus 5.5 reject disabled thinking; keep adaptive thinking at low effort.
         await q.applyFlagSettings({ effortLevel: config.compactEffort, maxEffortLevel: config.compactEffort });
         return {};
       },
@@ -166,7 +166,8 @@ export class Harness {
       settingSources: ["project"],
       settings: {
         availableModels: MODELS.map((row) => row.id),
-        modelPicker: { replaceBuiltInOptions: true, options: MODELS.map((row) => ({ model: row.id, label: row.label, behavesAs: CLI_MODEL_PROFILE })) },
+        modelOverrides: { ...CLI_MODEL_OVERRIDES },
+        modelPicker: { replaceBuiltInOptions: true, options: MODELS.map((row) => ({ model: row.id, label: row.label, behavesAs: contextPolicy(row.id).canonical })) },
         autoCompactEnabled: true,
         precomputeCompactionEnabled: false,
         idleCompaction: false,

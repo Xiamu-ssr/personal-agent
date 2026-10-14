@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { contextPolicy, inputUsage } from "../src/context-policy.mjs";
+import { MODELS, modelEnvironment } from "../src/app-settings.mjs";
 
 test("200K CLI window reserves 20K output and 13K summary for a 167K trigger", () => {
   const p = contextPolicy("anthropic/claude-haiku-5.5", {});
@@ -13,9 +14,10 @@ test("200K CLI window reserves 20K output and 13K summary for a 167K trigger", (
   assert.equal(p.env.DISABLE_AUTO_COMPACT, "0");
 });
 
-test("only the three settings models use a fixed 200K policy; obsolete env overrides have no effect", () => {
-  for (const model of ["anthropic/claude-haiku-5.5", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flashx"]) {
+test("all four settings models use a fixed 200K policy; obsolete env overrides have no effect", () => {
+  for (const { id: model } of MODELS) {
     const p = contextPolicy(model, { AGENT_CONTEXT_INPUT_LIMIT: "1", AGENT_MAX_OUTPUT_TOKENS: "1" });
+    assert.equal(p.canonical, model === "anthropic/claude-opus-5.5" ? "claude-opus-5-5" : "claude-haiku-5-5");
     assert.equal(p.windowTokens, 200000);
     assert.equal(p.triggerTokens, 167000);
     assert.equal(p.maxOutputTokens, 128000);
@@ -23,6 +25,16 @@ test("only the three settings models use a fixed 200K policy; obsolete env overr
     assert.equal("CLAUDE_CODE_CURRIED_TRINKET" in p.env, false);
   }
   assert.throws(() => contextPolicy("unknown"), /不支持/);
+});
+
+test("Opus model environment uses the provider id for all families, subagents and permission classifiers", () => {
+  const model = "anthropic/claude-opus-5.5";
+  assert.deepEqual(modelEnvironment(model), {
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: model, ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL: model,
+    CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1", CLAUDE_CODE_AUTO_MODE_MODEL: model,
+    CLAUDE_CODE_BG_CLASSIFIER_MODEL: model,
+  });
 });
 
 test("input usage counts cached reads/writes exactly once and takes the last server-side iteration", () => {

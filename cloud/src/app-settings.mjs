@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 
 export const MODELS = [
   { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", note: "消耗约 1×；输入超过 100K 后约 5×" },
+  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", note: "消耗约 40×；缓存读约 20×" },
   { id: "z-ai/glm-5.3-flash", label: "GLM 5.3 Flash", note: "输入约 1.5×，输出约 1×；缓存读约 3×" },
   { id: "z-ai/glm-5.3-flashx", label: "GLM 5.3 FlashX", note: "输入约 3.75×，输出约 2.5×；缓存读约 7.5×" },
 ];

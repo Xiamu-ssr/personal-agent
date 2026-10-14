@@ -54,6 +54,7 @@ brief_items = [dict(date=day(), name='晨报', time=f'{day()}T07:36:00+08:00', p
     dict(date=day(20), name='健康周报', time=f'{day(20)}T20:00:00+08:00', path=f'data/briefs/{day(20)}/健康周报.html', cards=[dict(html=card_html('<span class="chip">健康周报</span><h2>这一周休息得不错</h2><span class="metric">7.2</span> 小时'))])]
 settings = dict(model='anthropic/claude-haiku-5.5', permissionMode='auto', models=[
     dict(id='anthropic/claude-haiku-5.5', label='Claude Haiku 5.5', note='消耗约 1×；输入超过 100K 后约 5×'),
+    dict(id='anthropic/claude-opus-5.5', label='Claude Opus 5.5', note='消耗约 40×；缓存读约 20×'),
     dict(id='z-ai/glm-5.3-flash', label='GLM 5.3 Flash', note='输入约 1.5×，输出约 1×；缓存读约 3×'),
     dict(id='z-ai/glm-5.3-flashx', label='GLM 5.3 FlashX', note='输入约 3.75×，输出约 2.5×；缓存读约 7.5×')], permissionModes=[
     dict(id='auto', label='自动', note='不问用户，自动拦下危险操作'),

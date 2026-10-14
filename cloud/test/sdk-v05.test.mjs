@@ -42,7 +42,7 @@ function fixture(t,api,release=()=>{}) {
   return {h,wire,events,optionsUsed,spawned,until,turn};
 }
 
-test("真实 SDK 切换后三模型下一轮的 wire model 改变，原会话和内置系统提示词保留",{timeout:60_000},async(t)=>{
+test("真实 SDK 切换后四模型下一轮的 wire model 改变，原会话和内置系统提示词保留",{timeout:60_000},async(t)=>{
   putAppSettings(config.root,{...DEFAULT_SETTINGS,permissionMode:"bypassPermissions"});
   const api=await fakeAnthropic();
   const f=fixture(t,api);
@@ -58,19 +58,19 @@ test("真实 SDK 切换后三模型下一轮的 wire model 改变，原会话和
     assert.equal(result.modelUsage[row.id].contextWindow,200000);
     assert.equal(api.requests.at(-1).output_config.effort,"max");
   }
-  assert.equal(f.optionsUsed.length,3,"model changes refresh classifier env by resuming the same conversation");
+  assert.equal(f.optionsUsed.length,MODELS.length,"model changes refresh classifier env by resuming the same conversation");
   assert.equal(f.optionsUsed[0].systemPrompt.type,"preset");
   assert.equal(f.optionsUsed[0].systemPrompt.preset,"claude_code");
   assert.match(JSON.stringify(api.requests[0].system),/你是豆豆/);
   assert.ok(JSON.stringify(api.requests[0].system).length>f.optionsUsed[0].systemPrompt.append.length,"the CLI builtin prompt remains present");
-  assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_AUTO_MODE_MODEL,MODELS[2].id);
-  assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_SUBAGENT_MODEL,MODELS[2].id);
+  assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_AUTO_MODE_MODEL,MODELS.at(-1).id);
+  assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_SUBAGENT_MODEL,MODELS.at(-1).id);
   assert.equal(new Set(f.optionsUsed.map((o)=>o.systemPrompt.append)).size,1);
   assert.deepEqual(f.spawned.map((s)=>s.autoModel),MODELS.map((m)=>m.id));
   assert.ok(f.spawned.every((s)=>s.subagent===s.autoModel&&s.backgroundClassifier===s.autoModel&&s.window==="200000"));
 });
 
-test("三模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用内置压缩并恢复 max",{timeout:120_000},async(t)=>{
+test("四模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用内置压缩并恢复 max",{timeout:120_000},async(t)=>{
   for(const row of MODELS) await t.test(row.id,{timeout:40_000},async(t)=>{
     putAppSettings(config.root,{model:row.id,permissionMode:"bypassPermissions"});
     let normal=0;
@@ -78,6 +78,9 @@ test("三模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用�
     const f=fixture(t,api);
     const first=await f.turn("V05_WINDOW_FIRST");
     assert.equal(first.subtype,"success");assert.equal(first.modelUsage[row.id].contextWindow,200000);
+    assert.equal(first.modelUsage[row.id].maxOutputTokens,128000);
+    assert.equal(api.requests[0].thinking.type,"adaptive");
+    if(row.id==="anthropic/claude-opus-5.5")assert.ok(Math.abs(first.modelUsage[row.id].costUSD-.04656)<1e-10,"CLI uses the Opus 5.5 profile's pricing");
     assert.equal((await f.turn("V05_WINDOW_SECOND")).subtype,"success");
     assert.equal(api.requests.filter(compactRequest).length,0);
     assert.equal((await f.turn("V05_WINDOW_THIRD")).subtype,"success");
@@ -88,6 +91,7 @@ test("三模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用�
     assert.ok(f.wire.some((m)=>m.subtype==="compact_boundary"));
     assert.equal(api.requests.at(-1).output_config.effort,"max");
     assert.equal(api.requests.at(-1).model,row.id);
+    assert.ok(api.requests.every((r)=>r.max_tokens===128000&&r.thinking.type==="adaptive"));
   });
 });
 

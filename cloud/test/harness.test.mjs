@@ -161,7 +161,8 @@ test("main, isolated and subagent env share the model cap and the 167K estimated
     assert.equal(o.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000");
     assert.equal(o.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, "100");
     assert.equal(o.env.CLAUDE_CODE_SUBAGENT_MODEL, config.model);
-    assert.ok(o.settings.modelPicker.options.every((row) => row.behavesAs === "claude-haiku-5-5"));
+    assert.deepEqual(o.settings.modelOverrides, { "claude-opus-5-5": "anthropic/claude-opus-5.5" });
+    assert.ok(o.settings.modelPicker.options.every((row) => row.behavesAs === (row.model === "anthropic/claude-opus-5.5" ? "claude-opus-5-5" : "claude-haiku-5-5")));
     assert.equal(o.systemPrompt.preset, "claude_code");
   }
   for (const server of Object.values(opts.mcpServers)) await server.instance.close();

@@ -1,6 +1,6 @@
 # 豆豆云端协议（v0.6）：后台任务、HTML 简报与设置
 
-接口沿用现有 Bearer / cookie 鉴权。下面路径是云端服务路径；反向代理对外仍可加 `/agent`。本文是当前协议；简报只认 HTML，设置只接受以下三个模型和两种权限。
+接口沿用现有 Bearer / cookie 鉴权。下面路径是云端服务路径；反向代理对外仍可加 `/agent`。本文是当前协议；简报只认 HTML，设置只接受以下四个模型和两种权限。
 
 ## 主会话忙闲与输入
 
@@ -135,7 +135,7 @@ id 是任务 id。path 是该次运行第一份有效 HTML 简报；name/time �
 `GET /api/settings` 与 `PUT /api/settings {model?,permissionMode?}` 返回同一结构：
 
 ```json
-{"model":"anthropic/claude-haiku-5.5","permissionMode":"auto","models":[{"id":"anthropic/claude-haiku-5.5","label":"Claude Haiku 5.5","note":"消耗约 1×；输入超过 100K 后约 5×"},{"id":"z-ai/glm-5.3-flash","label":"GLM 5.3 Flash","note":"输入约 1.5×，输出约 1×；缓存读约 3×"},{"id":"z-ai/glm-5.3-flashx","label":"GLM 5.3 FlashX","note":"输入约 3.75×，输出约 2.5×；缓存读约 7.5×"}],"permissionModes":[{"id":"auto","label":"自动","note":"不问用户，自动拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}
+{"model":"anthropic/claude-haiku-5.5","permissionMode":"auto","models":[{"id":"anthropic/claude-haiku-5.5","label":"Claude Haiku 5.5","note":"消耗约 1×；输入超过 100K 后约 5×"},{"id":"anthropic/claude-opus-5.5","label":"Claude Opus 5.5","note":"消耗约 40×；缓存读约 20×"},{"id":"z-ai/glm-5.3-flash","label":"GLM 5.3 Flash","note":"输入约 1.5×，输出约 1×；缓存读约 3×"},{"id":"z-ai/glm-5.3-flashx","label":"GLM 5.3 FlashX","note":"输入约 3.75×，输出约 2.5×；缓存读约 7.5×"}],"permissionModes":[{"id":"auto","label":"自动","note":"不问用户，自动拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"什么都不拦"}]}
 ```
 
 - 原子保存 system/app-settings.json，权限 600。默认 Haiku 5.5 + auto。model/permissionMode 之外的字段及未知值 400，不修改原设置；JSON 格式错误 400。

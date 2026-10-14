@@ -2,14 +2,15 @@
 // The CLI's window is NOT its input trigger: p5() reserves output, $Y() reserves a summary.
 export const CLI_OUTPUT_RESERVE = 20_000;
 export const CLI_SUMMARY_RESERVE = 13_000;
-// The three product models share the same CLI profile. Provider ids remain unchanged on the wire.
+// Haiku and GLM share a CLI profile. The dotted Opus id otherwise resolves to Opus 5 in this CLI.
 export const CLI_MODEL_PROFILE = "claude-haiku-5-5";
-const PRODUCT_MODELS = new Set(["anthropic/claude-haiku-5.5", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flashx"]);
+export const CLI_MODEL_OVERRIDES = { "claude-opus-5-5": "anthropic/claude-opus-5.5" };
+const PRODUCT_MODELS = new Set(["anthropic/claude-haiku-5.5", "anthropic/claude-opus-5.5", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flashx"]);
 
 export function contextPolicy(model) {
   if (!PRODUCT_MODELS.has(model)) throw new Error("不支持的模型");
   return {
-    canonical: CLI_MODEL_PROFILE, maxOutputTokens: 128_000,
+    canonical: model === CLI_MODEL_OVERRIDES["claude-opus-5-5"] ? "claude-opus-5-5" : CLI_MODEL_PROFILE, maxOutputTokens: 128_000,
     inputLimit: 172_000, toolHeadroom: 5000, outputReserve: CLI_OUTPUT_RESERVE,
     summaryReserve: CLI_SUMMARY_RESERVE, windowTokens: 200_000, triggerTokens: 167_000,
     env: {
