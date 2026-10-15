@@ -46,16 +46,18 @@ object Api {
         return server + path
     }
 
-    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    fun encode(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
-    /** `/files/<path under the repo root>`, each segment URL-encoded. Paths look like `data/briefs/...`. */
-    fun filePath(dataPath: String) = "/files/" + dataPath.split("/").joinToString("/") { enc(it) }
+    /** `/files/<path under the repo root>`, each segment URL-encoded. Paths begin with `data/`. */
+    fun filePath(dataPath: String) = "/files/" + dataPath.split("/").joinToString("/") { encode(it) }
     fun fileUrl(dataPath: String, server: String = Prefs.server) = url(filePath(dataPath), server)
 
-    fun wsRequest(role: String): Request? {
+    fun wsRequest(role: String): Request? = socketRequest("/ws?role=$role")
+
+    fun socketRequest(path: String): Request? {
         val base = serverUri()?.toASCIIString()?.trimEnd('/')
             ?.replaceFirst("https://", "wss://")?.replaceFirst("http://", "ws://") ?: return null
-        return Request.Builder().url("$base/ws?role=$role").header("Authorization", "Bearer ${Prefs.token}").build()
+        return Request.Builder().url("$base$path").header("Authorization", "Bearer ${Prefs.token}").build()
     }
 
     private fun req(path: String) = Request.Builder().url(url(path)).header("Authorization", "Bearer ${Prefs.token}")
@@ -92,7 +94,7 @@ object Api {
         call(req(path).put(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
 
     private fun accountsPath(name: String, id: String? = null) =
-        "/api/connectors/${enc(name)}/accounts" + if (id == null) "" else "/${enc(id)}"
+        "/api/connectors/${encode(name)}/accounts" + if (id == null) "" else "/${encode(id)}"
 
     suspend fun addConnectorAccount(name: String, values: JSONObject): JSONObject =
         postJson(accountsPath(name), JSONObject().put("values", values))
@@ -102,13 +104,13 @@ object Api {
 
     suspend fun testConnectorAccount(name: String, id: String): JSONObject = postJson(accountsPath(name, id) + "/test")
     suspend fun deleteConnectorAccount(name: String, id: String) { call(req(accountsPath(name, id)).delete().build()) }
-    suspend fun removeDevice(id: String) { call(req("/api/devices/${enc(id)}").delete().build()) }
+    suspend fun removeDevice(id: String) { call(req("/api/devices/${encode(id)}").delete().build()) }
 
     private suspend fun postRaw(path: String, body: RequestBody): JSONObject = JSONObject(call(req(path).post(body).build(), slow))
 
     /** Raw bytes into data/uploads/<date>/. Returns `{path, name, size}`. */
     suspend fun upload(name: String, bytes: ByteArray): JSONObject =
-        postRaw("/api/upload?name=" + enc(name), bytes.toRequestBody("application/octet-stream".toMediaType()))
+        postRaw("/api/upload?name=" + encode(name), bytes.toRequestBody("application/octet-stream".toMediaType()))
 
     suspend fun upload(name: String, file: File): JSONObject = upload(name, withContext(Dispatchers.IO) { file.readBytes() })
 
@@ -122,41 +124,35 @@ object Api {
 
     suspend fun bytes(dataPath: String): ByteArray = fetch(req(filePath(dataPath)).build(), http) { it.body?.bytes() ?: byteArrayOf() }
 
-    suspend fun connectorIcon(name: String): ByteArray = fetch(req("/api/connectors/${enc(name)}/icon").build(), http) { it.body?.bytes() ?: byteArrayOf() }
+    suspend fun connectorIcon(name: String): ByteArray = fetch(req("/api/connectors/${encode(name)}/icon").build(), http) { it.body?.bytes() ?: byteArrayOf() }
 
-    suspend fun briefs(): List<BriefDocument> = getJson("/api/briefs?days=7").optJSONArray("items").objects()
-        .mapNotNull(BriefDocument::from).sortedByDescending { it.time }
-
-    suspend fun briefItem(path: String): BriefDocument = BriefDocument.from(getJson("/api/briefs/item?path=${enc(path)}"))
-        ?.also { require(it.path == path) } ?: error("简报内容无法读取")
-    suspend fun jobs(before: Long? = null): JobsPage = JobsPage.from(getJson("/api/jobs?limit=30" + (before?.let { "&before=$it" } ?: "")))
+    suspend fun feed(before: String? = null): FeedPage = FeedPage.from(getJson("/api/feed?days=7" + (before?.let { "&before=${encode(it)}" } ?: "")))
+    suspend fun feedSettings() = FeedSettings.from(getJson("/api/feed/settings"))
+    suspend fun saveFeedSettings(value: FeedSettings): FeedSettings { value.validate(); return FeedSettings.from(putJson("/api/feed/settings",value.json())) }
+    suspend fun feedback(path: String,action: String) = postJson("/api/feed/feedback",JSONObject().put("path",path).put("action",action))
+    suspend fun ideas() = Ideas.from(getJson("/api/ideas"))
+    suspend fun clickIdea(id: String,revision: String) = postJson("/api/ideas/click",JSONObject().put("id",id).put("revision",revision))
+    suspend fun goals() = getJson("/api/goals")
+    suspend fun goal(name: String) = Goal.from(getJson("/api/goals/item?name=${encode(name)}"))
+    suspend fun library() = Library.from(getJson("/api/library"))
+    suspend fun activities(before: Long? = null) = ActivitiesPage.from(getJson("/api/activities?limit=30"+(before?.let { "&before=$it" } ?: "")))
     suspend fun health(): HealthData = HealthData.from(getJson("/api/health"))
-    suspend fun syncHealth(): HealthData = HealthData.from(postJson("/api/health/sync", JSONObject()))
-
+    suspend fun syncHealth(): HealthData = HealthData.from(postJson("/api/health/sync"))
     suspend fun settings(): AgentSettings = AgentSettings.from(getJson("/api/settings"))
     suspend fun saveSettings(model: String? = null, permissionMode: String? = null): AgentSettings {
         require(model != null || permissionMode != null)
-        val body = JSONObject()
-        model?.let { body.put("model", it) }
-        permissionMode?.let { body.put("permissionMode", it) }
-        return AgentSettings.from(putJson("/api/settings", body))
+        return AgentSettings.from(putJson("/api/settings",JSONObject().apply { model?.let { put("model",it) }; permissionMode?.let { put("permissionMode",it) } }))
     }
-
-    suspend fun taskHistory(id: String): TaskHistory = TaskHistory.from(getJson("/api/tasks/${enc(id)}/history")).also {
-        require(it.id == id) { "返回的任务不匹配，请重试" }
+    suspend fun activityHistory(id: String) = ActivityHistory.from(getJson("/api/activities/${encode(id)}/history")).also { require(it.id==id) { "返回的活动不匹配" } }
+    suspend fun sideChatHistory(id: String) = SideChatHistory.from(getJson("/api/activities/${encode(id)}/history")).also { require(it.id==id) { "返回的旁聊不匹配" } }
+    suspend fun createSideChat(text: String,attachments: List<Attachment>): String = createdSideChatId(postJson("/api/side-chats",JSONObject().put("text",text).put("attachments",JSONArray(attachments.map { it.toJson() }))))
+    suspend fun chooseSideOption(id: String,messageId: String,optionId: String) = postJson("/api/options/choose",JSONObject().put("activityId",id).put("messageId",messageId).put("optionId",optionId))
+    suspend fun sendToActivity(id: String,text: String,attachments: List<Attachment> = emptyList()) {
+        val body=JSONObject().put("text",text).put("attachments",JSONArray(attachments.map { it.toJson() }))
+        val result=postJson("/api/activities/${encode(id)}/send",body)
+        check(result.optBoolean("ok") && result.optString("id")==id) { "续聊发送失败" }
     }
-    suspend fun sendToTask(id: String, text: String, attachments: List<Attachment> = emptyList()) {
-        require(text.isNotBlank() || attachments.isNotEmpty())
-        val body = JSONObject().put("text", text)
-        if (attachments.isNotEmpty()) body.put("attachments", JSONArray(attachments.map { it.toJson() }))
-        val result = postJson("/api/tasks/${enc(id)}/send", body)
-        check(result.getBoolean("ok") && result.getString("id") == id) { "任务续聊发送失败，请重试" }
-    }
-
-    suspend fun profile(): AvatarChoice = AvatarChoice.from(getJson("/api/profile").optJSONObject("avatar"))
-    suspend fun saveProfile(choice: AvatarChoice) {
-        putJson("/api/profile", JSONObject().put("avatar", JSONObject().put("shape", choice.shape).put("palette", choice.palette)))
-    }
+    suspend fun pathBytes(path: String): ByteArray = fetch(req(path).build(),http) { it.body?.bytes() ?: byteArrayOf() }
 
     suspend fun download(dataPath: String, dest: File) = withContext(Dispatchers.IO) {
         dest.parentFile?.mkdirs()
@@ -173,7 +169,7 @@ object Api {
     }
 
     suspend fun tree(dir: String): List<Entry> {
-        val arr = getJson("/api/tree?dir=" + enc(dir)).getJSONArray("entries")
+        val arr = getJson("/api/tree?dir=" + encode(dir)).getJSONArray("entries")
         return (0 until arr.length()).map {
             val e = arr.getJSONObject(it)
             Entry(e.getString("name"), e.getBoolean("dir"), e.optLong("size"), e.optLong("mtime"))

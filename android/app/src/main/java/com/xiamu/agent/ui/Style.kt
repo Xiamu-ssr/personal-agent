@@ -57,34 +57,33 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** All native surfaces and typography use the selected local skin. */
-object SkinState {
-    val current = androidx.compose.runtime.mutableStateOf(com.xiamu.agent.Skin.Silver)
-    fun restore() { current.value = com.xiamu.agent.Prefs.skinPreference.current }
-    fun select(skin: com.xiamu.agent.Skin) { current.value = com.xiamu.agent.Prefs.skinPreference.select(skin) }
+object ThemeState {
+    val preference = androidx.compose.runtime.mutableStateOf("system")
+    val dark = androidx.compose.runtime.mutableStateOf(false)
+    fun restore() { preference.value = com.xiamu.agent.Prefs.appearance }
+    fun select(value: String) { preference.value=value; com.xiamu.agent.Prefs.appearance=value }
 }
-
 object Pal {
-    private val c get() = SkinState.current.value.colors
-    val Background get() = Color(c.background)
-    val Ink get() = Color(c.ink)
-    val Muted get() = Color(c.secondary)
-    val Faint get() = Color(c.secondary)
-    val Line get() = Color(c.line)
-    val Card get() = Color(c.card)
-    val CardSolid get() = Card
-    val Field get() = Background
-    val Icon get() = Color(c.accent)
-    val Link get() = Color(c.accent)
-    val GoldInk get() = Link
-    val Gold get() = Color(c.decoration)
-    val Danger get() = Color(c.attention)
-    val Online get() = Color(c.good)
-    val Info get() = Color(c.info)
-    val UserBubble get() = Color(c.accentSoft)
-    val UserText get() = Ink
-    val Quiet get() = UserBubble
-    val QuietText get() = Link
+    private val dark get()=ThemeState.dark.value
+    val Background get()=if(dark) Color.Black else Color.White
+    val Ink get()=if(dark) Color.White else Color.Black
+    val Muted get()=if(dark) Color(0xFF999999) else Color(0xFF707070)
+    val Faint get()=Muted
+    val Line get()=if(dark) Color(0xFF292929) else Color(0xFFE8E8E8)
+    val Card get()=if(dark) Color(0xFF202020) else Color(0xFFF3F3F3)
+    val CardSolid get()=Card
+    val Field get()=Card
+    val Icon get()=Ink
+    val Link get()=if(dark) Color(0xFF69AFFF) else Color(0xFF0668CE)
+    val GoldInk get()=Ink
+    val Gold get()=Ink
+    val Danger get()=Muted
+    val Online get()=Ink
+    val Info get()=Muted
+    val UserBubble get()=if(dark) Color(0xFFE8E8E8) else Color(0xFF202020)
+    val UserText get()=Background
+    val Quiet get()=if(dark) Color(0xFF363636) else Color(0xFFE6E6E6)
+    val QuietText get()=Ink
 }
 
 object Type {
@@ -99,19 +98,21 @@ object Type {
     val BodyLine = 22.sp
     val SecondaryLine = 19.sp
     val LabelLine = 16.sp
-    val titleFamily get() = if (SkinState.current.value == com.xiamu.agent.Skin.Paper) androidx.compose.ui.text.font.FontFamily.Serif else androidx.compose.ui.text.font.FontFamily.SansSerif
-    val bodyWeight get() = if (SkinState.current.value == com.xiamu.agent.Skin.Night) FontWeight.Light else FontWeight.Normal
+    val titleFamily get() = androidx.compose.ui.text.font.FontFamily.SansSerif
+    val bodyWeight get() = FontWeight.Normal
     fun body(size: Int) = TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif, fontSize = size.sp,
         lineHeight = (size * 1.45f).sp, fontWeight = bodyWeight, fontFeatureSettings = "tnum", color = Pal.Ink)
     fun title(size: Int) = body(size).copy(fontFamily = titleFamily, fontWeight = FontWeight.SemiBold)
 }
 
 val GoldBrush get() = Brush.linearGradient(listOf(Pal.Quiet, Pal.Quiet))
-val GoldRim get() = Brush.horizontalGradient(listOf(Pal.Link, Pal.Link))
+val GoldRim get() = Brush.horizontalGradient(listOf(Pal.Ink, Pal.Ink))
 
 @Composable
 fun AgentTheme(content: @Composable () -> Unit) {
-    val night = SkinState.current.value == com.xiamu.agent.Skin.Night
+    val systemDark=androidx.compose.foundation.isSystemInDarkTheme()
+    val night=when(ThemeState.preference.value) { "light" -> false; "dark" -> true; else -> systemDark }
+    ThemeState.dark.value=night
     val view = androidx.compose.ui.platform.LocalView.current
     val background = Pal.Background
     androidx.compose.runtime.SideEffect {
@@ -129,7 +130,7 @@ fun AgentTheme(content: @Composable () -> Unit) {
     }
     val colors = if (night) androidx.compose.material3.darkColorScheme() else lightColorScheme()
     MaterialTheme(
-        colorScheme = colors.copy(primary = Pal.Link, onPrimary = Pal.Background, primaryContainer = Pal.Quiet,
+        colorScheme = colors.copy(primary = Pal.Ink, onPrimary = Pal.Background, primaryContainer = Pal.Quiet,
             onPrimaryContainer = Pal.Ink, secondary = Pal.Gold, secondaryContainer = Pal.Quiet,
             onSecondaryContainer = Pal.Ink, background = background, surface = Pal.Card, surfaceVariant = Pal.Field,
             surfaceContainer = Pal.Card, surfaceContainerHigh = Pal.Card, surfaceContainerHighest = Pal.Field,
@@ -147,7 +148,7 @@ fun AgentTheme(content: @Composable () -> Unit) {
 }
 
 fun Modifier.canvasBackground() = background(Pal.Background)
-fun Modifier.card(radius: Dp = 16.dp, color: Color = Pal.Card): Modifier = background(color, RoundedCornerShape(radius.coerceAtMost(16.dp)))
+fun Modifier.card(radius: Dp = 22.dp, color: Color = Pal.Card): Modifier = background(color, RoundedCornerShape(radius))
 fun Modifier.gold(shape: Shape = CircleShape) = clip(shape).background(Pal.Quiet)
 
 /** clickable without the grey ripple; most surfaces here are glassy and the ripple looks muddy on them. */
@@ -160,7 +161,7 @@ fun Screen(content: @Composable BoxScope.() -> Unit) {
     Box(Modifier.fillMaxSize().canvasBackground(), content = content)
 }
 
-/** Big page title (今日 / 任务 / 记忆) with round icon buttons on the right. */
+/** Page title and contextual actions. */
 @Composable
 fun PageHeader(title: String, sub: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Column(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, top = 18.dp, bottom = 8.dp)) {
@@ -176,10 +177,10 @@ fun PageHeader(title: String, sub: String? = null, actions: @Composable RowScope
 @Composable
 fun SubHeader(title: String, onBack: () -> Unit) {
     Box(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp).height(52.dp)) {
-        Box(Modifier.align(Alignment.CenterStart).size(44.dp).clip(CircleShape).tap(onClick = onBack), contentAlignment = Alignment.Center) {
+        Box(Modifier.align(Alignment.CenterStart).size(44.dp).clip(CircleShape).background(Pal.Card).tap(onClick = onBack), contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Outlined.ArrowBackIos, "返回", tint = Pal.Icon, modifier = Modifier.size(18.dp).offset(x = 3.dp))
         }
-        Text(title, style = Type.title(20), color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(title, style = Type.title(17), color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 56.dp))
     }
 }
@@ -277,9 +278,9 @@ fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = t
     ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (enabled) Pal.GoldInk else Pal.Faint) }
 }
 
-/** Plain silver button for secondary actions. */
+/** Neutral secondary action. */
 @Composable
-fun SilverButton(text: String, modifier: Modifier = Modifier, color: Color = Pal.Link, onClick: () -> Unit) {
+fun SilverButton(text: String, modifier: Modifier = Modifier, color: Color = Pal.Ink, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     Box(
         modifier.height(48.dp).clip(shape).background(Pal.Card).tap(onClick = onClick),
@@ -308,7 +309,7 @@ fun Tag(text: String, color: Color = Pal.Muted) {
         .background(color.copy(alpha = 0.1f)).padding(horizontal = 8.dp, vertical = 3.dp))
 }
 
-/** Segmented tabs: the selected one sits on a gold pill with a short gold rim below. */
+/** Neutral segmented controls. */
 @Composable
 fun SegTabs(labels: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
     Row(modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -331,7 +332,7 @@ fun GoldSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val x = animateDpAsState(if (checked) 20.dp else 2.dp, label = "knob")
     val shape = RoundedCornerShape(14.dp)
     Box(
-        Modifier.size(46.dp, 28.dp).then(if (checked) Modifier.clip(shape).background(Pal.Link) else Modifier.clip(shape).background(Pal.Line))
+        Modifier.size(46.dp, 28.dp).then(if (checked) Modifier.clip(shape).background(Pal.Ink) else Modifier.clip(shape).background(Pal.Line))
             .tap { onChange(!checked) },
     ) {
         Box(
@@ -363,7 +364,7 @@ fun ErrorNote(text: String) {
     Text(text, fontSize = 13.sp, color = Pal.Danger, modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 4.dp))
 }
 
-fun pagePadding(bottom: Dp) = PaddingValues(start = 20.dp, end = 20.dp, bottom = bottom + 16.dp)
+fun pagePadding(bottom: Dp) = PaddingValues(start = 20.dp, end = 20.dp, top = FloatingHeaderSpace, bottom = bottom + 16.dp)
 
 /** A pushed page: nav bar on top, scrolling content below. */
 @Composable

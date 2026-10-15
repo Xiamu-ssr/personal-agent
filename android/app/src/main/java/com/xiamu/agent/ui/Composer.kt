@@ -112,7 +112,7 @@ import java.util.Locale
 data class Picked(val id: Long, val name: String, val kind: String, val uri: Uri? = null, val file: File? = null)
 
 /** The draft is shared by every tab's input box. */
-open class MessageDraft(private val taskId: String? = null) {
+open class MessageDraft(private val taskId: String? = null,private val sendMessage: (suspend (String,List<Attachment>) -> Boolean)? = null) {
     val text = mutableStateOf("")
     val picked = mutableStateListOf<Picked>()
     val sending = mutableStateOf(false)
@@ -141,18 +141,18 @@ open class MessageDraft(private val taskId: String? = null) {
     fun send(ctx: Context, text: String = this.text.value.trim(), extra: List<Picked> = emptyList(), includeDraft: Boolean = true, onDone: () -> Unit = {}): Boolean {
         val files = (if (includeDraft) picked.toList() else emptyList()) + extra
         if (sending.value || (text.isBlank() && files.isEmpty())) { onDone(); return false }
-        if (taskId == null && !Chat.connected.value) {
+        if (taskId == null && sendMessage == null && !Chat.connected.value) {
             say("还没连上云端，稍等再发")
             extra.forEach { if (it !in picked) picked.add(it) }
             onDone()
             return false
         }
-        if (taskId == null) Nav.home(0)
+        if (taskId == null && sendMessage == null) Nav.home(0)
         sending.value = true
         transfer = scope.launch {
             try {
                 val atts = files.map { upload(ctx, it) }
-                val accepted = if (taskId == null) Chat.send(text, atts) else { Api.sendToTask(taskId, text, atts); true }
+                val accepted = if(sendMessage!=null) sendMessage.invoke(text,atts) else if (taskId == null) Chat.send(text, atts) else { Api.sendToActivity(taskId, text, atts); true }
                 if (accepted) {
                     sentVersion.intValue++
                     if (includeDraft && text == this@MessageDraft.text.value.trim()) this@MessageDraft.text.value = ""
@@ -268,27 +268,13 @@ object Voice {
 
 private fun hasPerm(ctx: Context, p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
 
-private data class TabSpec(val label: String, val icon: ImageVector, val hint: String)
-
-private val tabSpecs = listOf(
-    TabSpec("聊天", Icons.Outlined.ChatBubbleOutline, "说说你想做什么…"),
-    TabSpec("今日", Icons.Outlined.CalendarToday, "告诉我今天的安排…"),
-    TabSpec("任务", Icons.Outlined.Checklist, "交给豆豆一个任务…"),
-    TabSpec("记忆", Icons.Outlined.AutoAwesome, "告诉豆豆更多关于你的事…"),
-)
-
-/** Floating white card at the bottom: picked attachments, the input pill (not on 豆豆), and the tab bar. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun Dock(modifier: Modifier = Modifier) {
-    val tab = Nav.tab.intValue
-    val ime = WindowInsets.isImeVisible
-    Column(modifier.fillMaxWidth().background(Pal.Card, RoundedCornerShape(16.dp))
-        .card(radius = 16.dp, color = Pal.Card).padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = if (ime) 10.dp else 4.dp)) {
-        BackgroundTasks()
-        ReplyActivity()
-        MessageComposer(Draft, tabSpecs[tab].hint)
-        if (!ime) NavRow(tab)
+    val ime=WindowInsets.isImeVisible
+    Column(modifier.fillMaxWidth(), horizontalAlignment=Alignment.CenterHorizontally) {
+        if(Nav.tab.intValue==0) Box(Modifier.fillMaxWidth().padding(bottom=10.dp)) { MessageComposer(Draft,"消息") }
+        if(!ime) MainNavBar()
     }
 }
 
@@ -319,7 +305,7 @@ private fun PickedRow(draft: MessageDraft) {
                 ) {
                     if (p.kind == "image" && p.uri != null) LocalThumb(p.uri)
                     else Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = Pal.Link, modifier = Modifier.size(22.dp))
+                        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = Pal.Ink, modifier = Modifier.size(22.dp))
                     }
                     if (p.kind != "image") Text(p.name, fontSize = Type.Label, color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 130.dp))
                 }
@@ -396,7 +382,7 @@ private fun InputPill(draft: MessageDraft, hint: String) {
     }
 
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Background).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Card).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
@@ -459,7 +445,7 @@ private fun PillIcon(icon: ImageVector, desc: String, enabled: Boolean = true, o
 private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(label, fontSize = Type.Body, color = Pal.Ink) },
-        leadingIcon = { Icon(icon, null, tint = Pal.Link, modifier = Modifier.size(21.dp)) },
+        leadingIcon = { Icon(icon, null, tint = Pal.Ink, modifier = Modifier.size(21.dp)) },
         onClick = onClick,
         modifier = Modifier.widthIn(min = 180.dp),
     )
@@ -509,30 +495,7 @@ private fun HoldToTalk(draft: MessageDraft, modifier: Modifier) {
     }
 }
 
-@Composable
-private fun NavRow(tab: Int) {
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        tabSpecs.forEachIndexed { i, t ->
-            val on = i == tab
-            Column(
-                Modifier.weight(1f).tap { Nav.home(i) }.padding(bottom = 2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box(
-                    Modifier.size(46.dp, 30.dp).then(if (on) Modifier.gold(RoundedCornerShape(16.dp)) else Modifier),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(t.icon, t.label, tint = if (on) Pal.GoldInk else Pal.Muted, modifier = Modifier.size(21.dp)) }
-                Text(
-                    t.label, fontSize = Type.Tiny, lineHeight = Type.LabelLine, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (on) Pal.GoldInk else Pal.Muted, modifier = Modifier.padding(top = 3.dp),
-                )
-                Box(Modifier.padding(top = 3.dp).size(20.dp, 2.dp).clip(CircleShape).then(if (on) Modifier.background(GoldRim) else Modifier))
-            }
-        }
-    }
-}
 
-/** Recording overlays: the hold-to-talk bubble and the voice-note sheet. */
 @Composable
 fun VoiceOverlay() {
     val mode = Voice.mode.value ?: return

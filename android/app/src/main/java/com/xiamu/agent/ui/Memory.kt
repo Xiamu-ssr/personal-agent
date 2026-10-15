@@ -1,146 +1,90 @@
 package com.xiamu.agent.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.xiamu.agent.*
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import org.json.JSONObject
+import kotlinx.coroutines.*
 
-private const val PROFILE = "data/memory/profile/总档.md"
-private val categories = linkedMapOf("work" to "工作", "project" to "项目", "life" to "生活", "health" to "健康", "people" to "人际",
-    "preferences" to "偏好", "interests" to "兴趣", "finance" to "财务", "feedback" to "反馈", "history" to "历史", "automation-prefs" to "自动化偏好", "voice-notes" to "语音笔记", "role" to "角色")
-private data class MemoryFolder(val dir: String, val files: List<Api.Entry>)
-private suspend fun optionalFile(path: String): String = try { Api.readFile(path) } catch(e: Api.ApiError) { if(e.code == 404) "" else throw e }
-
+private val categoryNames=mapOf("profile" to "总档","work" to "工作","project" to "项目","life" to "生活","health" to "健康","people" to "人际","preferences" to "偏好","interests" to "兴趣","finance" to "财务","feedback" to "反馈","history" to "历史","automation-prefs" to "自动化偏好","voice-notes" to "语音笔记")
 @Composable
-fun MemoryScreen(bottom: Dp) {
-    val (state, _) = load("state") { Api.getJson("/api/state") }
-    val (profile, profileError) = load("profile") { optionalFile(PROFILE) }
-    val (health, healthError) = load("health") { Api.health() }
-    val (folders, folderError) = load("memcats") { coroutineScope {
-        Api.treeOrEmpty("data/memory").filter { it.dir && it.name != "profile" && it.name in categories }.map { dir -> async {
-            MemoryFolder(dir.name, Api.treeOrEmpty("data/memory/${dir.name}").filter { !it.dir }.sortedByDescending { it.mtime })
-        } }.awaitAll().sortedBy { categories.keys.indexOf(it.dir) }
-    } }
-    LazyColumn(contentPadding=pagePadding(bottom)) {
-        item { PageHeader("记忆") { SettingsButton() } }
-        item {
-            Column(Modifier.fillMaxWidth().card(radius=24.dp).padding(20.dp)) {
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Text("我对 ${state?.optString("userCall")?.ifBlank { null } ?: "你"} 的了解", fontSize = Type.Page, fontFamily = Type.titleFamily, fontWeight=FontWeight.Bold, color=Pal.Ink, modifier=Modifier.weight(1f))
-                    Icon(Icons.Outlined.AutoAwesome, null, tint=Pal.Gold, modifier=Modifier.size(24.dp))
-                }
-                Spacer(Modifier.height(16.dp))
-                when {
-                    profile == null && profileError.isNotBlank() -> ErrorNote(profileError)
-                    profile == null -> Loading()
-                    profile.isBlank() -> EmptyNote("还是空的，聊得越多越完整")
-                    else -> {
-                        val excerpt = profile.lines().filterNot { it.trimStart().startsWith("#") || it.startsWith("更新") }.filter { it.isNotBlank() }.take(4).joinToString("\n")
-                        Markdown(excerpt, fontSize=15) { Nav.open(memoryDoc(it)) }
-                        Text("查看全部", fontSize = Type.Secondary, color=Pal.Link, modifier=Modifier.padding(top=14.dp).tap { Nav.open(Route.Doc("我对你的了解", PROFILE, pointers=true)) })
-                    }
-                }
+fun MemoryCards() {
+    val (memory,error)=load("memory") { Api.getJson("/api/memory") }
+    Column(Modifier.padding(top=24.dp)) {
+        Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f).height(162.dp).card().tap { Nav.open(Route.Soul) }.padding(18.dp)) {
+                Text("灵魂",style=Type.title(20),color=Pal.Ink); Spacer(Modifier.height(12.dp)); Text(memory?.optJSONObject("soul")?.optString("name") ?: Chat.agentName.value,style=Type.body(14),color=Pal.Ink); Text("名字、性格和日记",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(top=8.dp))
+            }
+            Column(Modifier.weight(1f).height(162.dp).card().tap { Nav.open(Route.Memory) }.padding(18.dp)) {
+                Text("记忆",style=Type.title(20),color=Pal.Ink); Spacer(Modifier.height(12.dp)); Text("关于你的事",style=Type.body(14),color=Pal.Ink); Text("总档、分类和健康",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(top=8.dp))
             }
         }
-        item { SectionTitle("全部") }
-        item {
-            val today = health?.today
-            Column(Modifier.fillMaxWidth().card().tap { Nav.open(Route.Health) }.padding(20.dp)) {
-                Text("健康", fontSize = Type.Body, fontWeight=FontWeight.SemiBold, color=Pal.Ink)
-                val slots = listOf("sleep" to "睡眠", "resting_heart_rate" to "静息心率", "steps" to "步数", "hrv" to "心率变异性")
-                slots.chunked(2).forEach { row -> Row(Modifier.fillMaxWidth().padding(top=16.dp)) {
-                    row.forEach { (key, label) ->
-                        val value = when (key) {
-                            "sleep" -> sleepLabel(today?.sleepMinutes)
-                            "resting_heart_rate" -> healthNumber(today?.restingHr)
-                            "steps" -> healthNumber(today?.steps)
-                            else -> healthNumber(today?.hrv)
-                        }
-                        val unit = if (value == "--") "" else when (key) { "resting_heart_rate" -> "bpm"; "steps" -> "步"; "hrv" -> "ms"; else -> "" }
-                        Column(Modifier.weight(1f)) {
-                            Text(label, fontSize = Type.Label, color=Pal.Muted)
-                            Row(verticalAlignment=Alignment.Bottom, horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                                Text(value, fontSize = Type.Number, fontWeight=FontWeight.Bold, color=Pal.Ink)
-                                Text(unit, fontSize = Type.Tiny, color=Pal.Muted, modifier=Modifier.padding(bottom=4.dp))
-                            }
-                        }
-                    }
-                } }
-                if(health?.days?.all { it.sleepMinutes == null && it.restingHr == null && it.steps == null && it.hrv == null } != false) Text("还没有健康数据", fontSize = Type.Tiny, color=Pal.Faint, modifier=Modifier.padding(top=14.dp))
-                if(healthError.isNotBlank()) ErrorNote(healthError)
-            }
-        }
-        item {
-            val voice = folders?.firstOrNull { it.dir == "voice-notes" }?.files.orEmpty()
-            Column(Modifier.fillMaxWidth().padding(top=12.dp).card().tap { Nav.open(Route.MemoryCategory("voice-notes")) }.padding(20.dp)) {
-                Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    IconTile(Icons.Outlined.KeyboardVoice, Pal.Link)
-                    Column {
-                        Text("语音笔记", fontSize = Type.Body, fontWeight=FontWeight.SemiBold, color=Pal.Ink)
-                        Text(if(voice.isEmpty()) "按住说话发的语音笔记会出现在这里" else "${voice.size} 条 · 最近 ${whenLabel(voice.first().mtime)}", fontSize = Type.Label, lineHeight = Type.SecondaryLine, color=Pal.Muted)
-                    }
-                }
-            }
-        }
-        if(folderError.isNotBlank()) item { ErrorNote(folderError) }
-        folders.orEmpty().filter { it.dir !in setOf("health", "voice-notes") && it.files.isNotEmpty() }.chunked(2).forEach { pair -> item {
-            Row(Modifier.padding(top=16.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                pair.forEach { folder ->
-                    val tint = Pal.Link
-                    Column(Modifier.weight(1f).tap { Nav.open(Route.MemoryCategory(folder.dir)) }) {
-                        Box(Modifier.padding(start=14.dp).width(54.dp).height(9.dp).background(tint.copy(alpha=.18f),RoundedCornerShape(topStart=8.dp,topEnd=8.dp)))
-                        Column(Modifier.fillMaxWidth().card(radius=18.dp).padding(18.dp)) {
-                            Icon(Icons.Outlined.Folder, null, tint=tint, modifier=Modifier.size(24.dp))
-                            Text(categories[folder.dir].orEmpty(), fontSize = Type.Body, fontWeight=FontWeight.SemiBold, color=Pal.Ink, modifier=Modifier.padding(top=12.dp))
-                            Text("${folder.files.size} 项", fontSize = Type.Label, color=Pal.Muted, modifier=Modifier.padding(top=4.dp))
-                            Text(folder.files.first().name.removeSuffix(".md"), fontSize = Type.Tiny, color=Pal.Faint, maxLines=1, overflow=TextOverflow.Ellipsis, modifier=Modifier.padding(top=6.dp))
-                        }
-                    }
-                }
-                if(pair.size == 1) Spacer(Modifier.weight(1f))
-            }
-        } }
+        if(error.isNotBlank()) ErrorNote(error)
     }
 }
-
+@Composable
+fun SoulScreen() {
+    val (memory,error)=load("memory") { Api.getJson("/api/memory") }
+    val soul=memory?.optJSONObject("soul")
+    SubPage("灵魂") {
+        item { Spacer(Modifier.height(16.dp)); CardList {
+            ListRow(soul?.optString("name") ?: Chat.agentName.value,soul?.optString("personality"),Icons.Outlined.Face,subLines=3,onClick={Nav.open(Route.Doc("角色","data/soul/角色.md",editable=true))})
+        } }
+        item { SectionTitle("日记") }
+        soul?.optJSONArray("diary").objects().forEach { entry -> item { CardList(Modifier.padding(bottom=8.dp)) { ListRow(entry.optString("name"),icon=Icons.Outlined.Book,onClick={Nav.open(Route.Doc(entry.optString("name"),entry.optString("path"),editable=true))}) } } }
+        if(error.isNotBlank()) item { ErrorNote(error) }
+    }
+}
+@Composable
+fun DiariesScreen()=SoulScreen()
+@Composable
+fun MemoryScreen(bottom: Dp) {
+    val (memory,error)=load("memory") { Api.getJson("/api/memory") }
+    SubPage("记忆") {
+        item { Spacer(Modifier.height(16.dp)); CardList {
+            ListRow("总档","豆豆对你的了解",Icons.Outlined.PersonOutline,onClick={Nav.open(Route.Doc("总档",memory?.optString("profile") ?: "data/memory/profile/总档.md",pointers=true,editable=true))})
+            Hairline(); ListRow("健康","手机同步的数据与记录",Icons.Outlined.FavoriteBorder,onClick={Nav.open(Route.Health)})
+        } }
+        item { SectionTitle("分类") }
+        memory?.optJSONArray("categories").objects().forEach { category -> item { CardList(Modifier.padding(bottom=8.dp)) {
+            val name=category.optString("name")
+            ListRow(categoryNames[name] ?: name,"${category.optJSONArray("items").objects().size} 项",Icons.Outlined.Folder,onClick={Nav.open(Route.MemoryCategory(name))})
+        } } }
+        if(error.isNotBlank()) item { ErrorNote(error) }
+    }
+}
 @Composable
 fun MemoryCategoryScreen(dir: String) {
-    val c = ctx()
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val (files,error) = load("mem:$dir") { Api.treeOrEmpty("data/memory/$dir").filter { !it.dir } }
-    SubPage(categories[dir] ?: dir) {
-        item { BigTitle(categories[dir] ?: dir, files?.let { "${it.size} 项" }) }
-        item { when {
-            files == null && error.isNotBlank() -> ErrorNote(error)
-            files == null -> Loading()
-            files.isEmpty() -> EmptyNote("这里还是空的")
-            else -> CardList { files.forEachIndexed { i,file ->
-                if(i > 0) Hairline()
-                ListRow(file.name.removeSuffix(".md"), "更新于 ${whenLabel(file.mtime)}", Icons.Outlined.Folder, Pal.Link) {
-                    if(file.name.endsWith(".md")) Nav.open(memoryDoc("$dir/${file.name}"))
-                    else scope.launch { openFile(c, "data/memory/$dir/${file.name}", file.name) }
-                }
-            } }
-        } }
+    val (memory,error)=load("memory") { Api.getJson("/api/memory") }
+    val items=memory?.optJSONArray("categories").objects().firstOrNull { it.optString("name")==dir }?.optJSONArray("items").objects()
+    SubPage(categoryNames[dir] ?: dir) {
+        item { Spacer(Modifier.height(16.dp)) }
+        items.forEach { entry -> item { CardList(Modifier.padding(bottom=8.dp)) { ListRow(entry.optString("name"),icon=Icons.Outlined.Description,onClick={Nav.open(Route.Doc(entry.optString("name"),entry.optString("path"),pointers=true,editable=true))}) } } }
+        if(error.isNotBlank()) item { ErrorNote(error) }
+    }
+}
+@Composable
+fun HealthScreen() {
+    val (loaded,error)=load("health",cacheValue=false) { Api.health() }
+    var data by remember(loaded) { mutableStateOf(loaded) }
+    var note by remember { mutableStateOf("") }
+    var syncing by remember { mutableStateOf(false) }
+    val scope=rememberCoroutineScope()
+    SubPage("健康") {
+        item { RowActions(if(syncing) "同步中…" else "同步") { if(!syncing) { syncing=true; scope.launch {
+            try { data=Api.syncHealth(); note="" } catch(e: CancellationException) { throw e } catch(e: Exception) { note=e.message ?: "同步失败" } finally { syncing=false }
+        } } }; FooterNote(data?.syncLabel() ?: "正在读取") }
+        data?.days?.reversed()?.forEach { day -> item { Column(Modifier.fillMaxWidth().padding(top=12.dp).card().padding(16.dp)) {
+            Text(day.date.toString(),style=Type.title(15),color=Pal.Ink)
+            Text("睡眠 ${sleepLabel(day.sleepMinutes)}\n静息心率 ${healthNumber(day.restingHr)} bpm\n心率变异性 ${healthNumber(day.hrv)} ms\n步数 ${healthNumber(day.steps)}",style=Type.body(14),color=Pal.Ink,modifier=Modifier.padding(top=10.dp))
+        } } }
+        item { SectionTitle("记录") }
+        data?.records?.forEach { record -> item { CardList(Modifier.padding(bottom=8.dp)) { ListRow(record.title,record.preview,subLines=2,onClick={Nav.open(Route.Doc(record.title,record.path,editable=true))}) } } }
+        if(error.isNotBlank() || note.isNotBlank()) item { ErrorNote(error.ifBlank { note }) }
     }
 }

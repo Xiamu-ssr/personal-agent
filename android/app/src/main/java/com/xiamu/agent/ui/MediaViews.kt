@@ -135,7 +135,7 @@ private fun ActionNote(actions: FileActions) {
 @Composable
 private fun MediaIcon(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clip(CircleShape).background(Pal.Quiet).tap(enabled, onClick), contentAlignment = Alignment.Center) {
-        Icon(icon, label, tint = if (enabled) Pal.Link else Pal.Faint, modifier = Modifier.size(22.dp))
+        Icon(icon, label, tint = if (enabled) Pal.Ink else Pal.Faint, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -154,7 +154,7 @@ private fun MediaFileCard(media: ReplyMedia, notice: String = "") {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Pal.Card)
         .testTag("media-file:${media.path}").tap(!actions.busy, actions::open).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconTile(icon, Pal.Link, 38.dp)
+            IconTile(icon, Pal.Ink, 38.dp)
             Column(Modifier.padding(horizontal = 10.dp).weight(1f)) {
                 Text(media.name, fontSize = Type.Secondary, fontWeight = FontWeight.Medium, color = Pal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val type = media.path.substringAfterLast('/').substringAfterLast('.', "").uppercase().ifBlank { "文件" }
@@ -240,7 +240,7 @@ private fun SeekBar(player: ReplyPlayer, modifier: Modifier = Modifier) {
     Slider(value = dragging ?: player.position.toFloat().coerceAtMost(player.duration.toFloat()),
         onValueChange = { dragging = it }, onValueChangeFinished = { dragging?.let { player.seek(it.toInt()) }; dragging = null },
         valueRange = 0f..player.duration.coerceAtLeast(1).toFloat(), enabled = player.duration > 0 && !player.loading,
-        colors = SliderDefaults.colors(thumbColor = Pal.Link, activeTrackColor = Pal.Link, inactiveTrackColor = Pal.Line), modifier = modifier)
+        colors = SliderDefaults.colors(thumbColor = Pal.Ink, activeTrackColor = Pal.Ink, inactiveTrackColor = Pal.Line), modifier = modifier)
 }
 
 @Composable

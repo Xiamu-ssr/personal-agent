@@ -84,10 +84,10 @@ internal fun PdfPage(route: Route.Pdf) {
             }
             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("上一页", fontSize = Type.Body, color = if (page > 0) Pal.Link else Pal.Faint,
+                Text("上一页", fontSize = Type.Body, color = if (page > 0) Pal.Ink else Pal.Faint,
                     modifier = Modifier.tap(page > 0 && image != null) { page-- }.padding(10.dp))
                 Text(if (pages == 0) "PDF" else "${page + 1} / $pages", fontSize = Type.Label, color = Pal.Muted)
-                Text("下一页", fontSize = Type.Body, color = if (page + 1 < pages) Pal.Link else Pal.Faint,
+                Text("下一页", fontSize = Type.Body, color = if (page + 1 < pages) Pal.Ink else Pal.Faint,
                     modifier = Modifier.tap(page + 1 < pages && image != null) { page++ }.padding(10.dp))
             }
         }

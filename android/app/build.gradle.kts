@@ -9,7 +9,7 @@ plugins {
 // Release signing comes from ~/.personal-agent/signing.properties (kept out of the repo).
 val signingProps = Properties().apply {
     val f = File(System.getProperty("user.home"), ".personal-agent/signing.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
+    if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) } && providers.gradleProperty("enableReleaseSigning").orNull == "true" && f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -20,8 +20,8 @@ android {
         applicationId = "com.xiamu.agent"
         minSdk = 28
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.7.1"
+        versionCode = 12
+        versionName = "0.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

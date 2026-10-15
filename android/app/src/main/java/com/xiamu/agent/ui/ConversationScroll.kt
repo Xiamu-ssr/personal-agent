@@ -79,8 +79,8 @@ fun ReturnToBottom(list: LazyListState, state: ConversationScrollState, modifier
             finally { state.programmatic = false }
         }
     }.testTag("return-bottom"), contentAlignment = Alignment.Center) {
-        Icon(Icons.Rounded.ArrowDownward, "回到底部", tint = Pal.Link, modifier = Modifier.size(22.dp))
-        if (state.rules.unread > 0) Text(state.rules.unread.toString(), style = Type.body(11), color = Pal.Link,
+        Icon(Icons.Rounded.ArrowDownward, "回到底部", tint = Pal.Ink, modifier = Modifier.size(22.dp))
+        if (state.rules.unread > 0) Text(state.rules.unread.toString(), style = Type.body(11), color = Pal.Ink,
             modifier = Modifier.align(Alignment.TopEnd).background(Pal.Quiet, CircleShape).padding(horizontal = 5.dp, vertical = 2.dp).testTag("unread-count"))
     }
 }

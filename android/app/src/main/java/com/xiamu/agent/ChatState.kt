@@ -3,213 +3,67 @@ package com.xiamu.agent
 import org.json.JSONObject
 
 sealed class ChatItem {
-    /** pending waits for the echo; queued waits for a user turn. They are independent. */
-    data class User(val text: String, val attachments: List<Attachment> = emptyList(), val pending: Boolean = false, val ts: Long = 0, val queued: Boolean = false, val queueOrder: Long = 0, val id: String = "") : ChatItem()
-    data class Assistant(val text: String, val ts: Long = 0, val media: List<ReplyMedia> = emptyList()) : ChatItem()
-    data class Alarm(val text: String, val ts: Long = 0) : ChatItem()
-    data class Card(val title: String, val label: String, val path: String?, val ts: Long = 0) : ChatItem()
-    data class Note(val text: String) : ChatItem()
+    data class User(val text: String,val attachments: List<Attachment> = emptyList(),val pending: Boolean = false,val ts: Long = 0,val id: String = "") : ChatItem()
+    data class Assistant(val text: String,val ts: Long = 0,val media: List<ReplyMedia> = emptyList(),val id: String = "",val options: List<SayOption> = emptyList(),val cards: List<SayCard> = emptyList(),val optionsUsed: Boolean = false,val choosing: Boolean = false) : ChatItem() {
+        val displayMedia: List<ReplyMedia> get() = (cards.filterIsInstance<SayCard.Media>().map { it.file } + media).distinctBy { it.path }
+    }
 }
-
-internal fun historyItem(h: JSONObject): ChatItem? = when (h.optString("role")) {
-    "user" -> incomingUser(h.optString("text"), h.optString("source"), h.optJSONArray("attachments").objects().map(Attachment::from), h.optLong("ts"), h.optString("id"))
-    "assistant" -> ChatItem.Assistant(h.optString("text"), h.optLong("ts"), replyMedia(h))
-    "card" -> ChatItem.Card(h.optString("title"), h.optString("label"), h.optString("path").ifBlank { h.optJSONArray("outputs").strings().firstOrNull() }, h.optLong("ts"))
+internal fun historyItem(h: JSONObject): ChatItem? = when(h.optString("role")) {
+    "user" -> if(h.optString("source")=="onboarding") null else ChatItem.User(h.optString("text"),h.optJSONArray("attachments").objects().map(Attachment::from),ts=h.optLong("ts"),id=h.optString("id"))
+    "assistant" -> ChatItem.Assistant(h.optString("text"),h.optLong("ts"),replyMedia(h),h.optString("id"),sayOptions(h),sayCards(h),h.optBoolean("optionsUsed"))
     else -> null
 }
+data class BackgroundActivity(val id: String,val description: String,val startedAt: Long)
 
-/** Scheduled/isolated jobs are separate from the main query's background tasks. */
-data class Running(val id: String, val label: String, val started: Long)
-data class BackgroundTask(val id: String, val description: String, val startedAt: Long, val stopping: Boolean = false, val error: String = "")
-
-class TaskBook {
-    private val live = linkedMapOf<String, BackgroundTask>()
-    private val ended = linkedSetOf<String>()
-    val tasks: List<BackgroundTask> get() = live.values.toList()
-
-    fun snapshot(tasks: List<BackgroundTask>, reconnect: Boolean = false) {
-        val old = if (reconnect) emptyMap() else live.toMap()
-        if (reconnect) ended.clear()
-        else (old.keys - tasks.map { it.id }.toSet()).forEach(::finish)
-        live.clear()
-        tasks.filter { it.id.isNotBlank() }.forEach { task ->
-            val previous = old[task.id]
-            live[task.id] = task.copy(stopping = previous?.stopping ?: false, error = previous?.error.orEmpty())
-            ended.remove(task.id)
-        }
-    }
-
-    fun started(task: BackgroundTask) {
-        if (task.id.isBlank() || task.id in ended) return
-        val old = live[task.id]
-        live[task.id] = task.copy(description = task.description.ifBlank { old?.description ?: "后台任务" },
-            startedAt = task.startedAt.takeIf { it > 0 } ?: old?.startedAt ?: 0, stopping = old?.stopping ?: false, error = old?.error.orEmpty())
-    }
-
-    fun update(id: String, description: String? = null, status: String? = null) {
-        if (status in setOf("completed", "failed", "killed", "stopped")) return finish(id)
-        val old = live[id] ?: return
-        live[id] = old.copy(description = description?.takeIf { it.isNotBlank() } ?: old.description)
-    }
-
-    fun notification(id: String, status: String) {
-        if (status in setOf("completed", "failed", "stopped", "killed")) finish(id)
-    }
-
-    private fun finish(id: String) {
-        if (id.isBlank()) return
-        live.remove(id)
-        ended.add(id)
-        while (ended.size > 256) ended.remove(ended.first())
-    }
-
-    fun requestStop(id: String): Boolean {
-        val task = live[id] ?: return false
-        if (task.stopping) return false
-        live[id] = task.copy(stopping = true, error = "")
-        return true
-    }
-
-    fun stopResult(id: String, ok: Boolean, error: String = "") {
-        val task = live[id] ?: return
-        if (!ok) live[id] = task.copy(stopping = false, error = error.ifBlank { "停止任务失败，请稍后再试" })
-    }
-
-    fun clear() { live.clear(); ended.clear() }
-}
-
-fun incomingUser(text: String, source: String, attachments: List<Attachment> = emptyList(), ts: Long = 0, id: String = ""): ChatItem =
-    if (source == "schedule") ChatItem.Alarm(alarmLabel(text), ts) else ChatItem.User(text, attachments, ts = ts, id = id)
-
-fun alarmLabel(text: String): String {
-    val name = Regex("该出「([^」\\r\\n]+)」了").find(text)?.groupValues?.get(1)?.trim()
-    return if (!name.isNullOrBlank()) "${name}时间到了"
-        else text.lineSequence().firstOrNull().orEmpty().removePrefix("[定时]").trim().ifBlank { "定时任务时间到了" }
-}
-
-fun replyLabel(reason: String): String = when (reason) {
-    "task_result" -> "豆豆正在处理子任务结果…"
-    "schedule" -> "豆豆正在安排定时任务…"
-    else -> "豆豆正在回复…"
-}
-
-fun taskStopError(code: String, error: String = ""): String {
-    if (error.any { it in '\u4e00'..'\u9fff' }) return error
-    return when (code) {
-        "invalid_task_id" -> "任务编号无效，请刷新后重试"
-        "task_not_found" -> "找不到这个运行中的任务"
-        "task_ended" -> "任务已经结束"
-        "task_stopping" -> "任务已经在停止中"
-        "session_unavailable" -> "主会话暂时不可用，请稍后再试"
-        else -> "停止任务失败，请稍后再试"
-    }
-}
-
-/** Protocol state, with no Android dependencies; the socket publishes changes to Compose. */
+/** Pure, id-based 0.8 chat reducer. turn_end only closes provisional text. */
 class Conversation(val items: MutableList<ChatItem> = mutableListOf()) {
-    val background = TaskBook()
-    private var echoOrder = 0L
-    var busy = false
-        private set
-    var reason = ""
-        private set
-    var streaming = ""
-        private set
-    var toolHint = ""
-        private set
-    var turnClosed = true
-        private set
-
-    fun hello(history: List<ChatItem>, busy: Boolean, reason: String, tasks: List<BackgroundTask>, queued: List<ChatItem> = emptyList()) {
+    var busy=false; private set
+    var avatar=AvatarStatus(); private set
+    private val consumed=mutableSetOf<String>()
+    private val deltas=linkedMapOf<String,String>()
+    val streaming get() = deltas.values.joinToString("\n\n")
+    fun hello(history: List<ChatItem>, busy: Boolean, avatar: AvatarStatus) {
+        this.busy=busy; this.avatar=avatar; deltas.clear(); consumed.clear()
+        history.filterIsInstance<ChatItem.Assistant>().filter { it.optionsUsed }.forEach { consumed.add(it.id) }
         items.clear(); items.addAll(history)
-        echoOrder = 0
-        this.busy = busy
-        this.reason = if (busy) reason else ""
-        streaming = ""; toolHint = ""; turnClosed = !busy
-        background.snapshot(tasks, reconnect = true)
-        queued.forEach { item ->
-            if(item is ChatItem.User) {
-                val accepted = item.copy(pending=false, queued=true, queueOrder=++echoOrder)
-                val existing = items.indexOfFirst { it is ChatItem.User && item.id.isNotBlank() && it.id == item.id }
-                if(existing >= 0) items[existing] = accepted else items.add(accepted)
-            } else if(item !in items) items.add(item)
-        }
     }
-
-    /** Undispatched users are absent from chat.jsonl; refreshing history must keep their bubbles. */
     fun replaceHistory(history: List<ChatItem>) {
-        val ids = history.filterIsInstance<ChatItem.User>().map { it.id }.filter { it.isNotBlank() }.toSet()
-        val waiting = items.filterIsInstance<ChatItem.User>().filter { (it.pending || it.queued) && (it.id.isBlank() || it.id !in ids) }
-        items.clear(); items.addAll(history); items.addAll(waiting)
+        val pending=items.filterIsInstance<ChatItem.User>().filter { it.pending }
+        history.filterIsInstance<ChatItem.Assistant>().filter { it.optionsUsed }.forEach { consumed.add(it.id) }
+        items.clear(); items.addAll(history.map { if(it is ChatItem.Assistant && it.id in consumed) it.copy(optionsUsed=true) else it }); items.addAll(pending)
     }
-
-    fun status(busy: Boolean, reason: String? = null): Boolean {
-        val nextReason = reason ?: if (this.busy) this.reason else ""
-        val newTurn = busy && (!this.busy || turnClosed || (reason != null && nextReason != this.reason))
-        if (newTurn) {
-            streaming = ""; toolHint = ""; turnClosed = false
-            if (nextReason == "user") {
-                val next = items.filterIsInstance<ChatItem.User>().filter { it.queued && !it.pending }.minByOrNull { it.queueOrder }
-                val i = if (next == null) -1 else items.indexOf(next)
-                if (i >= 0) items[i] = (items[i] as ChatItem.User).copy(queued = false)
-            }
-        }
-        this.busy = busy
-        this.reason = if (busy) nextReason else ""
-        if (!busy) toolHint = ""
-        return newTurn
+    fun sent(text: String,attachments: List<Attachment>,ts: Long) { items.add(ChatItem.User(text,attachments,true,ts)) }
+    fun user(m: ChatItem.User) {
+        val existing=items.indexOfFirst { it is ChatItem.User && m.id.isNotBlank() && it.id==m.id }
+        if(existing>=0) { items[existing]=m; return }
+        val pending=items.indexOfFirst { it is ChatItem.User && it.pending && it.text==m.text && it.attachments.map { a->a.path }==m.attachments.map { a->a.path } }
+        if(pending>=0) items[pending]=m else items.add(m)
     }
-
-    fun sent(text: String, attachments: List<Attachment>, ts: Long) {
-        items.add(ChatItem.User(text, attachments, pending = true, ts = ts, queued = busy))
+    fun say(m: ChatItem.Assistant) {
+        deltas.remove(m.id)
+        if(m.optionsUsed) consumed.add(m.id)
+        val index=items.indexOfFirst { it is ChatItem.Assistant && m.id.isNotBlank() && it.id==m.id }
+        val value=m.copy(optionsUsed=m.optionsUsed || m.id in consumed)
+        if(index>=0) items[index]=value else items.add(value)
     }
-
-    fun user(text: String, source: String, attachments: List<Attachment>, ts: Long, id: String = "") {
-        val echo = incomingUser(text, source, attachments, ts, id)
-        if (echo !is ChatItem.User) { items.add(echo); return }
-        val existing = items.indexOfFirst { id.isNotBlank() && it is ChatItem.User && it.id == id }
-        if (existing >= 0) return
-        val i = items.indexOfFirst { it is ChatItem.User && it.pending && it.text == text && it.attachments.map { a -> a.path } == attachments.map { a -> a.path } }
-        val queued = busy || (i >= 0 && (items[i] as ChatItem.User).queued)
-        val accepted = echo.copy(queued = queued, queueOrder = if (queued) ++echoOrder else 0)
-        if (i >= 0) items[i] = accepted else items.add(accepted)
+    fun choose(messageId: String,optionId: String): Boolean {
+        val i=items.indexOfFirst { it is ChatItem.Assistant && it.id==messageId }
+        val m=items.getOrNull(i) as? ChatItem.Assistant ?: return false
+        if(m.optionsUsed || m.choosing || m.options.none { it.id==optionId }) return false
+        items[i]=m.copy(choosing=true); return true
     }
-
-    /** Only authoritative queue_update mutates a bubble; request sending never removes it early. */
-    fun queueUpdate(id: String, state: String, text: String? = null): String {
-        val i = items.indexOfFirst { it is ChatItem.User && it.id == id && id.isNotBlank() }
-        if (i >= 0) {
-            val user = items[i] as ChatItem.User
-            when (state) {
-                "removed" -> items.removeAt(i)
-                "edited" -> if (text != null) items[i] = user.copy(text = text)
-                "too_late" -> items[i] = user.copy(queued = false)
-            }
-        }
-        return if (state == "too_late") "豆豆已经在看这条了" else ""
+    fun optionsUsed(id: String) {
+        consumed.add(id)
+        val i=items.indexOfFirst { it is ChatItem.Assistant && it.id==id }
+        if(i>=0) items[i]=(items[i] as ChatItem.Assistant).copy(optionsUsed=true,choosing=false)
     }
-
-    fun delta(text: String) { streaming += text; toolHint = ""; turnClosed = false }
-
-    fun tool(hint: String) {
-        toolHint = hint
-        if (streaming.isNotBlank() && !streaming.endsWith("\n\n")) streaming += "\n\n"
+    fun choiceFailed(id: String) {
+        val i=items.indexOfFirst { it is ChatItem.Assistant && it.id==id }
+        if(i>=0) items[i]=(items[i] as ChatItem.Assistant).copy(choosing=false)
     }
-
-    fun endTurn(event: JSONObject, ts: Long) =
-        endTurn(event.opt("text") as? String, (event.opt("error") as? String).orEmpty(), ts, replyMedia(event))
-
-    fun endTurn(text: String?, error: String, ts: Long, media: List<ReplyMedia> = emptyList()) {
-        val reply = text ?: streaming
-        val outputs = if (error.isBlank()) media else emptyList()
-        if (reply.isNotBlank() || outputs.isNotEmpty()) items.add(ChatItem.Assistant(reply, ts, outputs))
-        if (error.isNotBlank()) items.add(ChatItem.Note("这一轮出错了：$error"))
-        streaming = ""; toolHint = ""; turnClosed = true
-        // Only status/hello change busy; a result can arrive before native idle.
-    }
-
-    fun disconnected() {
-        busy = false; reason = ""; streaming = ""; toolHint = ""; turnClosed = true
-        background.clear()
-    }
+    fun status(value: Boolean) { busy=value }
+    fun avatar(value: AvatarStatus) { avatar=value }
+    fun delta(id: String,text: String) { if(id.isNotBlank() && items.none { it is ChatItem.Assistant && it.id==id }) deltas[id]=deltas[id].orEmpty()+text }
+    fun endTurn() { deltas.clear() }
+    fun disconnected() { busy=false; deltas.clear(); avatar=AvatarStatus() }
 }

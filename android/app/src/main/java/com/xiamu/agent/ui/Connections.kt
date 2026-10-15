@@ -186,7 +186,7 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                                     else CardList {
                                         d.caps.forEachIndexed { i, cap ->
                                             if (i > 0) Hairline()
-                                            ListRow(cap.title, cap.description, capIcon(cap.name), Pal.Link, subLines = 2,
+                                            ListRow(cap.title, cap.description, capIcon(cap.name), Pal.Ink, subLines = 2,
                                                 trailing = { Tag(if (cap.enabled) "已开启" else "未开启", if (cap.enabled) Pal.GoldInk else Pal.Muted) })
                                         }
                                     }
@@ -284,7 +284,7 @@ fun DevicesScreen(gateway: ConnectorGateway = CloudConnectors) {
 @Composable
 private fun DeviceCard(name: String, sub: String, kind: String, online: Boolean, remove: (() -> Unit)? = null, onClick: () -> Unit) {
     CardList(Modifier.padding(top = 14.dp)) {
-        ListRow(name, sub, deviceIcon(kind), if (online) Pal.Link else Pal.Muted, subLines = 2,
+        ListRow(name, sub, deviceIcon(kind), if (online) Pal.Ink else Pal.Muted, subLines = 2,
             trailing = remove?.let { action -> { TextButton(onClick = action) { Text("移除", color = Pal.Danger) } } }, onClick = onClick)
     }
 }
@@ -302,7 +302,7 @@ fun SkillsScreen() {
                 else -> CardList(Modifier.padding(top = 12.dp)) {
                     skills.forEachIndexed { i, s ->
                         if (i > 0) Hairline()
-                        ListRow(s.optString("name"), s.optString("description"), Icons.Outlined.Extension, Pal.Link, subLines = 3)
+                        ListRow(s.optString("name"), s.optString("description"), Icons.Outlined.Extension, Pal.Ink, subLines = 3)
                     }
                 }
             }

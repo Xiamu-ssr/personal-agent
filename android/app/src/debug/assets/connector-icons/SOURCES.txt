@@ -1,6 +1,0 @@
-qq-mail: https://mail.qq.com/zh_CN/htmledition/images/favicon/qqmail_favicon_32h.png
-netease-163: https://mail.163.com/favicon.ico
-gmail: https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico
-tavily: https://tavily.com/favicon.ico
-weread: https://weread.qq.com/favicon.ico
-Official icons, debug-only local HTTP fixture. ICO files converted to PNG without redrawing.

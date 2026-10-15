@@ -1,0 +1,7 @@
+{
+  "idle": "final",
+  "working": "final",
+  "waiting": "final",
+  "happy": "final",
+  "error": "final"
+}

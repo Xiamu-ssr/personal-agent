@@ -15,10 +15,15 @@ object Prefs {
         }
     }
 
-    val skinPreference = SkinPreference(
-        read = { sp.getString("skin", null) },
-        write = { sp.edit().putString("skin", it).apply() },
-    )
+    var appearance: String
+        get() = sp.getString("appearance", "system") ?: "system"
+        set(v) = sp.edit().putString("appearance", v).apply()
+    var feedKnownPaths: Set<String>
+        get() = sp.getStringSet("feedKnown.${server}",emptySet())?.toSet() ?: emptySet()
+        set(v) = sp.edit().putStringSet("feedKnown.${server}",v).apply()
+    var feedUnread: Boolean
+        get() = sp.getBoolean("feedUnread.${server}", false)
+        set(v) = sp.edit().putBoolean("feedUnread.${server}",v).apply()
 
     var server: String
         get() = (sp.getString("server", "") ?: "").trim().trimEnd('/')
@@ -27,11 +32,6 @@ object Prefs {
     var token: String
         get() = sp.getString("token", "")!!
         set(v) = sp.edit().putString("token", v.trim()).apply()
-
-    /** The capability onboarding is shown once, after the first login. */
-    var onboarded: Boolean
-        get() = sp.getBoolean("onboarded", false)
-        set(v) = sp.edit().putBoolean("onboarded", v).apply()
 
     var notifyMessages: Boolean
         get() = sp.getBoolean("notifyMessages", true)

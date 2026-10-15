@@ -144,9 +144,9 @@ class DeviceService : Service() {
         main.postDelayed({ if (ws == null) connect() }, delay)
     }
 
-    /** Replies and finished jobs pop up as notifications while the App isn't on screen. */
+    /** Each say can notify while the App is in the background. */
     private fun onEvent(kind: String, text: String) {
-        onAgentEvent(this, kind, text)
+        if (kind == "reply") onAgentEvent(this, kind, text)
     }
 
     private suspend fun handleCall(webSocket: WebSocket, m: JSONObject) {
@@ -176,9 +176,9 @@ class DeviceService : Service() {
         val online = mutableStateOf(false)
 
         internal fun onAgentEvent(ctx: Context, kind: String, text: String) {
-            if (App.foreground || !Prefs.notifyMessages || text.isBlank()) return
+            if (kind != "reply" || App.foreground || !Prefs.notifyMessages || text.isBlank()) return
             if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled()) return
-            Capabilities.notify(ctx, if (kind == "job") "豆豆 · 任务完成" else "豆豆", text)
+            Capabilities.notify(ctx, "豆豆", text)
         }
 
         fun start(ctx: Context, reregister: Boolean = false) {
@@ -194,7 +194,7 @@ class DeviceService : Service() {
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED && Prefs.configured && Prefs.onboarded) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED && Prefs.configured) {
             DeviceService.start(context)
         }
     }

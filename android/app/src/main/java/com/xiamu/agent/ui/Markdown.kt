@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
-import com.xiamu.agent.isBriefPath
 import com.xiamu.agent.Chat
 import com.xiamu.agent.markdownFilePath
 import kotlinx.coroutines.CancellationException
@@ -135,10 +134,10 @@ private fun parse(src: String, pointers: Boolean): List<Block> {
  * With [onPointer], trailing `→ x/y.md` pointers become tappable chips (paths relative to data/memory/).
  */
 @Composable
-fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink, fontSize: Int = 15, onPointer: ((String) -> Unit)? = null) {
+fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink, fontSize: Int = 15, onPointer: ((String) -> Unit)? = null, lineHeightMultiplier: Float = 1.45f) {
     val blocks = remember(src, onPointer != null) { parse(src, onPointer != null) }
     val body = fontSize.sp
-    val lh = (fontSize * 1.45f).sp
+    val lh = (fontSize * lineHeightMultiplier).sp
     Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         for (b in blocks) when (b) {
             is Block.Heading -> Text(
@@ -192,7 +191,7 @@ private fun PointerText(text: String, paths: List<String>, fontSize: TextUnit, l
         }
     }.toMap()
     val content = inlineContent(text)
-    val annotated = remember(content, paths, SkinState.current.value) {
+    val annotated = remember(content, paths, ThemeState.dark.value) {
         buildAnnotatedString {
             append(content)
             paths.forEachIndexed { i, p ->
@@ -243,7 +242,7 @@ private fun inlineContent(text: String): AnnotatedString {
         }
         Unit
     } }
-    return remember(text, SkinState.current.value, open) { inline(text, open) }
+    return remember(text, ThemeState.dark.value, open) { inline(text, open) }
 }
 
 fun inline(s: String, onFile: ((String, String) -> Unit)? = null): AnnotatedString = buildAnnotatedString {
@@ -271,10 +270,9 @@ fun inline(s: String, onFile: ((String, String) -> Unit)? = null): AnnotatedStri
                     val path = markdownFilePath(target)
                     if (path == null) append(m.value)
                     else {
-                        val brief = path.takeIf(::isBriefPath)
                         val name = m.groupValues[1].ifBlank { path.substringAfterLast('/') }
                         withLink(LinkAnnotation.Clickable(path, linkStyle) {
-                            if (brief != null) Nav.brief(brief) else onFile?.invoke(path, name)
+                            onFile?.invoke(path, name)
                         }) { append(name) }
                     }
                 }

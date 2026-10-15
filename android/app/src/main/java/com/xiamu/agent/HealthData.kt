@@ -8,10 +8,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 data class HealthDay(val date: LocalDate, val sleepMinutes: Double?, val restingHr: Double?, val hrv: Double?, val steps: Double?)
-data class HealthWeekly(val name: String, val path: String, val date: String, val range: String, val summary: String)
 data class HealthRecord(val path: String, val title: String, val updated: String?, val preview: String)
 data class HealthData(val syncedAt: String?, val device: String?, val note: String?, val days: List<HealthDay>,
-    val weekly: List<HealthWeekly>, val records: List<HealthRecord>) {
+    val records: List<HealthRecord>) {
     val today: HealthDay get() = days.last()
     fun syncLabel(zone: ZoneId = ZoneId.systemDefault()): String = note?.takeIf { it.isNotBlank() } ?: syncedAt?.let {
         runCatching { "上次同步 " + OffsetDateTime.parse(it).atZoneSameInstant(zone).format(DateTimeFormatter.ofPattern("HH:mm")) +
@@ -27,8 +26,7 @@ data class HealthData(val syncedAt: String?, val device: String?, val note: Stri
             }
             return HealthData(j.text("syncedAt"), j.text("device"), j.text("note"), (6L downTo 0L).map {
                 val date = today.minusDays(it); byDate[date] ?: HealthDay(date, null, null, null, null)
-            }, j.getJSONArray("weekly").objects().map { HealthWeekly(it.getString("name"), it.getString("path"), it.getString("date"), it.getString("range"), it.getString("summary")) },
-                j.getJSONArray("records").objects().map { HealthRecord(it.getString("path"), it.getString("title"), it.text("updated"), it.getString("preview")) })
+            }, j.getJSONArray("records").objects().map { HealthRecord(it.getString("path"), it.getString("title"), it.text("updated"), it.getString("preview")) })
         }
     }
 }

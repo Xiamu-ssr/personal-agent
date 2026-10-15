@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -22,6 +24,7 @@ import java.io.File
 import java.security.MessageDigest
 
 internal fun cacheKey(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
+private val monochromeIcon = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
 
 /** Official connector bytes from the same authenticated service; no invented brand drawings. */
 @Composable
@@ -41,8 +44,8 @@ fun ConnectorLogo(name: String, size: Dp = 36.dp) {
             }
         }
     }
-    if (bitmap != null) Image(bitmap.asImageBitmap(), null, Modifier.size(size))
-    else IconTile(connectorIcon(name), Pal.Link, size)
+    if (bitmap != null) Image(bitmap.asImageBitmap(), null, Modifier.size(size), colorFilter = monochromeIcon)
+    else IconTile(connectorIcon(name), Pal.Ink, size)
 }
 
 /** Resolve the actual calendar/SMS/settings/Health Connect app installed on this phone. */
@@ -66,6 +69,6 @@ fun SystemCapabilityIcon(name: String) {
         packages.firstNotNullOfOrNull { runCatching { pm.getApplicationIcon(it).toBitmap(96, 96) }.getOrNull() }
             ?: runCatching { pm.resolveActivity(intent, 0)?.loadIcon(pm)?.toBitmap(96, 96) }.getOrNull()
     }
-    if (icon != null) Image(icon.asImageBitmap(), null, Modifier.size(36.dp))
-    else IconTile(capIcon(name), Pal.Link)
+    if (icon != null) Image(icon.asImageBitmap(), null, Modifier.size(36.dp), colorFilter = monochromeIcon)
+    else IconTile(capIcon(name), Pal.Ink)
 }

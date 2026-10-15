@@ -62,6 +62,7 @@ import com.xiamu.agent.connectors.ConnectorAccount
 import com.xiamu.agent.media.Images
 import com.xiamu.agent.media.openSystemFile
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -71,37 +72,40 @@ import java.util.Locale
 /** Pages pushed on top of the tabs. */
 sealed interface Route {
     data object Settings : Route
-    data object Skins : Route
-    data object Doudou : Route
+    data object Server : Route
+    data object Appearance : Route
     data object Health : Route
-    data class HealthBrief(val path: String, val title: String) : Route
+    data object Soul : Route
+    data object Memory : Route
+    data object Browser : Route
+    data object Capabilities : Route
+    data class GoalDetail(val name: String) : Route
     data class RuntimeSettings(val permissions: Boolean = false) : Route
-    data class TaskDetail(val id: String, val title: String, val briefPath: String? = null) : Route
-    data class Connectors(val tab: Int = 0, val device: String? = null) : Route
+    data class ActivityDetail(val id: String,val title: String) : Route
+    data class SideChat(val id: String? = null) : Route
+    data class Connectors(val tab: Int = 1,val device: String? = null) : Route
     data class ConnectorDetail(val connector: ConnectorInfo) : Route
-    data class ConnectorForm(val connector: ConnectorInfo, val account: ConnectorAccount? = null) : Route
+    data class ConnectorForm(val connector: ConnectorInfo,val account: ConnectorAccount? = null) : Route
     data object Devices : Route
     data object Skills : Route
-    data class Web(val title: String, val path: String) : Route
-    data class Doc(val title: String, val path: String, val pointers: Boolean = false) : Route
+    data class Web(val title: String,val path: String) : Route
+    data class Doc(val title: String,val path: String,val pointers: Boolean = false,val editable: Boolean = false) : Route
     data class Image(val path: String) : Route
-    data class Pdf(val title: String, val path: String) : Route
+    data class Pdf(val title: String,val path: String) : Route
     data class MemoryCategory(val dir: String) : Route
     data object Diaries : Route
 }
-
 object Nav {
-    val tab = mutableIntStateOf(0)
-    val todaySegment = mutableIntStateOf(0)
-    val stack = mutableStateListOf<Route>()
-    val briefPath = mutableStateOf<String?>(null)
-    fun brief(path: String) { briefPath.value = path; todaySegment.intValue = 0; home(1) }
-    fun open(r: Route) { stack.add(r) }
+    val tab=mutableIntStateOf(0)
+    val stack=mutableStateListOf<Route>()
+    val console=mutableStateOf(false)
+    val drawer=mutableStateOf(false)
+    val feedSettings=mutableStateOf(false)
+    fun open(r: Route) { console.value=false; drawer.value=false; stack.add(r) }
     fun back() { stack.removeLastOrNull() }
-    fun home(tab: Int) {
-        stack.clear()
-        this.tab.intValue = tab
-    }
+    fun home(tab: Int) { stack.clear(); console.value=false; drawer.value=false; this.tab.intValue=tab }
+    fun sideChat(id: String? = null) { home(0); open(Route.SideChat(id)) }
+    fun createdSideChat(id: String) { if(stack.lastOrNull()==Route.SideChat()) stack[stack.lastIndex]=Route.SideChat(id) }
 }
 
 /** Last good value per key, so going back to a page shows something instantly while it refreshes. */
@@ -132,12 +136,17 @@ fun RoutePage(r: Route) {
         is Route.Image -> ImagePage(r.path)
         is Route.Pdf -> PdfPage(r)
         Route.Settings -> SettingsScreen()
-        Route.Skins -> SkinsScreen()
-        Route.Doudou -> Screen { Column { SubHeader("豆豆", Nav::back); DouScreen(0.dp) } }
+        Route.Server -> ServerScreen()
+        Route.Appearance -> AppearanceScreen()
         Route.Health -> HealthScreen()
-        is Route.HealthBrief -> HealthBriefScreen(r)
+        Route.Soul -> SoulScreen()
+        Route.Memory -> MemoryScreen(0.dp)
+        Route.Browser -> BrowserScreen()
+        Route.Capabilities -> SubPage("本机能力") { item { EnableAllCapabilities() }; item { LocalCapabilities() } }
+        is Route.GoalDetail -> GoalDetailScreen(r.name)
         is Route.RuntimeSettings -> RuntimeSettingsScreen(r.permissions)
-        is Route.TaskDetail -> TaskDetailScreen(r)
+        is Route.ActivityDetail -> ActivityDetailScreen(r)
+        is Route.SideChat -> SideChatScreen(r)
         is Route.Connectors -> ConnectorsScreen(r)
         is Route.ConnectorDetail -> ConnectorDetailScreen(r)
         is Route.ConnectorForm -> ConnectorFormScreen(r)
@@ -222,23 +231,34 @@ private fun WebPage(r: Route.Web) {
 
 @Composable
 private fun DocPage(r: Route.Doc) {
-    val (text, err) = load("doc:${r.path}") { Api.readFile(r.path) }
-    Screen {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            SubHeader(r.title, Nav::back)
-            Column(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 24.dp).navigationBarsPadding()) {
-                when {
-                    text != null -> Box(Modifier.fillMaxWidth().card().padding(horizontal = 20.dp, vertical = 22.dp)) {
-                        SelectionContainer {
-                            Markdown(text, onPointer = if (r.pointers) { p -> Nav.open(memoryDoc(p)) } else null)
-                        }
-                    }
-                    err.isNotBlank() -> ErrorNote(err)
-                    else -> Loading()
-                }
+    val scope=androidx.compose.runtime.rememberCoroutineScope()
+    val (document,err)=load("doc:${r.path}") { if(r.path.startsWith("data/memory/") || r.path.startsWith("data/soul/")) Api.getJson("/api/memory/item?path=${Api.encode(r.path)}").optString("text") else Api.readFile(r.path) }
+    var text by remember(document) { mutableStateOf(document.orEmpty()) }
+    var editing by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf("") }
+    Screen { Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+        SubHeader(r.title,Nav::back)
+        if(r.editable) RowActions(if(editing) "取消编辑" else "编辑") { editing=!editing }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
+            when {
+                document==null && err.isBlank() -> Loading()
+                document==null -> ErrorNote(err)
+                editing -> androidx.compose.material3.OutlinedTextField(text,{text=it},modifier=Modifier.fillMaxWidth(),minLines=12)
+                else -> SelectionContainer { Markdown(document.orEmpty(),onPointer=if(r.pointers) { p->Nav.open(memoryDoc(p)) } else null) }
+            }
+            if(note.isNotBlank()) ErrorNote(note)
+        }
+        if(editing) GoldButton(if(saving) "正在保存…" else "保存",Modifier.fillMaxWidth().padding(20.dp),!saving) {
+            saving=true
+            scope.launch {
+                try { Api.putJson("/api/memory/item?path=${Api.encode(r.path)}",org.json.JSONObject().put("text",text)); invalidateCache("doc:${r.path}"); Chat.filesVersion.intValue++; editing=false }
+                catch(e: kotlinx.coroutines.CancellationException) { throw e }
+                catch(e: Exception) { note=e.message ?: "保存失败" }
+                finally { saving=false }
             }
         }
-    }
+    } }
 }
 
 fun memoryDoc(rel: String) = Route.Doc(rel.substringAfterLast('/').removeSuffix(".md"), "data/memory/$rel", pointers = true)
@@ -272,7 +292,7 @@ private fun ImagePage(path: String) {
     }
 }
 
-/** Shared by Sites, Markdown links and chat attachments. */
+/** Shared by the library, Markdown links and chat attachments. */
 suspend fun openFile(ctx: Context, path: String, title: String = path.substringAfterLast('/'), mime: String = "") {
     when (fileOpening(path, mime)) {
         FileOpening.Markdown -> Nav.open(Route.Doc(title.removeSuffix(".md"), path))

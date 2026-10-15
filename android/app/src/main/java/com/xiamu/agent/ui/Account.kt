@@ -94,7 +94,6 @@ import kotlinx.coroutines.launch
 /** Whether we hold a token; flipping it swaps the whole UI between login and the app. */
 object Session {
     val loggedIn = mutableStateOf(Prefs.configured)
-    val onboarded = mutableStateOf(Prefs.onboarded)
 
     fun logout(ctx: android.content.Context) {
         Prefs.token = ""
@@ -107,7 +106,6 @@ object Session {
         DeviceService.stop(ctx)
         java.io.File(ctx.cacheDir, "site-previews").deleteRecursively()
         java.io.File(ctx.cacheDir, "connector-icons").deleteRecursively()
-        Appearance.choice.value = com.xiamu.agent.AvatarChoice()
         clearCache()
         Nav.home(0)
         loggedIn.value = false
@@ -165,10 +163,10 @@ fun LoginScreen() {
             Text("登录豆豆", fontSize = Type.Large, fontFamily = Type.titleFamily, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.padding(top = 26.dp))
             Text("你的个人 agent，住在你自己的云主机上", fontSize = Type.Secondary, color = Pal.Muted, modifier = Modifier.padding(top = 8.dp))
             Column(Modifier.padding(top = 32.dp).fillMaxWidth().card(radius = 24.dp).padding(horizontal = 20.dp)) {
-                LoginField("账号", server, { server = it }, "https://你的服务器/agent", KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next))
+                LoginField("云端地址", server, { server = it }, "https://你的服务器/agent", KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next))
                 Hairline()
                 LoginField(
-                    "密码", password, { password = it }, "6 位配对码或口令",
+                    "配对码", password, { password = it }, "6 位配对码",
                     KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                     KeyboardActions(onDone = { login() }),
                     if (shown) VisualTransformation.None else PasswordVisualTransformation(),
@@ -181,7 +179,7 @@ fun LoginScreen() {
             }
             if (error.isNotBlank()) ErrorNote(error)
             GoldButton(if (busy) "正在登录…" else "登录", Modifier.fillMaxWidth().padding(top = if (error.isBlank()) 24.dp else 4.dp), ready) { login() }
-            Text("没有密码？在已登录的设备上：设置 → 生成配对码", fontSize = Type.Label, color = Pal.Faint,
+            Text("没有配对码？在已登录的设备上：设置 → 生成配对码", fontSize = Type.Label, color = Pal.Faint,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
@@ -273,34 +271,6 @@ fun LocalCapabilities() {
     }
 }
 
-@Composable
-fun OnboardingScreen() {
-    val c = ctx()
-    fun finish() { Prefs.onboarded = true; Session.onboarded.value = true }
-    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        Prefs.notifyMessages = ok
-        finish()
-    }
-    Screen {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Spacer(Modifier.height(40.dp))
-            Text("开通本机能力", fontSize = Type.Large, fontFamily = Type.titleFamily, fontWeight = FontWeight.Bold, color = Pal.Ink, modifier = Modifier.padding(start = 4.dp))
-            Text(
-                "打开的，豆豆可以随时用；没打开的，它碰不到。之后在「连接应用 → 本机」里随时改。",
-                fontSize = Type.Secondary, lineHeight = Type.BodyLine, color = Pal.Muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 22.dp),
-            )
-            LocalCapabilities()
-            EnableAllCapabilities()
-            GoldButton("开始使用", Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 24.dp)) {
-                if (android.os.Build.VERSION.SDK_INT >= 33 && Prefs.notifyMessages &&
-                    ContextCompat.checkSelfPermission(c, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    notifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                } else finish()
-            }
-        }
-    }
-}
-
 // ---------- 设置 ----------
 
 /** Issue a fresh one-time code for another device. */
@@ -360,36 +330,28 @@ fun SettingsScreen() {
         notifyDenied = !ok
     }
     SubPage("设置") {
-        item { MembershipCard(state) }
-        item { SectionTitle("外观") }
+
+        item { SectionTitle("偏好") }
         item { CardList {
-            ListRow("皮肤", SkinState.current.value.label, Icons.Outlined.Palette, Pal.Link) { Nav.open(Route.Skins) }
+            ListRow("模型",runtime?.modelLabel ?: "正在读取",Icons.Outlined.AutoAwesome) { Nav.open(Route.RuntimeSettings()) }
             Hairline()
-            ListRow("豆豆", "角色、形象与日记", Icons.Outlined.PersonOutline, Pal.Link) { Nav.open(Route.Doudou) }
+            ListRow("外观",when(ThemeState.preference.value) { "light"->"浅色"; "dark"->"深色"; else->"跟随系统" },Icons.Outlined.Palette) { Nav.open(Route.Appearance) }
         } }
-        item { SectionTitle("模型与权限") }
-        item {
-            CardList {
-                ListRow("模型", runtime?.modelLabel ?: "正在读取", Icons.Outlined.AutoAwesome, Pal.Link) { Nav.open(Route.RuntimeSettings()) }
-                Hairline()
-                ListRow("权限", runtime?.permissionLabel ?: "正在读取", Icons.Outlined.Shield, Pal.Gold) { Nav.open(Route.RuntimeSettings(permissions = true)) }
-            }
-        }
         if (runtimeError.isNotBlank()) item { ErrorNote(runtimeError) }
         item { SectionTitle("能力与连接") }
         item {
             CardList {
-                ListRow("连接应用", "本机、云端和其他设备的能力", Icons.Outlined.Hub, Pal.Link) { Nav.open(Route.Connectors()) }
+                ListRow("连接应用", "本机、云端和其他设备的能力", Icons.Outlined.Hub, Pal.Ink) { Nav.open(Route.Connectors()) }
                 Hairline()
-                ListRow("设备", "豆豆能用的手机、电脑和云电脑", Icons.Outlined.Devices, Pal.Link) { Nav.open(Route.Devices) }
+                ListRow("设备", "设备与本机能力", Icons.Outlined.Devices, Pal.Ink) { Nav.open(Route.Devices) }
                 Hairline()
-                ListRow("技能", "豆豆整理好的常用做法", Icons.Outlined.Extension, Pal.Link) { Nav.open(Route.Skills) }
+                ListRow("技能", "豆豆整理好的常用做法", Icons.Outlined.Extension, Pal.Ink) { Nav.open(Route.Skills) }
             }
         }
         item { SectionTitle("通知") }
         item {
             CardList {
-                ListRow("接收消息通知", if (notifyDenied) "系统通知权限被拒绝 · 点这里去系统设置打开" else "App 不在前台时，豆豆的回复和任务结果弹通知", Icons.Outlined.NotificationsNone,
+                ListRow("接收消息通知", if (notifyDenied) "系统通知权限被拒绝 · 点这里去系统设置打开" else "App 不在前台时，豆豆说话会发通知", Icons.Outlined.NotificationsNone,
                     Pal.Gold, subColor = if (notifyDenied) Pal.Danger else Pal.Muted, subLines = 2,
                     onClick = if (notifyDenied) { { c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", c.packageName, null))) } } else null,
                     trailing = {
@@ -405,7 +367,7 @@ fun SettingsScreen() {
         item { SectionTitle("账号") }
         item {
             CardList {
-                ListRow("云端地址", Prefs.server, Icons.Outlined.Cloud, Pal.Link)
+                ListRow("云端地址", Prefs.server, Icons.Outlined.Cloud, Pal.Ink) { Nav.open(Route.Server) }
                 Hairline()
                 PairCode()
                 Hairline()
@@ -418,5 +380,5 @@ fun SettingsScreen() {
 
 @Composable
 fun PillLink(text: String, onClick: () -> Unit) {
-    Text(text, fontSize = Type.Secondary, color = Pal.Link, modifier = Modifier.clip(CircleShape).tap(onClick = onClick).padding(vertical = 6.dp))
+    Text(text, fontSize = Type.Secondary, color = Pal.Ink, modifier = Modifier.clip(CircleShape).tap(onClick = onClick).padding(vertical = 6.dp))
 }

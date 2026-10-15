@@ -21,7 +21,7 @@ internal fun ToolRow(label: String, detail: String, active: Boolean = false, tag
     var expanded by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag(tag)) {
         Row(Modifier.fillMaxWidth().tap { expanded = !expanded }.padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (active) CircularProgressIndicator(Modifier.size(14.dp), color = Pal.Link, strokeWidth = 1.5.dp)
+            if (active) CircularProgressIndicator(Modifier.size(14.dp), color = Pal.Ink, strokeWidth = 1.5.dp)
             else Icon(Icons.Outlined.Terminal, null, tint = Pal.Muted, modifier = Modifier.size(16.dp))
             Text(label, style = Type.body(13), color = Pal.Muted, modifier = Modifier.weight(1f).padding(start = 9.dp), maxLines = 1)
             Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (expanded) "收起工具" else "展开工具", tint = Pal.Muted, modifier = Modifier.size(18.dp))
