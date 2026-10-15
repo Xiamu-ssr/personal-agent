@@ -36,7 +36,7 @@ export function recentChat(file, maxBytes = 256 * 1024) {
 }
 
 function memoryPointers(root) {
-  const pointers = ["data/memory/profile/总档.md", "data/memory/role/角色.md"];
+  const pointers = ["data/memory/profile/总档.md", "data/soul/角色.md"];
   const base = path.join(root, "data/memory");
   try {
     for (const category of fs.readdirSync(base, { withFileTypes: true })) {
@@ -52,7 +52,7 @@ function memoryPointers(root) {
 
 export function recoveryContext({ root, chatLog, redact = (s) => s }) {
   const legacyError = /^(?:Error during compaction:|Prompt (?:is )?too long(?:\s*[·:：]|$)|API Error:|Conversation too long\.)/i;
-  const rows = recentChat(chatLog).filter((e) => ["user", "assistant", "card"].includes(e.role) && !e.error &&
+  const rows = recentChat(chatLog).filter((e) => ["user", "assistant"].includes(e.role) && !e.error &&
     !(e.role === "assistant" && !e.partial && legacyError.test(e.text || "")) && e.text !== RECOVERY_NOTICE);
   const excerpts = rows.map((e) => {
     const text = String(e.text || e.title || "").slice(0, 900);

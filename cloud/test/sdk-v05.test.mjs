@@ -49,7 +49,7 @@ test("真实 SDK 切换后四模型下一轮的 wire model 改变，原会话和
   assert.equal((await f.turn("V05_FIRST_CONTEXT" )).subtype,"success");
   const session=f.h.main.sessionId;
   for(const row of MODELS.slice(1)) {
-    putAppSettings(config.root,{model:row.id});f.h.settingsChanged();await f.h.dispatchChain;
+    putAppSettings(config.root,{model:row.id});f.h.settingsChanged();await f.h.inputChain;
     const result=await f.turn("V05_SWITCH "+row.id);
     assert.equal(result.subtype,"success");
     assert.equal(api.requests.at(-1).model,row.id);
@@ -61,7 +61,7 @@ test("真实 SDK 切换后四模型下一轮的 wire model 改变，原会话和
   assert.equal(f.optionsUsed.length,MODELS.length,"model changes refresh classifier env by resuming the same conversation");
   assert.equal(f.optionsUsed[0].systemPrompt.type,"preset");
   assert.equal(f.optionsUsed[0].systemPrompt.preset,"claude_code");
-  assert.match(JSON.stringify(api.requests[0].system),/你是豆豆/);
+  assert.ok(f.optionsUsed[0].systemPrompt.append.trim());
   assert.ok(JSON.stringify(api.requests[0].system).length>f.optionsUsed[0].systemPrompt.append.length,"the CLI builtin prompt remains present");
   assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_AUTO_MODE_MODEL,MODELS.at(-1).id);
   assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_SUBAGENT_MODEL,MODELS.at(-1).id);
@@ -119,7 +119,7 @@ test("真实 SendMessage 恢复已完成 fork：同一任务 id、原始上下�
   const before=f.h.taskHistory(id);
   assert.equal(before.status,"done");assert.ok(before.items.some((i)=>i.kind==="prompt"&&i.text.includes("V05_TASK_MEMORY_42")));
   assert.ok(before.items.some((i)=>i.kind==="result"&&i.text.includes("V05_ORIGINAL_RESULT")));
-  putAppSettings(config.root,{model:MODELS[2].id});f.h.settingsChanged();await f.h.dispatchChain;
+  putAppSettings(config.root,{model:MODELS[2].id});f.h.settingsChanged();await f.h.inputChain;
   assert.equal(await f.h.sendTask(id,"V05_FOLLOW_DONE"),id);
   await f.until(()=>continued&&f.wire.filter((m)=>m.subtype==="task_notification"&&m.task_id===id&&m.status==="completed").length===2&&!f.h.busy);
   const after=f.h.taskHistory(id);
@@ -136,7 +136,7 @@ test("真实 SDK 权限切换在下一轮生效，保留主会话且不发 App �
   const api=await fakeAnthropic();const f=fixture(t,api);
   await f.turn("V05_PERMISSIONS_FIRST");const session=f.h.main.sessionId;
   for(const mode of ["auto","bypassPermissions"]) {
-    putAppSettings(config.root,{permissionMode:mode});f.h.settingsChanged();await f.h.dispatchChain;
+    putAppSettings(config.root,{permissionMode:mode});f.h.settingsChanged();await f.h.inputChain;
     assert.equal((await f.turn("V05_PERMISSIONS "+mode)).subtype,"success");
     assert.equal(f.wire.findLast((m)=>m.subtype==="init").permissionMode,mode);
     assert.equal(f.h.main.sessionId,session);
@@ -184,7 +184,7 @@ test("切模型时运行中的 fork 以原 id 恢复，新模型请求仍包含�
   const f=fixture(t,api,release);await f.turn("V05_SWITCH_RUNNING_START");
   await f.until(()=>blocked&&f.h.backgroundTasks().length===1&&!f.h.busy);id=f.h.backgroundTasks()[0].id;
   const session=f.h.main.sessionId;
-  putAppSettings(config.root,{model:MODELS[1].id});f.h.settingsChanged();await f.h.dispatchChain;
+  putAppSettings(config.root,{model:MODELS[1].id});f.h.settingsChanged();await f.h.inputChain;
   await f.until(()=>restored&&f.wire.some((m)=>m.subtype==="task_notification"&&m.task_id===id&&m.status==="completed")&&!f.h.busy);
   assert.equal(f.h.main.sessionId,session);assert.equal(f.h.taskHistory(id).status,"done");release();
 });

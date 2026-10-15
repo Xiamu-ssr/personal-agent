@@ -9,6 +9,7 @@ User=agent
 Group=agent
 WorkingDirectory=/srv/agent
 EnvironmentFile=/etc/personal-agent.env
+Environment=AGENT_BROWSER_SERVICE=personal-agent-browser.service
 ExecStart=/usr/bin/node /opt/personal-agent/cloud/src/main.mjs
 Restart=always
 RestartSec=5

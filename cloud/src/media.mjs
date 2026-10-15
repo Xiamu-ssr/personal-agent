@@ -118,8 +118,7 @@ export function replyMedia(root, text) {
       const decoded = decodeURIComponent(link.destination);
       if (!decoded.startsWith("data/") || decoded.includes("\\")) continue;
       const file = localFile(root, decoded, "data"), rel = path.relative(root, file);
-      const real = path.relative(fs.realpathSync(root), fs.realpathSync(file));
-      if ([rel, real].some((p) => p.startsWith("data/briefs/") && path.extname(p).toLowerCase() === ".json") || seen.has(rel)) continue;
+      if (seen.has(rel)) continue;
       media.push({ path: rel, name: link.name || path.basename(file), ...fileType(file), size: fs.statSync(file).size });
       seen.add(rel);
       if (media.length === 20) break;

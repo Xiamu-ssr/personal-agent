@@ -34,5 +34,5 @@ test("real SDK restart continuation carries original context and uploaded image,
   assert.ok(requests>=2);assert.equal(sawImage,true);assert.equal(fs.readFileSync(healthFile,"utf8"),'{"days":[]}');assert.equal(restarted.history.get(id).status,"done");
   assert.ok(restarted.history.get(id).sessionId&&restarted.history.get(id).sessionId!==oldSession);
   const history=restarted.taskHistory(id);assert.equal(history.items[0].from,"agent");assert.equal(history.items.find((i)=>i.from==="user").attachments[0].path,image);assert.ok(history.items.some((i)=>i.kind==="result"&&i.text.startsWith("V06_NATIVE_CONTINUED")));assert.ok(!history.items.some((i)=>i.text.startsWith("[任务续聊上下文]")));
-  assert.ok(events.some((e)=>e.t==="job"&&e.phase==="done"&&e.id===id&&e.taskContinuation));
+  assert.ok(events.some((e)=>e.t==="activity"&&e.phase==="done"&&e.id===id));
 });

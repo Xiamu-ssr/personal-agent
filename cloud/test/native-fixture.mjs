@@ -20,10 +20,10 @@ export function nativeHarness(t, api, { connectors, hub = new DeviceHub(), relea
   fs.mkdirSync(config.root, { recursive: true }); writeJson(config.stateFile, {});
   const harness = new Harness({ hub, bus, log() {}, ...(connectors && { connectors }),
     queryFactory: ({ prompt, options }) => query({ prompt, options: { ...options,
-      systemPrompt: "Local test fixture. Write brief HTML with Write/Edit. Use background Agent fork for scheduled briefs.",
+      systemPrompt: "Local test fixture. Use say for speech and file tools for artifacts.",
       settingSources: [], agentProgressSummaries: false, permissionMode: "bypassPermissions", allowDangerouslySkipPermissions: true,
       env: { ...options.env, ANTHROPIC_BASE_URL: api.url, ANTHROPIC_API_KEY: "fake-local-only", ANTHROPIC_AUTH_TOKEN: "",
-        CLAUDE_CONFIG_DIR: path.join(config.sessions, "v04-" + Math.random().toString(16).slice(2)), CLAUDE_CODE_TMPDIR: path.join(config.root, "native-tmp"),
+        CLAUDE_CONFIG_DIR: config.sessions, CLAUDE_CODE_TMPDIR: path.join(config.root, "native-tmp"),
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "0", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1" } } }) });
   const receive = harness.onMainMessage.bind(harness);
   harness.onMainMessage = (m, main) => { wire.push(m); receive(m, main); };

@@ -1,11 +1,11 @@
-// One long-lived main thread: user/schedule turns, native background forks, isolated maintenance.
+// One open main thread for chat/interjections, plus native forks and isolated background work.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { config, MEMORY_CATEGORIES } from "./config.mjs";
-import { readJson, appendJsonl, nowIn } from "./store.mjs";
+import { readJson, appendJsonl, tailJsonl, nowIn } from "./store.mjs";
 import { ConnectorManager, writePrivateJson } from "./connectors.mjs";
 import { checkConnectorAccess, CONNECTOR_GUARD_TOOLS } from "./connector-guard.mjs";
 import { inputUsage, contextPolicy, CLI_MODEL_OVERRIDES } from "./context-policy.mjs";
@@ -13,18 +13,19 @@ import { readAppSettings, MODELS, modelEnvironment } from "./app-settings.mjs";
 import { TaskHistory } from "./task-history.mjs";
 import { contextFailure, humanError, recoveryContext, withRecovery, RECOVERY_NOTICE } from "./conversation-recovery.mjs";
 import { BackgroundTasks, TaskError } from "./background-tasks.mjs";
-import { isBriefPath, isOutputPath, readBrief } from "./briefs.mjs";
+import { localFile } from "./local-paths.mjs";
+import { Speech } from "./say.mjs";
+import { Avatar } from "./avatar.mjs";
 import { validateMessage, prepareAttachments, userContent } from "./attachments.mjs";
 import { checkDataAccess } from "./data-guard.mjs";
 import { calendarContext } from "./calendar-context.mjs";
 import { PageScreenshot } from "./page-screenshot.mjs";
+import { CloudBrowser, createBrowserMcpServer } from "./browser/index.mjs";
 import { estimateUsageCost } from "./usage-pricing.mjs";
 import { replyMedia } from "./media.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
-const SCHEDULE_FORK_REASON = '定时简报请先用 Agent（subagent_type: "fork"，run_in_background: true）派到后台，再简短回复用户';
-// Some models send tool booleans as strings; the CLI accepts both.
-const isTrue = (v) => v === true || v === "true";
+const isOutputPath = (r) => /^data\/(?:feed|ideas|goals|library)\//.test(r);
 
 // An async iterable the SDK reads user messages from (streaming input mode).
 class Inbox {
@@ -34,6 +35,7 @@ class Inbox {
     this.closed = false;
   }
   push(item) {
+    if (this.closed) throw new Error("会话输入已经关闭");
     const w = this.waiters.shift();
     w ? w({ value: item, done: false }) : this.items.push(item);
   }
@@ -90,18 +92,19 @@ function memoryPathError(r) {
 }
 
 export class Harness {
-  constructor({ hub, bus, log, connectors = new ConnectorManager(), queryFactory = query }) {
+  constructor({ hub, bus, log, connectors = new ConnectorManager(), queryFactory = query, browser = new CloudBrowser({ root: config.root }) }) {
     this.hub = hub;
     this.bus = bus;
     this.log = log;
     this.connectors = connectors;
+    this.browser = browser;
     for (const [key, value] of Object.entries(process.env)) {
       if (/(?:TOKEN|KEY|SECRET|PASSWORD)$/i.test(key) && value?.length >= 8) connectors.knownSecrets?.add(value);
     }
     this.queryFactory = queryFactory;
+    this.closed = false;
     this.main = null;
-    this.turnQueue = [];
-    this.dispatchChain = Promise.resolve();
+    this.inputChain = Promise.resolve();
     this.reloadRevision = 0;
     const previousOnChange = connectors.onChange;
     connectors.onChange = (name) => {
@@ -112,8 +115,29 @@ export class Harness {
     this.jobChain = Promise.resolve();
     this.busy = false;
     this.running = new Map(); // id -> { label, started } (isolated jobs, queued or running)
+    this.isolated = new Map();
+    this.cancelled = new Set();
     this.history = new TaskHistory({ root: config.root, sessions: config.sessions, redact: (s) => connectors.redact(s) });
     this.pages = new PageScreenshot({root:config.root});
+    this.speech = new Speech({ root: config.root, bus, redact: (s) => connectors.redact(s), onSay: (entry) => {
+      if (this.main?.activityId === entry.activityId) this.main.said = true;
+      if (entry.activityId && this.history.records.has(entry.activityId)) {
+        if (this.history.get(entry.activityId).kind === "subagent") this.bus.emit({ t: "activity_step", id: entry.activityId, item: { kind: "text", text: entry.text, time: new Date(entry.ts).toISOString() } });
+        else this.step(entry.activityId, "text", entry.text);
+      }
+    } });
+    this.avatar = new Avatar({ bus, busy: () => this.busy || this.running.size > 0 || this.backgroundTasks().length > 0, waiting: () => this.speech.waiting(), waitingForUser: () => this.browser.owner === "user" });
+    if (this.speech.waiting()) this.avatar.value = { state: "waiting" };
+    this.onBrowserState = (state) => {
+      if (state.control !== "user") return;
+      this.browserSession ||= { main: this.main, activityId: this.main?.activityId };
+      const isolated = this.isolated.get(this.browserSession.activityId);
+      if (isolated) isolated.job.awaitingBrowser = true;
+      this.avatar.working();
+    };
+    this.onBrowserReturned = () => this.browserReturned().catch((e) => this.log("browser return failed:", this.connectors.redact(e.message)));
+    browser.on("state", this.onBrowserState);
+    browser.on("returned", this.onBrowserReturned);
   }
 
   compactionControl(getQuery = () => undefined) {
@@ -144,8 +168,10 @@ export class Harness {
     return control;
   }
 
-  options({ isolated, onWrite, compaction = this.compactionControl() }) {
-    const selected = readAppSettings(config.root), m = selected.model, context = contextPolicy(m);
+  options({ isolated, onWrite, model, feed = false, speechContext = () => ({ activityId: this.main?.activityId }), compaction = this.compactionControl() }) {
+    const selected = readAppSettings(config.root), m = model || selected.model, context = contextPolicy(m);
+    const speechCalls = new Map();
+    const browserCalls = new Map();
     const inheritedEnv = { ...process.env };
     for (const key of ["AGENT_MODEL", "AGENT_PERMISSION_MODE", "AGENT_EFFORT", "AGENT_MODEL_CANONICAL", "AGENT_MAX_OUTPUT_TOKENS", "AGENT_CONTEXT_INPUT_LIMIT", "AGENT_CONTEXT_HEADROOM", "CLAUDE_CODE_CURRIED_TRINKET"]) delete inheritedEnv[key];
     return {
@@ -157,7 +183,7 @@ export class Harness {
       allowedTools: [
         "mcp__devices__list_devices", "mcp__devices__call_device", "mcp__devices__read_since", "mcp__devices__sync_commit",
         "mcp__connectors__list", "mcp__connectors__add_account", "mcp__connectors__update_account", "mcp__connectors__remove_account",
-        "mcp__page__screenshot",
+        "mcp__page__screenshot", "mcp__doudou__say", "mcp__browser__*",
         ...[...this.connectors.definitions.keys()].map((name) => "mcp__" + name + "__*"),
       ],
       thinking: { type: "adaptive" },
@@ -172,7 +198,15 @@ export class Harness {
         precomputeCompactionEnabled: false,
         idleCompaction: false,
       },
-      mcpServers: { devices: this.hub.mcpServer(), page:this.pages.mcpServer(), ...this.connectors.mcpServers() },
+      mcpServers: { doudou: this.speech.mcpServer((extra) => {
+        const id = extra?._meta?.["claudecode/toolUseId"], owner = speechCalls.get(id);
+        speechCalls.delete(id);
+        return owner || speechContext(extra);
+      }), browser: createBrowserMcpServer({ browser: this.browser, feed, onCall: (_name, _args, extra) => {
+        const id = extra?._meta?.["claudecode/toolUseId"], owner = browserCalls.get(id) || speechContext();
+        browserCalls.delete(id);
+        if (this.browser.owner !== "user") this.browserSession = { ...owner, main: isolated ? null : this.main, isolated };
+      } }), devices: this.hub.mcpServer(), page:this.pages.mcpServer(), ...this.connectors.mcpServers() },
       includePartialMessages: !isolated,
       agentProgressSummaries: true,
       perTaskStopAffordance: !isolated, // The App's per-task stop controls target the open main query.
@@ -203,16 +237,24 @@ export class Harness {
         SubagentStop: [{ hooks: [compaction.restore] }],
         PreToolUse: [
           { matcher: CONNECTOR_GUARD_TOOLS, hooks: [async (input) => checkConnectorAccess(input)] },
-          { matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash", hooks: [async (input)=>checkDataAccess(input)] },
+          { matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash", hooks: [async (input)=>checkDataAccess(input,{feed})] },
           { matcher: WRITE_TOOLS, hooks: [async (input) => this.checkWrite(input)] },
-          ...(!isolated ? [{ hooks: [async (input) => this.checkScheduleFork(input), async (input) => this.checkTaskContinuation(input)] }] : []),
+          ...(!isolated ? [{ hooks: [async (input) => this.checkTaskContinuation(input)] }] : []),
+          { hooks: [async (input) => {
+            this.avatar.working(input.tool_name, input.tool_input);
+            if (input.tool_name === "mcp__doudou__say") speechCalls.set(input.tool_use_id, { activityId: input.agent_id || speechContext().activityId });
+            if (input.tool_name?.startsWith("mcp__browser__")) {
+              browserCalls.set(input.tool_use_id, { activityId: input.agent_id || speechContext().activityId, agentId: input.agent_id });
+              if (browserCalls.size > 128) browserCalls.delete(browserCalls.keys().next().value);
+            }
+            return {};
+          }] },
+
         ],
         PostToolUse: [{ matcher: WRITE_TOOLS, hooks: [async (input) => {
           const r = rel(input.tool_input?.file_path || input.tool_input?.notebook_path);
-          const error = isBriefPath(r) && readBrief(config.root, r).error;
-          onWrite(r, input, !error);
-          return error ? { decision: "block", reason: `简报校验失败：${error}。请用 Write / Edit 修正。`,
-            hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `简报校验失败：${error}。请修正后再完成任务。` } } : {};
+          onWrite(r, input, true);
+          return {};
         }] }],
       },
       stderr: (d) => {
@@ -229,53 +271,34 @@ export class Harness {
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
         additionalContext: `当前时间：${nowIn(config.timezone)}（${config.timezone}） · ${calendarContext({timezone:config.timezone})}\n在线设备：${devText}` +
-          (!isolated && !agentId && this.main?.reason === "schedule" ? "\n这份定时任务请放到后台做，完成后通知用户。" : "") +
-          (!isolated && !agentId && this.main?.active?.taskContinuation ? `\n用户在继续任务 ${this.main.active.taskContinuation.id}。请只用 SendMessage，to 为这个任务 id，message 原样使用用户这条消息；任务继续在后台做，简短确认即可。` : ""),
+          (!isolated && !agentId && this.main?.continuations?.length ? "\n请用 SendMessage 把用户交代原样发给指定活动，继续在后台执行：" + this.main.continuations.map((c) => JSON.stringify({ to: c.id, message: c.text })).join("\n") : ""),
       },
     };
   }
 
   checkWrite(input) {
     const r = rel(input.tool_input?.file_path || input.tool_input?.notebook_path);
-    const err = /^data\/briefs\/.+\.json$/.test(r) ? "简报只接受 HTML，请写到 data/briefs/<日期>/<任务名>.html" : memoryPathError(r);
+    const err = memoryPathError(r);
     if (!err) return {};
     return {
       hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: err },
     };
   }
 
-  checkScheduleFork(input) {
-    const main = this.main, guard = main?.scheduleFork;
-    if (input.agent_id || !main?.turnOpen || main.reason !== "schedule" || !guard || guard.dispatched) return {};
-    // The CLI strips run_in_background from its parsed Agent schema with the fork gate on.
-    // Match its normalized hook input to the original assistant tool_use by id, never infer intent.
-    const background = isTrue(input.tool_input?.run_in_background) ||
-      (input.tool_input?.run_in_background === undefined && guard.requestedForks.has(input.tool_use_id));
-    if (input.tool_name === "Agent" && input.tool_input?.subagent_type === "fork" && background) {
-      guard.dispatched = true; // Once this call passes the guard, the rest of the main turn is unrestricted.
-      guard.toolUseId = input.tool_use_id;
-      return {};
-    }
-    if (guard.failOpen) return {};
-    guard.denials++;
-    this.log(`[schedule] fork guard denied count=${guard.denials} tool=${this.connectors.redact(input.tool_name)}`);
-    if (guard.denials === 3) {
-      guard.failOpen = true; // The third call is still denied; subsequent calls use the normal path.
-      this.log("[schedule] fork guard fail-open");
-    }
-    return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: SCHEDULE_FORK_REASON } };
+  step(id, kind, text, tool, extra = {}) {
+    const record = this.history.records.get(id);
+    if (!record) return;
+    const entry = { kind, text: this.history.safe(text), time: new Date().toISOString(), ...(tool && { tool }), ...(kind === "prompt" && { from: record.kind === "chat" || record.steps?.some((s) => s.kind === "prompt") ? "user" : "agent" }), ...extra };
+    this.history.put(id, { steps: [...(record.steps || []), entry] });
+    this.bus.emit({ t: "activity_step", id, item: entry });
   }
 
   checkTaskContinuation(input) {
-    const continuation = this.main?.active?.taskContinuation;
-    if (!continuation || input.agent_id || continuation.dispatched) return {};
-    const i = input.tool_input || {};
-    if (input.tool_name === "SendMessage" && i.to === continuation.id && i.message === continuation.text) {
-      continuation.dispatched = true;
-      return {};
-    }
-    return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny",
-      permissionDecisionReason: `请用 SendMessage 给任务 ${continuation.id} 发送用户原文，不新建任务，也不在主会话执行。` } };
+    const pending = this.main?.continuations;
+    if (input.agent_id || !pending?.length) return {};
+    const index = pending.findIndex((c) => input.tool_name === "SendMessage" && input.tool_input?.to === c.id && input.tool_input?.message === c.text);
+    if (index >= 0) { pending.splice(index, 1); return {}; }
+    return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: `请先用 SendMessage 把用户原文交给活动 ${pending[0].id}，message 为：${pending[0].text}` } };
   }
 
   // Shared side effects of any write the agent makes.
@@ -297,15 +320,10 @@ export class Harness {
   }
 
   taskCard(task, notification) {
-    if(this.history.records.get(task.id)?.detached)return;
+    if (this.history.records.get(task.id)?.detached) return;
     const outputs = this.validOutputs(task.outputs);
-    const briefFields = this.briefCardFields(outputs);
-    const entry = { role: "card", id: task.id, label: task.description, title: (briefFields.name || task.description) + (notification.status === "completed" ? "" : "（未完成）"),
-      outputs, ...briefFields, ok: notification.status === "completed", ts: Date.now(), taskId: task.id };
-    appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - task.startedAt });
-    this.history.put(task.id, { outputs, ...this.briefCardFields(outputs) });
-    if (outputs.length) appendJsonl(config.chatLog, entry);
-    this.bus.emit({ t: "job", phase: "done", ...entry }); // Same card/files protocol as isolated briefs.
+    this.history.put(task.id, { outputs });
+    this.bus.emit({ t: "activity", phase: "done", id: task.id, title: task.description, status: notification.status === "completed" ? "done" : notification.status === "stopped" ? "stopped" : "error", outputs, ts: Date.now() });
   }
 
   reloadSoon() {
@@ -314,18 +332,14 @@ export class Harness {
     this.reloadRevision++;
   }
 
-  validOutputs(outputs) { return [...outputs].filter((r) => isOutputPath(r) && (!isBriefPath(r) || !readBrief(config.root, r).error)); }
-
-  briefCardFields(outputs) {
-    const briefPath = outputs.find(isBriefPath);
-    if (!briefPath) return {};
-    const { brief } = readBrief(config.root, briefPath);
-    return { path: briefPath, name: brief.name, time: brief.time };
+  validOutputs(outputs) {
+    return [...outputs].filter((r) => { try { return isOutputPath(r) && !!localFile(config.root, r, "data"); } catch { return false; } });
   }
 
   // ---------- main thread ----------
 
   startMain() {
+    if (this.closed) return;
     clearTimeout(this.restartTimer);
     const state = readJson(config.stateFile, {});
     const inbox = new Inbox();
@@ -365,135 +379,109 @@ export class Harness {
       main.inbox.close();
       this.busy = false;
       this.bus.emit({ t: "status", busy: false });
-      if (this.turnQueue.length || main.needsFresh) {
-        this.scheduleDispatch().catch((e) => this.log("dispatch failed:", this.connectors.redact(e.message)));
-        return;
-      }
+      if (main.needsFresh) { this.scheduleRefresh(); return; }
       this.restartTimer = setTimeout(() => {
         this.startMain();
-        this.scheduleDispatch().catch((e) => this.log("dispatch failed:", this.connectors.redact(e.message)));
+        this.scheduleRefresh();
       }, 3000);
     })();
   }
 
-  async dispatchNextTurn() {
-    if (this.busy) return;
-    if (!this.turnQueue.length && !this.main?.needsFresh && !this.settingsPending) return;
+  async refreshMain() {
+    if (this.closed || this.busy) return;
     if (!this.main) this.startMain();
-    if (this.main.ended || this.main.needsFresh || this.main.reloadRevision !== this.reloadRevision || this.main.connectorRevision !== this.connectors.revision) {
-      const old = this.main;
-      old.intentionalClose = true;
-      old.inbox.close();
-      old.q.close();
-      await old.finished;
-      this.startMain(); // Same session for MCP changes; fresh session only after an explicit context failure.
-      this.log("main query rebuilt");
-    }
     let main = this.main;
-    main = await this.applySettings(main);
-    if (!this.turnQueue.length) return;
-    await main.compaction.restore();
-    // A native task-result turn can start while the control request above is awaiting acknowledgement.
-    if (this.busy || this.main !== main || main.ended || !this.turnQueue.length) return;
-    const active = this.turnQueue.shift();
-    if (active.entry && !active.persisted) {
-      appendJsonl(config.chatLog, active.entry);
-      active.persisted = true;
+    const selected = readAppSettings(config.root);
+    const rebuild = main.ended || main.needsFresh || main.reloadRevision !== this.reloadRevision || main.connectorRevision !== this.connectors.revision || main.settings.model !== selected.model;
+    if (rebuild) {
+      const active = main.tasks.list().filter((task) => this.history.records.get(task.id)?.kind === "subagent");
+      main.intentionalClose = true;
+      main.inbox.close(); main.q.close(); await main.finished;
+      if (this.closed) return;
+      this.startMain();
+      main = this.main;
+      for (const task of active) this.deliverContinuation(main, task.id, "继续原任务，从已经完成的步骤接着做。");
     }
-    this.beginMainTurn(main, active, active.source === "schedule" ? "schedule" : active.taskContinuation ? "task_continuation" : "user");
-    main.inbox.push(withRecovery(active.input, main.recoveryContext));
+    if (main.settings.permissionMode !== selected.permissionMode) {
+      await main.q.setPermissionMode(selected.permissionMode);
+      main.settings.permissionMode = selected.permissionMode;
+    }
+    if (!this.busy) await main.compaction.restore();
+    return main;
   }
 
+  scheduleRefresh() {
+    this.inputChain = this.inputChain.then(async () => {
+      if (this.closed || this.main?.intentionalClose || this.busy) return;
+      const replay = this.main?.replay;
+      const main = await this.refreshMain();
+      if (replay && main) {
+        this.beginMainTurn(main, replay, "user");
+        main.inbox.push(withRecovery(replay.input, main.recoveryContext));
+      }
+    }).catch((e) => this.log("session refresh failed:", this.connectors.redact(e.message)));
+    return this.inputChain;
+  }
+
+  settingsChanged() { this.scheduleRefresh(); }
+
   beginMainTurn(main, active = null, reason = "task_result") {
-    main.active = active; // Native turns have no user envelope and can never be auto-replayed.
+    main.active = active;
     main.reason = reason;
-    main.scheduleFork = { dispatched: false, denials: 0, failOpen: false, logged: false, requestedForks: new Set() };
-    main.toolsUsed = false;
-    main.failure = null;
-    main.reply = "";
-    main.compacting = false;
-    main.turnOpen = true;
+    main.toolsUsed = false; main.failure = null; main.reply = ""; main.said = false;
+    main.compacting = false; main.turnOpen = true;
+    main.activityId = active?.id || crypto.randomUUID();
+    const title = active?.entry?.text ? "聊天 · " + active.entry.text.replace(/\s+/g, " ").slice(0, 36) : reason === "task_result" ? "后台活动汇报" : "整理对话";
+    this.history.put(main.activityId, { kind: "chat", title, instruction: active?.entry?.text || title, status: "running", sessionId: main.sessionId, startedAt: Date.now(), steps: [] });
+    if (active?.entry) this.step(main.activityId, "prompt", active.entry.text, undefined, { ...(active.entry.attachments?.length && { attachments: active.entry.attachments }) });
     this.busy = true;
     this.bus.emit({ t: "status", busy: true, reason });
+    this.bus.emit({ t: "activity", phase: "started", id: main.activityId, title, ts: Date.now() });
+    this.avatar.working();
   }
 
   releaseMainTurn() {
     this.busy = false;
     this.bus.emit({ t: "status", busy: false });
-    this.scheduleDispatch().catch((e) => this.log("dispatch failed:", this.connectors.redact(e.message)));
-  }
-
-  scheduleDispatch() {
-    this.dispatchChain = this.dispatchChain.then(() => this.dispatchNextTurn(), () => this.dispatchNextTurn());
-    return this.dispatchChain;
-  }
-
-  settingsChanged() {
-    this.settingsPending = true;
-    this.scheduleDispatch().catch((e) => this.log("settings failed:", this.connectors.redact(e.message)));
-  }
-
-  async applySettings(main) {
-    const selected = readAppSettings(config.root);
-    if (main.settings.model === selected.model && main.settings.permissionMode === selected.permissionMode) { this.settingsPending = false; return main; }
-    let rebuild = main.settings.model !== selected.model;
-    try {
-      if (rebuild) await main.q.setModel(selected.model);
-      if (main.settings.permissionMode !== selected.permissionMode) await main.q.setPermissionMode(selected.permissionMode);
-    } catch (e) {
-      rebuild = true;
-      this.log("settings control requires resume:", this.connectors.redact(e.message));
-    }
-    if (this.busy || this.main !== main) { this.settingsPending = true; return main; }
-    if (rebuild) {
-      // 0.3.295 updateSettings refuses env. Refresh classifier/default-subagent models in a new CLI.
-      // Resume, never create a fresh conversation; native SendMessage restores each active agent by id.
-      const active = main.tasks.list().filter((task) => this.history.records.get(task.id)?.kind === "subagent");
-      main.intentionalClose = true; main.inbox.close(); main.q.close(); await main.finished;
-      this.startMain();
-      main = this.main;
-      for (const task of active.reverse()) {
-        if (this.turnQueue.some((turn) => turn.taskContinuation?.id === task.id)) continue;
-        const text = "继续原任务，从已经完成的步骤接着做。";
-        this.turnQueue.unshift({ source: "task", taskContinuation: { id: task.id, text },
-          input: { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } });
-      }
-    }
-    main.settings = selected;
-    this.settingsPending = false;
-    return main;
+    this.avatar.settle(!this.main?.failure);
+    this.scheduleRefresh();
   }
 
   taskHistory(id) { return this.history.history(id); }
 
-  async sendTask(id, text="", attachments=[]) {
+  async sendTask(id, text = "", attachments = []) {
     const task = this.history.get(id);
     let message;
-    try {message=validateMessage(config.root,text,attachments);}
-    catch(e) {throw new TaskError(e.message,400,"invalid_task_text");}
-    text=message.text;
-    const atts=await prepareAttachments(config.root,message.attachments);
-    const originalAvailable=this.main&&!this.main.ended&&task.sessionId===this.main.sessionId;
-    if(atts.length&&originalAvailable&&this.main.tasks.list().some((t)=>t.id===id)) {
-      // Move image continuations to an isolated query without leaving the original worker writing in parallel.
-      try{await this.stopTask(id);}catch(e){if(e.code!=="task_ended")throw e;}
-    }
-    if (task.kind === "isolated" || !originalAvailable || atts.length) {
-      const context=this.history.continuationContext(id);
-      this.history.rememberPrompt(id,text,atts);
-      // SendMessage accepts text only. Uploaded images use an isolated background message with image blocks.
-      this.runIsolated(task.title, text, { id, resumeTask:id, attachments:atts, continuationContext:context }).catch((e) => this.log("task continuation failed:", this.connectors.redact(e.message)));
+    try { message = validateMessage(config.root, text, attachments); }
+    catch (e) { throw new TaskError(e.message, 400, "invalid_task_text"); }
+    const atts = await prepareAttachments(config.root, message.attachments);
+    if (task.kind === "subagent" && !atts.length && this.main && !this.main.ended && task.sessionId === this.main.sessionId) {
+      this.history.rememberPrompt(id, message.text);
+      this.deliverContinuation(this.main, id, message.text);
       return id;
     }
-    this.history.rememberPrompt(id,text);
-    this.turnQueue.push({ source: "task", taskContinuation: { id, text },
-      input: { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } });
-    await this.scheduleDispatch();
+    if (this.backgroundTasks().some((t) => t.id === id)) await this.stopTask(id);
+    const context = this.history.continuationContext(id);
+    if (!task.steps?.length) this.history.put(id, { steps: this.history.history(id).items });
+    this.history.rememberPrompt(id, message.text, atts);
+    this.runIsolated(task.title, message.text, { id, resumeTask: id, attachments: atts, continuationContext: context })
+      .catch((e) => this.log("activity continuation failed:", this.connectors.redact(e.message)));
     return id;
+  }
+
+  deliverContinuation(main, id, text) {
+    const input = { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
+    (main.continuations ||= []).push({ id, text });
+    if (!main.turnOpen) this.beginMainTurn(main, { input }, "activity_continuation");
+    main.inbox.push(input);
   }
 
   runningJobs() {
     const jobs=new Map([...this.running].map(([id,job])=>[id,{id,...job}]));
+    if (this.main?.turnOpen && this.main.activityId) {
+      const activity = this.history.records.get(this.main.activityId);
+      if (activity) jobs.set(activity.id, { id: activity.id, title: activity.title, label: activity.title, started: activity.startedAt });
+    }
     for(const task of this.backgroundTasks())if(!this.history.records.get(task.id)?.detached)jobs.set(task.id,{id:task.id,label:task.description,title:task.description,started:task.startedAt});
     return [...jobs.values()];
   }
@@ -524,12 +512,13 @@ export class Harness {
       const state = readJson(config.stateFile, {});
       main.sessionId = m.session_id;
       if (state.mainSessionId !== m.session_id) writePrivateJson(config.stateFile, { ...state, mainSessionId: m.session_id });
+      if (main.activityId && this.history.records.has(main.activityId)) this.history.put(main.activityId, { sessionId: m.session_id });
       this.log(`main session ${m.session_id} mode=${m.permissionMode} model=${m.model}`);
       return;
     }
     if (m.type === "system" && m.subtype === "status") {
       if (m.status === "compacting") {
-        if (!main.compacting) this.bus.emit({ t: "delta", text: "对话太长，正在整理上下文…\n" });
+        if (!main.compacting) this.avatar.working("memory");
         main.compacting = true;
       }
       if (m.compact_result === "failed") this.recordFailure(main, `Error during compaction: ${m.compact_error || "unknown"}`);
@@ -550,21 +539,18 @@ export class Harness {
       this.log("[api retry]", m.error, m.error_status, `attempt=${m.attempt}`);
       return;
     }
-    if (m.type === "system" && m.subtype === "task_started" && m.subagent_type === "fork" && !m.parent_task_id) {
-      const guard = main.scheduleFork;
-      if (main.reason === "schedule" && guard?.dispatched && !guard.logged && (!guard.toolUseId || guard.toolUseId === m.tool_use_id)) {
-        guard.logged = true;
-        this.log(`[schedule] fork dispatched task_id=${m.task_id} tool_use_id=${m.tool_use_id || guard.toolUseId || "unknown"}`);
-      }
-    }
     if (m.type === "system") this.history.handle(m, main.sessionId);
-    if (m.type === "system" && main.tasks.handle(m)) return;
+    if (m.type === "system" && main.tasks.handle(m)) {
+      if (this.backgroundTasks().length) this.avatar.working(); else this.avatar.settle(m.status !== "failed");
+      return;
+    }
     if (m.parent_tool_use_id) return; // subagent internals stay out of the chat
     if (m.type === "stream_event") {
       const ev = m.event;
+      if (ev?.type === "message_start") main.bubbleId = crypto.randomUUID();
       if (ev?.type === "content_block_start" && ev.content_block?.type === "tool_use") main.toolsUsed = true;
       if (!main.compacting && !main.failure && ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") {
-        this.bus.emit({ t: "delta", text: ev.delta.text });
+        this.bus.emit({ t: "delta", id: main.bubbleId ||= crypto.randomUUID(), text: ev.delta.text });
       }
       return;
     }
@@ -579,20 +565,19 @@ export class Harness {
         this.log(`[context] input=${tokens} target=${config.context.inputLimit} trigger=${config.context.triggerTokens}`);
         this.log(`[usage] estimated_usd=${estimateUsageCost(main.settings?.model||config.model,m.message.usage).toFixed(6)}`);
       }
+      if (raw.trim()) this.speech.emit({ text: raw }, { id: main.bubbleId, activityId: main.activityId, fallback: true });
+      main.bubbleId = undefined;
       for (const b of m.message?.content || []) {
         if (b.type === "text") main.reply += (main.reply ? "\n\n" : "") + b.text;
         if (b.type === "tool_use") {
-          if (main.reason === "schedule" && b.name === "Agent" && b.input?.subagent_type === "fork" && isTrue(b.input?.run_in_background)) {
-            main.scheduleFork.requestedForks.add(b.id);
-          }
           main.toolsUsed = true;
-          this.bus.emit({ t: "tool", name: b.name, hint: this.connectors.redact(toolHint(b)) });
+          this.step(main.activityId, "tool", `${b.name} ${toolHint(b)}`.trim(), b.name);
+          this.avatar.working(b.name, b.input);
         }
       }
       return;
     }
     if (m.type === "result") {
-      if (main.active?.taskContinuation && !main.active.taskContinuation.dispatched) this.recordFailure(main, "任务续聊未送达，请重新发送");
       if (m.subtype !== "success" && !main.failure) this.recordFailure(main, (m.errors || []).join("\n") || m.result || m.subtype);
       this.finishMainTurn(main, m);
     }
@@ -612,11 +597,6 @@ export class Harness {
       text = error;
       if (main.failure.context) {
         const state = readJson(config.stateFile, {});
-        if (main.reply.trim()) {
-          const partial = main.reply.length <= 8000 ? main.reply : main.reply.slice(0, 2000) + "\n（中段省略）\n" + main.reply.slice(-6000);
-          appendJsonl(config.chatLog, { role: "assistant", partial: true, ts: Date.now(),
-            text: this.connectors.redact("本轮失败前的部分回复（未完成，需核对文件中的实际进度）：\n" + partial) });
-        }
         const context = recoveryContext({ root: config.root, chatLog: config.chatLog, redact: (s) => this.connectors.redact(s) });
         // Update only session routing. Never touch data/, schedule.json, the chat archive or old SDK transcripts.
         writePrivateJson(config.stateFile, { ...state, mainSessionId: null,
@@ -624,7 +604,7 @@ export class Harness {
         main.needsFresh = true;
         const active = main.active;
         const retry = active && !active.manualCompact && !main.toolsUsed && !active.recoveryAttempt;
-        if (retry) this.turnQueue.unshift({ ...active, recoveryAttempt: 1 });
+        if (retry) main.replay = { ...active, recoveryAttempt: 1 };
         text = RECOVERY_NOTICE + (retry ? "正在继续处理刚才的消息。" : active?.recoveryAttempt ? "这条消息仍然过长，请缩短内容或分批发送。" : "请继续发送消息。");
         this.log("[context recovery] fresh session; automatic replay=" + Boolean(retry));
       }
@@ -634,54 +614,99 @@ export class Harness {
       writePrivateJson(config.stateFile, state);
       main.recoveryContext = null;
     }
-    main.reply = "";
-    main.active = null;
-    main.turnOpen = false;
+    if (!text && !main.said && typeof result.result === "string") {
+      text = result.result;
+      if (text.trim()) this.speech.emit({ text }, { activityId: main.activityId, fallback: true });
+    }
+    if (error) this.speech.emit({ text }, { activityId: main.activityId, error: true });
+    const status = error || result.subtype !== "success" ? "error" : "done";
+    if (main.activityId) {
+      this.history.put(main.activityId, { status, endedAt: Date.now(), latestResult: text });
+      this.bus.emit({ t: "activity", phase: "done", id: main.activityId, status, ts: Date.now() });
+    }
+    main.reply = ""; main.active = null; main.turnOpen = false;
     const media = !error && result.subtype === "success" && !result.is_error ? replyMedia(config.root, text) : [], fields = media.length ? { media } : {};
-    if (text) appendJsonl(config.chatLog, { role: "assistant", text, ts: Date.now(), ...(error && { error: true }), ...fields });
-    this.bus.emit({ t: "turn_end", text, error, ...fields });
+    this.bus.emit({ t: "turn_end", activityId: main.activityId, text, error, ...fields });
     // Older/fake queries without state events retain the result fallback; 0.3.295 waits for native idle.
     if (!main.hasSessionStateSignal || main.sdkState === "idle") this.releaseMainTurn();
   }
 
   // attachments: [{ path: "data/uploads/...", name, kind: "image" | "file" | "voice" }], already uploaded.
-  async send(text, source = "app", attachments = []) {
-    if (!this.main) throw new Error("main thread not ready");
-    const message=validateMessage(config.root,text,attachments);
-    text=message.text;
-    const atts=await prepareAttachments(config.root,message.attachments);
-    const id = crypto.randomUUID();
-    const entry = { role: "user", id, text, ts: Date.now(), source };
-    if (atts.length) entry.attachments = atts;
-    this.turnQueue.push({ id, entry, source, input: { type: "user", message: { role: "user", content: userContent(config.root,text, atts) }, parent_tool_use_id: null } });
-    this.bus.emit({ t: "user", id, text, source, ts: entry.ts, attachments: atts });
-    await this.scheduleDispatch();
-    return id;
+  send(text, source = "app", attachments = [], { ifEmpty = false } = {}) {
+    const deliver = async () => {
+      if (this.closed) throw new Error("云端正在关闭，请稍后重试");
+      if (ifEmpty && tailJsonl(config.chatLog, 1).length) return null;
+      const message = validateMessage(config.root, text, attachments);
+      const atts = await prepareAttachments(config.root, message.attachments);
+      if (!this.busy) await this.refreshMain();
+      const main = this.main;
+      if (!main || main.ended) throw new Error("主聊天暂时不可用，请稍后重试");
+      const id = crypto.randomUUID(), entry = { role: "user", id, text: message.text, ts: Date.now(), source, ...(atts.length && { attachments: atts }) };
+      const input = { type: "user", uuid: id, message: { role: "user", content: userContent(config.root, message.text, atts) }, parent_tool_use_id: null };
+      appendJsonl(config.chatLog, entry);
+      this.bus.emit({ t: "user", ...entry, attachments: atts });
+      if (!main.turnOpen) this.beginMainTurn(main, { id, entry, input }, "user");
+      else {
+        this.step(main.activityId, "prompt", entry.text, undefined, { ...(atts.length && { attachments: atts }) });
+        if (main.active) {
+          main.active = { ...main.active, input: { ...input, message: { role: "user", content: [...(Array.isArray(main.active.input.message.content) ? main.active.input.message.content : [{ type: "text", text: main.active.input.message.content }]), ...(Array.isArray(input.message.content) ? input.message.content : [{ type: "text", text: input.message.content }])] } } };
+        }
+      }
+      main.inbox.push(withRecovery(input, main.recoveryContext));
+      this.avatar.working();
+      return id;
+    };
+    const result = this.inputChain.then(deliver, deliver);
+    this.inputChain = result.catch(() => {});
+    return result;
   }
 
-  queuedMessages() {
-    return this.turnQueue.filter((turn) => turn.entry && !turn.persisted).map(({ entry }) => ({
-      id: entry.id, text: entry.text, source: entry.source, ts: entry.ts, attachments: entry.attachments || [],
-    }));
+  chooseOption(messageId, optionId) { return this.speech.choose(messageId, optionId, this.send.bind(this)); }
+
+  firstChat(device) {
+    if (!["android", "mac"].includes(device)) return Promise.reject(Object.assign(new Error("设备必须是 android 或 mac"), { status: 400 }));
+    if (this.firstChatPending) return this.firstChatPending;
+    if (tailJsonl(config.chatLog, 1).length) return Promise.resolve({ started: false });
+    this.firstChatPending = this.send(`[第一次聊天] 设备：${device}`, "onboarding", [], { ifEmpty: true }).then((id) => id ? { started: true, id } : { started: false }).finally(() => { this.firstChatPending = null; });
+    return this.firstChatPending;
   }
 
-  updateQueued(id, text) {
-    const index = this.turnQueue.findIndex((turn) => turn.id === id && !turn.persisted && turn.source !== "schedule");
-    let event;
-    if (index < 0) event = { t: "queue_update", id, state: "too_late" };
-    else if (text === undefined) {
-      this.turnQueue.splice(index, 1);
-      event = { t: "queue_update", id, state: "removed" };
-    } else {
-      const turn = this.turnQueue[index];
-      if (typeof text !== "string" || (!text.trim() && !turn.entry.attachments?.length)) throw new Error("排队消息不能为空");
-      turn.entry.text = text.trim();
-      turn.input.message.content = userContent(config.root,turn.entry.text, turn.entry.attachments || []);
-      event = { t: "queue_update", id, state: "edited", text: turn.entry.text };
+  async browserReturned() {
+    if (this.closed) return;
+    const text = "[浏览器交还] 用户已交还浏览器，请重新读取页面后继续原来的工作。不要重复已经完成的点击或提交。";
+    const owner = this.browserSession;
+    if (owner?.cancelled) { this.avatar.settle(); return; }
+    this.avatar.working("mcp__browser__snapshot");
+    const isolated = owner && this.isolated.get(owner.activityId);
+    if (isolated) {
+      isolated.job.browserReturn = text;
+      if (isolated.job.waitingBrowser) this.resumeBrowserJob(isolated);
+      return;
     }
-    // All connected Apps observe the same queue; too_late is returned only to the requester.
-    if (event.state !== "too_late") this.bus.emit(event);
-    return event;
+    if (owner?.isolated || owner?.agentId) {
+      if (owner.activityId && this.history.records.has(owner.activityId)) return this.sendTask(owner.activityId, text);
+    }
+    const deliver = async () => {
+      if (this.closed) return;
+      if (!this.busy) await this.refreshMain();
+      const main = this.main;
+      if (!main || main.ended) throw new Error("主聊天暂时不可用");
+      const input = { type: "user", uuid: crypto.randomUUID(), message: { role: "user", content: text }, parent_tool_use_id: null };
+      if (!main.turnOpen) this.beginMainTurn(main, { input }, "browser_return");
+      this.step(main.activityId, "prompt", text, undefined, { from: "agent" });
+      main.inbox.push(input);
+      this.avatar.working("mcp__browser__snapshot");
+    };
+    const delivered = this.inputChain.then(deliver, deliver);
+    this.inputChain = delivered.catch(() => {});
+    return delivered;
+  }
+
+  resumeBrowserJob(isolated) {
+    const { job, inbox } = isolated;
+    this.step(job.id, "prompt", job.browserReturn, undefined, { from: "agent" });
+    inbox.push({ type: "user", message: { role: "user", content: job.browserReturn }, parent_tool_use_id: null });
+    job.browserReturn = null; job.awaitingBrowser = false; job.waitingBrowser = false;
   }
 
   async interrupt() {
@@ -693,6 +718,22 @@ export class Harness {
   }
 
   async stopTask(id) {
+    if (this.browserSession?.activityId === id) this.browserSession = { cancelled: true };
+    if (this.main?.activityId === id && this.main.turnOpen) return this.interrupt();
+    if (this.running.has(id)) {
+      if (this.history.records.get(id)?.kind === "maintenance") throw new TaskError("这项系统活动正在进行，请等它结束", 409, "task_not_stoppable");
+      const isolated = this.isolated.get(id);
+      if (!isolated) {
+        this.cancelled.add(id);
+        this.history.put(id, { status: "stopped", endedAt: Date.now(), latestResult: "已停止" });
+        return;
+      }
+      if (isolated.job.stopped) throw new TaskError("活动正在停止", 409, "task_stopping");
+      isolated.job.stopped = true;
+      try { await isolated.q.interrupt(); }
+      catch { isolated.job.stopped = false; throw new TaskError("停止活动失败，请稍后重试", 502, "task_stop_failed"); }
+      return;
+    }
     const main = this.main;
     if (!main || main.ended) throw new TaskError("主会话暂时不可用，请稍后再试", 503, "session_unavailable");
     const task = main.tasks.running(id);
@@ -708,19 +749,41 @@ export class Harness {
 
   compactMain() {
     if (this.busy) return false;
-    this.turnQueue.push({ manualCompact: true, input: { type: "user", message: { role: "user", content: "/compact" }, parent_tool_use_id: null } });
-    this.scheduleDispatch().catch((e) => this.log("compact failed:", this.connectors.redact(e.message)));
+    this.send("/compact", "maintenance").catch((e) => this.log("compact failed:", this.connectors.redact(e.message)));
     return true;
+  }
+
+  async close() {
+    this.closed = true;
+    this.browser.off("state", this.onBrowserState);
+    this.browser.off("returned", this.onBrowserReturned);
+    for (const { q, inbox, job } of this.isolated.values()) { job.stopped = true; inbox.close(); q.close(); }
+    clearTimeout(this.restartTimer); this.avatar.close();
+    if (this.main) {
+      this.main.intentionalClose = true;
+      this.main.inbox.close(); this.main.q.close();
+      await this.main.finished;
+    }
+    await this.jobChain;
+    await this.browser.close();
+    this.avatar.close();
   }
 
   // ---------- isolated sessions (cron, catch-up, night tidy) ----------
 
-  runIsolated(label, prompt, { id = crypto.randomUUID(), resumeTask, attachments=[], continuationContext } = {}) {
+  runIsolated(label, prompt, { id = crypto.randomUUID(), resumeTask, attachments=[], continuationContext, model } = {}) {
     const prior=resumeTask&&this.history.get(resumeTask);
-    this.history.put(id, { title: label, status: "running",...(prior?{detached:true}:{kind:"isolated",instruction:prompt}) });
+    const feed = /^\[动态\](?:\s|$)/.test(prompt);
+    this.history.put(id, { title: label, status: "running", feed, ...(prior?{detached:true}:{kind:"isolated",instruction:prompt}) });
     this.running.set(id, { label, started: Date.now() });
     const run = async () => {
-      const job = { label, outputs: new Set(), text: "" };
+      if (this.cancelled.delete(id) || this.closed) {
+        this.running.delete(id);
+        this.history.put(id, { status: "stopped", endedAt: Date.now(), latestResult: "已停止" });
+        this.bus.emit({ t: "activity", phase: "done", id, title: label, status: "stopped", ts: Date.now() });
+        return { ok: false, stopped: true, outputs: new Set() };
+      }
+      const job = { id, label, outputs: new Set(), text: "" };
       const started = Date.now();
       const current=resumeTask&&this.history.get(resumeTask);
       const resume=current?.kind==="isolated"&&this.history.transcript(current).length?current.sessionId:null;
@@ -728,15 +791,18 @@ export class Harness {
       const transcripts=current&&!resume?[...(current.transcripts||[]),{kind:current.kind,sessionId:current.sessionId,continuation:current.continuation}]:current?.transcripts||[];
       this.running.set(id, { label, started });
       this.history.put(id, { kind:"isolated",status: "running",...(current&&{transcripts,continuation:!resume||current.continuation}),...(current&&!resume&&{sessionId:null}),...(!prior&&{startedAt:started}) });
-      this.bus.emit({ t: "job", phase: "started", id, label });
+      this.bus.emit({ t: "activity", phase: "started", id, title: label, ts: started });
+      this.avatar.working();
+      this.step(id, "prompt", prompt, undefined, { from: prior ? "user" : "agent", ...(attachments.length && { attachments }) });
       this.log(`job start: ${label}`);
       let q;
       const inbox = new Inbox();
       const compaction = this.compactionControl(() => q);
       try {
         // Streaming input permits live effort control in PreCompact, just as in the main session.
-        const options={...this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), compaction }),...(resume&&{resume})};
+        const options={...this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), model, feed, speechContext: () => ({ activityId: id }), compaction }),...(resume&&{resume})};
         q = this.queryFactory({ prompt: inbox, options });
+        this.isolated.set(id, { q, job, inbox });
         const text=backgroundContext?`${backgroundContext}\n\n本次用户消息：\n${prompt}`:prompt;
         inbox.push({ type: "user", message: { role: "user", content: userContent(config.root,text,attachments) }, parent_tool_use_id: null });
         for await (const m of q) {
@@ -749,12 +815,19 @@ export class Harness {
             if(m.message?.usage)this.log(`[usage] estimated_usd=${estimateUsageCost(options.model,m.message.usage).toFixed(6)}`);
             for (const b of m.message?.content || []) if (b.type === "text") {
               if (m.error || (m.message?.model === "<synthetic>" && contextFailure(b.text))) job.error = b.text;
-              else job.text = b.text;
+              else if (b.text?.trim()) { job.text = b.text; this.speech.emit({ text: b.text }, { activityId: id, fallback: true }); }
             }
+            for (const b of m.message?.content || []) if (b.type === "tool_use") { this.step(id, "tool", `${b.name} ${toolHint(b)}`.trim(), b.name); this.avatar.working(b.name, b.input); }
           }
           if (m.type === "result") {
-            job.ok = m.subtype === "success" && !job.error;
-            if (!job.ok) job.error ||= (m.errors || []).join("\n") || m.subtype;
+            job.ok = m.subtype === "success" && !job.error && !job.stopped;
+            if (!job.ok && !job.stopped) job.error ||= (m.errors || []).join("\n") || m.subtype;
+            if (job.awaitingBrowser && job.ok) {
+              job.ok = undefined;
+              job.waitingBrowser = true;
+              if (job.browserReturn) this.resumeBrowserJob(this.isolated.get(id));
+              continue;
+            }
             inbox.close();
           }
         }
@@ -764,19 +837,21 @@ export class Harness {
       } finally {
         inbox.close();
         q?.close();
+        this.isolated.delete(id);
       }
+      if (job.ok === undefined && !job.stopped) { job.ok = false; job.error ||= "SDK process ended before a result"; }
+      if (job.stopped) job.text = "已停止";
       if (job.error) {
         this.log("[job model error]", this.connectors.redact(job.error));
         job.text = humanError(job.error);
       }
       const outputs = this.validOutputs(job.outputs);
-      const briefFields = this.briefCardFields(outputs);
-      const entry = { role: "card", id, label, title: (briefFields.name || label) + (job.ok ? "" : "（未完成）"), outputs, ...briefFields, ok: !!job.ok, ts: Date.now(),...(prior&&{taskContinuation:true}) };
-      this.history.put(id, { status: job.ok ? "done" : "error", endedAt: entry.ts, latestResult:this.connectors.redact(job.text), outputs:[...new Set([...(prior?.outputs||[]),...outputs])], ...this.briefCardFields(outputs) });
-      appendJsonl(path.join(config.system, "jobs.jsonl"), { ...entry, ms: Date.now() - started });
-      if (outputs.length) appendJsonl(config.chatLog, entry);
-      this.bus.emit({ t: "job", phase: "done", ...entry });
+      const entry = { id, label, title: label + (job.ok ? "" : "（未完成）"), outputs, ok: !!job.ok, ts: Date.now() };
+      const status = job.stopped ? "stopped" : job.ok ? "done" : "error";
+      this.history.put(id, { status, endedAt: entry.ts, latestResult:this.connectors.redact(job.text), outputs:[...new Set([...(prior?.outputs||[]),...outputs])] });
+      this.bus.emit({ t: "activity", phase: "done", ...entry, status });
       this.running.delete(id);
+      this.avatar.settle(job.ok);
       this.log(`job done: ${label} ok=${job.ok} outputs=${outputs.join(",")}`);
       return job;
     };

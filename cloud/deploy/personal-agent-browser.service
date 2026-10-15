@@ -1,0 +1,20 @@
+[Unit]
+Description=Personal Agent browser (on demand)
+
+[Service]
+Type=exec
+WorkingDirectory=/srv/agent
+Environment=AGENT_ROOT=/srv/agent
+ExecStart=/usr/bin/node /opt/personal-agent/cloud/src/browser/host.mjs
+Slice=personal-agent-browser.slice
+Restart=no
+KillMode=control-group
+TimeoutStopSec=8
+UMask=0077
+NoNewPrivileges=true
+MemoryAccounting=true
+MemoryHigh=320M
+MemoryMax=450M
+MemorySwapMax=0
+OOMPolicy=kill
+TasksMax=384

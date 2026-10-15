@@ -4,26 +4,26 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
-import { config, CODE } from "./config.mjs";
+import { config, CODE, VERSION } from "./config.mjs";
 import { readJson, writeJson, tailJsonl, firstTs, dateIn } from "./store.mjs";
 import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
 import { ConnectorManager } from "./connectors.mjs";
-import { runScheduledTask } from "./scheduler.mjs";
-import { listBriefs, briefItem } from "./briefs.mjs";
+import { schedulerFor } from "./scheduler.mjs";
+import { Content } from "./content.mjs";
 import { paginateJobs } from "./task-history.mjs";
 import { validateMessage } from "./attachments.mjs";
 import { HealthSync } from "./health.mjs";
-import { getProfile, putProfile } from "./profile.mjs";
 import { getAppSettings, putAppSettings } from "./app-settings.mjs";
 import { fileType } from "./media.mjs";
-import { localFile } from "./local-paths.mjs";
+import { localFile, inside, resolvedPath } from "./local-paths.mjs";
+import { attachBrowserRoutes } from "./browser/index.mjs";
 
 function tokenOf(req) {
   const h = req.headers.authorization || "";
   if (h.startsWith("Bearer ")) return h.slice(7);
   const m = (req.headers.cookie || "").match(/(?:^|;\s*)pa_token=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : "";
+  try { return m ? decodeURIComponent(m[1]) : ""; } catch { return ""; }
 }
 
 function authed(req) {
@@ -106,7 +106,7 @@ async function pair(req, res) {
   return json(res, 200, { token: config.token });
 }
 
-export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), health = new HealthSync({root:config.root,hub,timezone:config.timezone}), listen = config }) {
+export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), health = new HealthSync({root:config.root,hub,timezone:config.timezone}), listen = config, content = new Content({ root: config.root, bus, timezone: config.timezone }), schedules = schedulerFor({ harness, log, health, content }) }) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
     const p = url.pathname;
@@ -121,33 +121,88 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     if (p === "/api/pair" && req.method === "POST") return pair(req, res);
     if (!authed(req)) return json(res, 401, { error: "unauthorized" });
 
-    if (p === "/api/state") {
-      return json(res, 200, {
-        busy: harness.busy, devices: hub.online(), userCall: config.userCall, agentName: config.agentName,
-        tasks: harness.backgroundTasks?.() || [],
-        schedule: readJson(config.scheduleFile, []), firstChat: firstTs(config.chatLog),
+    try {
+      if (p === "/api/state" && req.method === "GET") return json(res, 200, {
+        version: VERSION, busy: harness.busy, avatar: harness.avatar?.value || { state: "idle" },
+        devices: hub.online(), activities: harness.runningJobs?.() || [], schedule: schedules.list(),
+        firstChat: firstTs(config.chatLog), chatEmpty: !firstTs(config.chatLog), userCall: config.userCall, agentName: content.memory().soul.name,
       });
-    }
-    if (p === "/api/briefs" && req.method === "GET") {
-      const days = Number(url.searchParams.get("days") || 7);
-      if (!Number.isInteger(days) || days < 1 || days > 365) return json(res, 400, { error: "days 必须是 1 到 365 的整数" });
-      return json(res, 200, { items: listBriefs(config.root, { days, timezone: config.timezone }) });
-    }
-    if(p==="/api/briefs/item"&&req.method==="GET") {
-      const item=briefItem(config.root,url.searchParams.get("path"));
-      return item?json(res,200,item):json(res,404,{error:"没有这份简报"});
+      if (p === "/api/first-chat" && req.method === "POST") return json(res, 200, await harness.firstChat((await readBody(req)).device));
+      if (p === "/api/options/choose" && req.method === "POST") {
+        const { messageId, optionId } = await readBody(req);
+        return json(res, 200, await harness.chooseOption(messageId, optionId));
+      }
+      if (p === "/api/feed" && req.method === "GET") return json(res, 200, content.feed({ before: url.searchParams.get("before") ?? undefined, days: Number(url.searchParams.get("days") ?? 7) }));
+      if (p === "/api/feed/item" && req.method === "GET") return json(res, 200, content.post(url.searchParams.get("path")));
+      if (p === "/api/feed/feedback" && req.method === "POST") return json(res, 200, await content.feedback(await readBody(req), harness.send.bind(harness)));
+      if (p === "/api/feed/settings") {
+        if (req.method === "GET") return json(res, 200, content.feedSettings());
+        if (req.method === "PUT") return json(res, 200, content.putFeedSettings(JSON.parse((await readRaw(req, 160 * 1024)).toString("utf8"))));
+        return json(res, 405, { error: "只支持 GET / PUT" });
+      }
+      if (p === "/api/feed/refresh" && req.method === "POST") return json(res, 202, await schedules.run("feed"));
+      if (p === "/api/ideas" && req.method === "GET") return json(res, 200, content.ideas());
+      if (p === "/api/ideas/click" && req.method === "POST") return json(res, 200, await content.clickIdea(await readBody(req), harness.send.bind(harness)));
+      if (p === "/api/ideas/refresh" && req.method === "POST") return json(res, 202, await schedules.run("ideas"));
+      if (p === "/api/goals" && req.method === "GET") {
+        const result = content.goals({ done: url.searchParams.get("done") === "true" });
+        const enabled = new Map(schedules.jobs().map((j) => [j.id, j.enabled !== false]));
+        for (const item of result.items) if (enabled.get(`goal:${item.name}`) === false) item.nextCheckin = null;
+        return json(res, 200, result);
+      }
+      if (p === "/api/goals/item" && req.method === "GET") {
+        const goal = content.goal(url.searchParams.get("name"), url.searchParams.get("done") === "true");
+        if (schedules.jobs().find((j) => j.id === `goal:${goal.name}`)?.enabled === false) goal.nextCheckin = null;
+        return json(res, 200, goal);
+      }
+      if (p === "/api/library" && req.method === "GET") return json(res, 200, content.library());
+      if (p === "/api/library/thumbnail" && req.method === "GET") {
+        const image = await harness.pages.screenshot({ path: url.searchParams.get("path") });
+        res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "private, max-age=60" }); return res.end(image.data);
+      }
+      if (p === "/api/memory" && req.method === "GET") return json(res, 200, content.memory());
+      if (p === "/api/memory/item") {
+        const rel = url.searchParams.get("path");
+        if (typeof rel !== "string" || /[\\\x00-\x1f]/.test(rel) || rel.split("/").includes("..") || !/^data\/(?:memory\/[^/]+\/[^/]+\.md|soul\/角色\.md|soul\/diary\/[^/]+\.md|health\/days\.json)$/.test(rel)) return json(res, 400, { error: "记忆路径不正确" });
+        if (req.method === "GET") return json(res, 200, { path: rel, text: content.read(rel), readOnly: rel.startsWith("data/health/") });
+        if (req.method === "PUT" && !rel.startsWith("data/health/")) {
+          const { text } = JSON.parse((await readRaw(req, 160 * 1024)).toString("utf8"));
+          if (typeof text !== "string" || text.length > 40000) return json(res, 400, { error: "text 必须是 40000 字以内的文字" });
+          content.write(rel, text); bus.emit({ t: "memory_updated", path: rel }); return json(res, 200, { ok: true });
+        }
+        return json(res, 405, { error: "这个记忆不支持此操作" });
+      }
+      if (p === "/api/schedules" && req.method === "GET") return json(res, 200, { items: schedules.list() });
+      const scheduleRoute = p.match(/^\/api\/schedules\/([^/]+)(?:\/(run))?$/);
+      if (scheduleRoute) {
+        const id = decodeURIComponent(scheduleRoute[1]);
+        if (scheduleRoute[2] && req.method === "POST") return json(res, 202, await schedules.run(id));
+        if (!scheduleRoute[2] && req.method === "PUT") return json(res, 200, schedules.setEnabled(id, (await readBody(req)).enabled));
+        return json(res, 405, { error: "不支持这个定时操作" });
+      }
+      if (p === "/api/activities" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? 30), cursor = url.searchParams.get("before"), before = cursor === null ? undefined : Number(cursor);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100 || before !== undefined && (!Number.isSafeInteger(before) || before < 1)) return json(res, 400, { error: "limit 要 1–100 的整数，before 要毫秒时间戳" });
+        return json(res, 200, { running: before === undefined ? harness.runningJobs?.() || [] : [], ...paginateJobs(harness.recentJobs?.() || [], { before, limit }) });
+      }
+      const activityRoute = p.match(/^\/api\/activities\/([^/]+)\/(history|send|stop)$/);
+      if (activityRoute) {
+        const id = decodeURIComponent(activityRoute[1]);
+        if (activityRoute[2] === "history" && req.method === "GET") return json(res, 200, harness.taskHistory(id));
+        if (activityRoute[2] === "stop" && req.method === "POST") { await harness.stopTask(id); return json(res, 200, { ok: true, id }); }
+        if (activityRoute[2] === "send" && req.method === "POST") {
+          const body = JSON.parse((await readRaw(req, 64 * 1024)).toString("utf8"));
+          const message = validateMessage(config.root, body.text ?? "", body.attachments ?? []);
+          await harness.sendTask(id, message.text, message.attachments); return json(res, 200, { ok: true, id });
+        }
+        return json(res, 405, { error: "不支持这个活动操作" });
+      }
+    } catch (e) {
+      return json(res, e.status || (e instanceof SyntaxError || e instanceof URIError ? 400 : e.code === "ENOENT" ? 404 : 400), { error: connectors.redact(e instanceof SyntaxError ? "请提交有效的 JSON" : e.message), ...(e.code && { code: e.code }) });
     }
     if(p==="/api/health"&&req.method==="GET"||p==="/api/health/sync"&&req.method==="POST") {
       try{return json(res,200,await health.sync());}
       catch{ return json(res,500,{error:"健康同步暂不可用，请稍后重试"}); }
-    }
-    if (p === "/api/profile") {
-      if (req.method === "GET") return json(res, 200, getProfile(config.root));
-      if (req.method !== "PUT") return json(res, 405, { error: "只支持 GET / PUT" });
-      try {
-        const value = JSON.parse((await readRaw(req, 4096)).toString("utf8"));
-        return json(res, 200, putProfile(config.root, value));
-      } catch (e) { return json(res, 400, { error: e instanceof SyntaxError ? "请提交有效的 JSON 头像设置" : e.message }); }
     }
     if (p === "/api/settings") {
       if (req.method === "GET") {
@@ -164,7 +219,9 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
     if (p === "/api/pair/new" && req.method === "POST") return json(res, 200, { code: issuePairCode() });
     if (p === "/api/history") {
-      return json(res, 200, { items: tailJsonl(config.chatLog, Number(url.searchParams.get("n") || 200)) });
+      const n = Number(url.searchParams.get("n") ?? 200);
+      if (!Number.isInteger(n) || n < 1 || n > 1000) return json(res, 400, { error: "n 必须是 1–1000 的整数" });
+      return json(res, 200, { items: harness.speech?.history(n) || tailJsonl(config.chatLog, n) });
     }
     if (p === "/api/send" && req.method === "POST") {
       try {
@@ -172,40 +229,6 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         const id = await harness.send(message.text, "http", message.attachments);
         return json(res, 200, { ok: true, id });
       }catch(e){return json(res,400,{error:e instanceof SyntaxError?"请提交有效的 JSON 消息":e.message});}
-    }
-    const taskStop = p.match(/^\/api\/tasks\/([^/]+)\/stop$/);
-    if (taskStop && req.method === "POST") {
-      try {
-        const id = decodeURIComponent(taskStop[1]);
-        await harness.stopTask(id);
-        return json(res, 200, { ok: true, id });
-      } catch (e) {
-        if (e instanceof URIError) return json(res, 400, { error: "任务 id 格式不对", code: "invalid_task_id" });
-        if (!e.status) log("task stop failed:", connectors.redact(e.message));
-        return json(res, e.status || 502, { error: e.status ? e.message : "停止任务失败，请稍后再试", code: e.code || "task_stop_failed" });
-      }
-    }
-    const taskRoute=p.match(/^\/api\/tasks\/([^/]+)\/(history|send)$/);
-    if (taskRoute) {
-      try {
-        const id=decodeURIComponent(taskRoute[1]);
-        if (taskRoute[2]==="history"&&req.method==="GET") return json(res,200,await harness.taskHistory(id));
-        if (taskRoute[2]==="send"&&req.method==="POST") {
-          let body;
-          try { body=JSON.parse((await readRaw(req,40*1024)).toString("utf8")); }
-          catch { return json(res,400,{error:"请提交有效的 JSON 续聊消息",code:"invalid_task_text"}); }
-          let message;
-          try{message=validateMessage(config.root,body?.text??"",body?.attachments??[]);}
-          catch(e){return json(res,400,{error:e.message,code:"invalid_task_text"});}
-          await harness.sendTask(id,message.text,message.attachments);
-          return json(res,200,{ok:true,id});
-        }
-        return json(res,405,{error:"不支持这个任务操作"});
-      } catch (e) {
-        if (e instanceof URIError) return json(res,400,{error:"任务 id 格式不对",code:"invalid_task_id"});
-        if (!e.status) log("task history/send failed:",connectors.redact(e.message));
-        return json(res,e.status||502,{error:e.status?e.message:"任务操作失败，请稍后再试",code:e.code||"task_failed"});
-      }
     }
     if (p === "/api/connectors") {
       return json(res, 200, {
@@ -252,11 +275,6 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       try { return json(res, 200, hub.forget(decodeURIComponent(deviceRoute[1]))); }
       catch (e) { return json(res, e.status || 400, { error: e.message || "设备移除失败" }); }
     }
-    if (p === "/api/jobs"&&req.method==="GET") {
-      const limit=Number(url.searchParams.get("limit")??30),cursor=url.searchParams.get("before"),before=cursor===null?undefined:Number(cursor);
-      if(!Number.isInteger(limit)||limit<1||limit>100||before!==undefined&&(!Number.isSafeInteger(before)||before<1))return json(res,400,{error:"limit 要 1–100 的整数，before 要毫秒时间戳"});
-      return json(res, 200, {running:before===undefined?harness.runningJobs?.()||[]:[],...paginateJobs(harness.recentJobs?.()||[],{before,limit})});
-    }
     if (p === "/api/skills") return json(res, 200, { skills: skills() });
     // Raw body upload into data/uploads/<date>/; the App then sends the returned path as an attachment.
     if (p === "/api/upload" && req.method === "POST") {
@@ -296,21 +314,9 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         return json(res, 502, { error: `转写失败：${e.message}` });
       }
     }
-    if (p === "/api/run" && req.method === "POST") {
-      const { id } = await readBody(req);
-      const job = readJson(config.scheduleFile, []).find((j) => j.id === id);
-      if (!job || (job.kind && job.kind !== "brief")) return json(res, 404, { error: "no such job" });
-      try {
-        const mode = await runScheduledTask(harness, job);
-        return json(res, 202, { ok: true, mode });
-      } catch (e) {
-        log("manual run failed:", connectors.redact(e.message));
-        return json(res, 503, { error: "任务暂时无法启动，请稍后再试" });
-      }
-    }
     if (p === "/api/tree") {
       const abs = dataPath(url.searchParams.get("dir"));
-      if (!abs) return json(res, 400, { error: "outside data/" });
+      if (!abs || !inside(resolvedPath(abs), path.join(fs.realpathSync(config.root), "data"))) return json(res, 400, { error: "outside data/" });
       try {
         const entries = fs.readdirSync(abs, { withFileTypes: true })
           .filter((d) => !d.name.startsWith("."))
@@ -330,14 +336,11 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       catch { return json(res, 400, { error: "invalid path" }); }
       const abs = dataPath(rel);
       if (!abs) return json(res, 400, { error: "outside data/" });
-      if (abs.startsWith(path.join(config.data,"briefs")+path.sep) && path.extname(abs).toLowerCase()===".json") return json(res,404,{error:"简报只提供 HTML"});
       let file = abs;
       try {
         if (fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
         if (!fs.statSync(file).isFile()) return json(res, 404, { error: "not found" });
         file = localFile(config.root, path.relative(config.root, file), "data");
-        const real = path.relative(fs.realpathSync(config.root), fs.realpathSync(file));
-        if (real.startsWith("data/briefs/") && path.extname(real).toLowerCase() === ".json") return json(res,404,{error:"简报只提供 HTML"});
         const size = fs.statSync(file).size;
         const headers = { "content-type": fileType(file).mime, "cache-control": "no-cache", "accept-ranges": "bytes" };
         let start = 0, end = size - 1, status = 200;
@@ -390,7 +393,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
   function onApp(ws) {
     apps.add(ws);
     ws.on("close", () => apps.delete(ws));
-    ws.send(JSON.stringify({ t: "hello", busy: harness.busy, tasks: harness.backgroundTasks?.() || [], devices: hub.online(), history: tailJsonl(config.chatLog, 100), queued: harness.queuedMessages?.() || [] }));
+    ws.send(JSON.stringify({ t: "hello", version: VERSION, busy: harness.busy, avatar: harness.avatar?.value || { state: "idle" }, activities: harness.runningJobs?.() || [], devices: hub.online(), history: harness.speech?.history(100) || tailJsonl(config.chatLog, 100) }));
     ws.on("message", (raw) => {
       let msg;
       try {
@@ -405,27 +408,14 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         }catch(e){if(ws.readyState===1)ws.send(JSON.stringify({t:"error",error:e.message}));}
       }
       if (msg.t === "interrupt") harness.interrupt();
-      if (["unqueue", "edit_queued"].includes(msg.t)) {
-        if (typeof msg.id !== "string" || !msg.id || (msg.t === "edit_queued" && typeof msg.text !== "string")) {
-          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "error", error: "请提供消息 id 和有效的修改文本" }));
-          return;
-        }
-        try {
-          const update = harness.updateQueued(msg.id, msg.t === "edit_queued" ? msg.text : undefined);
-          if (update.state === "too_late" && ws.readyState === 1) ws.send(JSON.stringify(update));
-        } catch (e) {
-          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "error", error: e.message }));
-        }
-      }
-      if (msg.t === "stop_task") {
-        harness.stopTask(msg.id).then(() => {
-          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "task_stop", id: msg.id, ok: true }));
-        }).catch((e) => {
-          if (!e.status) log("task stop failed:", connectors.redact(e.message));
-          if (ws.readyState === 1) ws.send(JSON.stringify({ t: "task_stop", id: msg.id, ok: false,
-            error: e.status ? e.message : "停止任务失败，请稍后再试", code: e.code || "task_stop_failed" }));
-        });
-      }
+      if (msg.t === "choose_option") harness.chooseOption(msg.messageId, msg.optionId).catch((e) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ t: "error", error: e.message, status: e.status || 400 }));
+      });
+      if (msg.t === "stop_activity") harness.stopTask(msg.id).then(() => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ t: "activity_stop", id: msg.id, ok: true }));
+      }).catch((e) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ t: "activity_stop", id: msg.id, ok: false, error: connectors.redact(e.message), code: e.code }));
+      });
     });
   }
 
@@ -446,11 +436,12 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
   }
 
   bus.on((ev) => {
-    const s = JSON.stringify(ev);
+    const event = ev.t === "task" ? { ...ev, t: "background_activities", ...(ev.tasks && { items: ev.tasks }) } : ev;
+    if (ev.t === "task") delete event.tasks;
+    if (ev.t === "tool") return;
+    const s = JSON.stringify(event);
     for (const ws of apps) if (ws.readyState === 1) ws.send(s);
-    // Devices show these as notifications when the App isn't open.
-    if (ev.t === "turn_end" && ev.text) hub.broadcast({ t: "event", kind: "reply", text: ev.text.slice(0, 300) });
-    if (ev.t === "job" && ev.phase === "done" && (ev.outputs?.length||ev.taskContinuation)) hub.broadcast({ t: "event", kind: "job", text: ev.title });
+    if (ev.t === "say" && ev.text) hub.broadcast({ t: "event", kind: "reply", messageId: ev.id, text: ev.text.slice(0, 300) });
   });
 
   const heartbeat = setInterval(() => {
@@ -464,8 +455,10 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
   }, 30_000);
   heartbeat.unref();
-  server.on("close", () => { clearInterval(heartbeat); wss.close(); });
+  server.closeSockets = () => { for (const ws of wss.clients) ws.terminate(); };
+  server.on("close", () => { clearInterval(heartbeat); server.closeSockets(); wss.close(); });
 
+  if (harness.browser) server.browserRoutes = attachBrowserRoutes(server, { browser: harness.browser, authenticate: authed });
   server.listen(listen.port, listen.host, () => log("listening on " + listen.host + ":" + server.address().port));
   return server;
 }

@@ -7,4 +7,5 @@ process.env.AGENT_ROOT = testRoot;
 process.env.AGENT_TOKEN = "fake-local-connectors-test-token";
 process.env.AGENT_HOST = "127.0.0.1";
 process.env.AGENT_PORT = "0";
+process.env.AGENT_BROWSER_SERVICE = "";
 after(() => fs.rmSync(testRoot, { recursive: true, force: true }));

@@ -1,16 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { parseDocument } from "htmlparser2";
 import { readJson, dateIn } from "./store.mjs";
 import { writePrivateJson } from "./connectors.mjs";
-import { briefItem } from "./briefs.mjs";
 import { shiftDate } from "./calendar-context.mjs";
 
 const fields={sleepMinutes:"sleep_minutes",restingHr:"resting_heart_rate_bpm",hrv:"hrv_ms",steps:"steps"};
 const emptyDay=(date)=>({date,sleepMinutes:null,restingHr:null,hrv:null,steps:null});
 const round=(n)=>typeof n==="number"&&Number.isFinite(n)&&n>=0?Math.round(n):null;
-const textOf=(n)=>n.type==="text"?n.data:(n.children||[]).map(textOf).join("");
-const nodes=(n)=>[n,...(n.children||[]).flatMap(nodes)];
 const plain=(s)=>s.replace(/!\[[^\]]*\]\([^)]*\)/g,"").replace(/\[([^\]]+)\]\([^)]*\)/g,"$1").replace(/<[^>]+>/g,"").replace(/^\s*(?:[-*+]\s+|\d+\.\s+|>\s*)/,"").replace(/[*_`]/g,"").trim();
 
 export function mergeHealthDays(existing,items,today) {
@@ -77,20 +73,7 @@ export class HealthSync {
     const saved=this.stored(),today=dateIn(this.timezone,this.clock()),byDate=new Map((saved.days||[]).map((d)=>[d.date,d]));
     return {syncedAt:saved.syncedAt||null,device:saved.device||null,note:saved.note||null,
       days:Array.from({length:7},(_,n)=>byDate.get(shiftDate(today,n-6))||emptyDay(shiftDate(today,n-6))),
-      weekly:this.weekly(),records:this.records()};
-  }
-  weekly() {
-    const dir=path.join(this.root,"data/briefs"),items=[];
-    if(!fs.existsSync(dir)||fs.lstatSync(dir).isSymbolicLink())return items;
-    for(const entry of fs.readdirSync(dir,{withFileTypes:true})) {
-      if(!entry.isDirectory()||!/^\d{4}-\d{2}-\d{2}$/.test(entry.name))continue;
-      const rel=`data/briefs/${entry.name}/健康周报.html`,brief=briefItem(this.root,rel);
-      if(!brief)continue;
-      const title=nodes(parseDocument(brief.cards[0].html)).find((n)=>(n.attribs?.class||"").split(/\s+/).includes("title"));
-      const start=shiftDate(brief.date,-6),fmt=(d)=>`${Number(d.slice(5,7))}月${Number(d.slice(8))}日`;
-      items.push({name:brief.name,path:rel,date:brief.date,range:`${fmt(start)}–${fmt(brief.date)}`,summary:title?textOf(title).trim():""});
-    }
-    return items.sort((a,b)=>b.date.localeCompare(a.date));
+      records:this.records()};
   }
   records() {
     const dir=path.join(this.root,"data/memory/health");

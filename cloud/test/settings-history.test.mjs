@@ -68,9 +68,9 @@ test("authenticated settings/history/send APIs validate bodies, preserve task id
   assert.deepEqual(saved.body.models[1],{id:opus,label:"Claude Opus 5.5",note:"消耗约 40×；缓存读约 20×"});
   assert.equal((await req("/api/settings","PUT","bad")).status,400);assert.equal((await req("/api/settings","PUT",{permissionMode:"default"})).status,400);
   assert.equal((await req("/api/settings")).body.model,opus);assert.equal(changed,2);
-  assert.equal((await req("/api/tasks/native-id/history")).body.status,"running");
-  assert.deepEqual((await req("/api/tasks/native-id/send","POST",{text:"继续"})).body,{ok:true,id:"native-id"});assert.deepEqual(sent,[{id:"native-id",text:"继续"}]);
-  assert.equal((await req("/api/tasks/native-id/send","POST",{text:""})).status,400);assert.equal((await req("/api/tasks/%E0/history")).status,400);
-  assert.equal((await req("/api/tasks/native-id/send","POST",{text:"继续"},false)).status,401);
-  const jobs=(await req("/api/jobs")).body;assert.ok([...jobs.running,...jobs.recent].every((j)=>j.id));
+  assert.equal((await req("/api/activities/native-id/history")).body.status,"running");
+  assert.deepEqual((await req("/api/activities/native-id/send","POST",{text:"继续"})).body,{ok:true,id:"native-id"});assert.deepEqual(sent,[{id:"native-id",text:"继续"}]);
+  assert.equal((await req("/api/activities/native-id/send","POST",{text:""})).status,400);assert.equal((await req("/api/activities/%E0/history")).status,400);
+  assert.equal((await req("/api/activities/native-id/send","POST",{text:"继续"},false)).status,401);
+  const jobs=(await req("/api/activities")).body;assert.ok([...jobs.running,...jobs.recent].every((j)=>j.id));
 });

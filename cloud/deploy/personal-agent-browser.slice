@@ -1,0 +1,8 @@
+[Unit]
+Description=Personal Agent browser and thumbnails combined budget
+
+[Slice]
+MemoryAccounting=true
+MemoryHigh=320M
+MemoryMax=450M
+MemorySwapMax=0

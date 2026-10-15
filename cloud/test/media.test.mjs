@@ -51,7 +51,7 @@ test("reply media uses case-insensitive extensions, matching MIME, measured size
     ["svg", "file", "image/svg+xml"], ["unknown", "file", "application/octet-stream"],
   ];
   const expected = types.map(([ext, kind, mime], i) => {
-    const rel = `data/files/2026-10-13/文件${i}.${ext}`, name = i ? `说明${i}` : path.basename(rel);
+    const rel = `data/library/media/2026-10-13/文件${i}.${ext}`, name = i ? `说明${i}` : path.basename(rel);
     put(root, rel, "测量字节" + i);
     assert.deepEqual(fileType(rel), { kind, mime });
     return { path: rel, name, kind, mime, size: Buffer.byteLength("测量字节" + i) };
@@ -62,18 +62,18 @@ test("reply media uses case-insensitive extensions, matching MIME, measured size
 });
 
 test("reply media decodes spaces and Chinese, accepts angle paths, balanced parentheses and titles, and deduplicates normalized paths", (t) => {
-  const root = fixture(t), first = "data/files/中文 演示.mp4", second = "data/files/demo(1).pdf", third = "data/files/图片.png";
+  const root = fixture(t), first = "data/library/media/中文 演示.mp4", second = "data/library/media/demo(1).pdf", third = "data/library/media/图片.png";
   for (const rel of [first, second, third]) put(root, rel);
   const text = `[演示](<${first}>)\n[重复](${first.split("/").map(encodeURIComponent).join("/")})\n` +
-    `[又一次](<data/files/./中文 演示.mp4>)\n[参数\\] [一]](${second} "可选标题")\n` +
-    `[重复参数](data/files/demo\\(1\\).pdf)\n![ ](${encodeURIComponent(third)})`;
+    `[又一次](<data/library/media/./中文 演示.mp4>)\n[参数\\] [一]](${second} "可选标题")\n` +
+    `[重复参数](data/library/media/demo\\(1\\).pdf)\n![ ](${encodeURIComponent(third)})`;
   const media = replyMedia(root, text);
   assert.deepEqual(media.map((m) => [m.path, m.name]), [[first, "演示"], [second, "参数] [一]"], [third, "图片.png"]]);
   assert.equal(replyMedia(root, `\\[不是链接](${third})`).length, 0);
 });
 
 test("reply media ignores fenced and indented blocks and inline code with matching backtick runs", (t) => {
-  const root = fixture(t), rel = "data/files/code.png", visible = "data/files/visible.png";
+  const root = fixture(t), rel = "data/library/media/code.png", visible = "data/library/media/visible.png";
   put(root, rel); put(root, visible);
   const link = `![代码里的链接](${rel})`;
   const text = ["```markdown", link, "```", "~~~", link, "~~~", "````", "```", link, "````", "> ```", "> " + link, "> ```",
@@ -84,7 +84,7 @@ test("reply media ignores fenced and indented blocks and inline code with matchi
 });
 
 test("reply media keeps links in nested list paragraphs while ignoring code blocks inside lists", (t) => {
-  const root = fixture(t), visible = "data/files/list.mp4", hidden = "data/files/list-code.mp4";
+  const root = fixture(t), visible = "data/library/media/list.mp4", hidden = "data/library/media/list-code.mp4";
   put(root, visible); put(root, hidden);
   const text = ["- 视频", "    [演示](" + visible + ")", "    - 子列表", "        [重复](" + visible + ")",
     "    ```markdown", "    [代码](" + hidden + ")", "    ```", "", "      [缩进代码](" + hidden + ")",
@@ -92,27 +92,25 @@ test("reply media keeps links in nested list paragraphs while ignoring code bloc
   assert.deepEqual(replyMedia(root, text).map((m) => m.path), [visible]);
 });
 
-test("reply media excludes missing files, traversal, absolute and workspace links, directories, brief JSON and symlink escapes", (t) => {
-  const root = fixture(t), safe = "data/files/safe.png", json = "data/files/ordinary.json";
+test("reply media excludes missing files, traversal, absolute and workspace links, directories and symlink escapes", (t) => {
+  const root = fixture(t), safe = "data/library/media/safe.png", json = "data/library/media/ordinary.json";
   put(root, safe); put(root, json, "{}");
-  put(root, "data/briefs/2026-10-13/nested/brief.JSON", "{}");
-  const outside = put(root, "workspace/outside.png"), directory = path.join(root, "data/files/folder");
+  const outside = put(root, "workspace/outside.png"), directory = path.join(root, "data/library/media/folder");
   fs.mkdirSync(directory);
-  fs.symlinkSync(outside, path.join(root, "data/files/escape.png"));
-  fs.symlinkSync(path.dirname(outside), path.join(root, "data/files/escape-dir"));
-  fs.symlinkSync(path.join(root, "data/briefs/2026-10-13/nested/brief.JSON"), path.join(root, "data/files/brief-alias.json"));
-  fs.symlinkSync(path.join(root, safe), path.join(root, "data/files/inside.png"));
-  const invalid = ["data/files/missing.png", "data/files/../files/safe.png", "data/files/%2e%2e/files/safe.png",
-    "data/../workspace/outside.png", "data/%2e%2e%2fworkspace/outside.png", "data/files/..\\..\\workspace/outside.png",
-    path.join(root, safe), "workspace/outside.png", "https://example.test/data/files/safe.png", "file://" + path.join(root, safe),
-    "/data/files/safe.png", "data/files/folder", "data/files/escape.png", "data/files/escape-dir/outside.png",
-    "data/briefs/2026-10-13/nested/brief.JSON", "data/files/brief-alias.json", "data/files/%E0.png", "data/files/safe.png%00"];
+  fs.symlinkSync(outside, path.join(root, "data/library/media/escape.png"));
+  fs.symlinkSync(path.dirname(outside), path.join(root, "data/library/media/escape-dir"));
+  fs.symlinkSync(path.join(root, safe), path.join(root, "data/library/media/inside.png"));
+  const invalid = ["data/library/media/missing.png", "data/library/media/../files/safe.png", "data/library/media/%2e%2e/files/safe.png",
+    "data/../workspace/outside.png", "data/%2e%2e%2fworkspace/outside.png", "data/library/media/..\\..\\workspace/outside.png",
+    path.join(root, safe), "workspace/outside.png", "https://example.test/data/library/media/safe.png", "file://" + path.join(root, safe),
+    "/data/library/media/safe.png", "data/library/media/folder", "data/library/media/escape.png", "data/library/media/escape-dir/outside.png",
+    "data/library/media/%E0.png", "data/library/media/safe.png%00"];
   assert.deepEqual(replyMedia(root, invalid.map((p) => `[无效](<${p}>)`).join("\n")), []);
-  assert.deepEqual(replyMedia(root, `[JSON](${json}) ![安全别名](data/files/inside.png)`).map((m) => m.path), [json, "data/files/inside.png"]);
+  assert.deepEqual(replyMedia(root, `[JSON](${json}) ![安全别名](data/library/media/inside.png)`).map((m) => m.path), [json, "data/library/media/inside.png"]);
 });
 
 test("reply media preserves appearance order and caps valid unique files at twenty", (t) => {
-  const root = fixture(t), paths = Array.from({ length: 23 }, (_, i) => `data/files/${i}.png`);
+  const root = fixture(t), paths = Array.from({ length: 23 }, (_, i) => `data/library/media/${i}.png`);
   for (const rel of paths) put(root, rel);
   const text = paths.map((p) => `[不存在](data/missing.png) ![首次](${p}) [重复](${p})`).join("\n");
   const media = replyMedia(root, text);
@@ -121,7 +119,7 @@ test("reply media preserves appearance order and caps valid unique files at twen
 });
 
 test("files stream audio/video with MIME, full/open/suffix ranges, 416, HEAD and bearer/cookie auth", async (t) => {
-  const base = await serve(t), dir = "data/files/http-media", video = `${dir}/演示 1.mp4`, audio = `${dir}/录音.mp3`;
+  const base = await serve(t), dir = "data/library/media/http-media", video = `${dir}/演示 1.mp4`, audio = `${dir}/录音.mp3`;
   const bytes = Buffer.from(Array.from({ length: 512 }, (_, i) => i % 256));
   put(config.root, video, bytes); put(config.root, audio, bytes); put(config.root, `${dir}/empty.mp4`, "");
   const readFile = fs.readFileSync;
@@ -165,28 +163,26 @@ test("files stream audio/video with MIME, full/open/suffix ranges, 416, HEAD and
   assert.equal(cookie.status, 200); assert.deepEqual(Buffer.from(await cookie.arrayBuffer()), bytes);
 });
 
-test("files preserve directory index, brief JSON 404 and outside-data 400, and reject symlink escapes", async (t) => {
-  const base = await serve(t), index = "data/sites/media-fixture/index.html", brief = "data/briefs/2026-10-13/media-http.json";
-  put(config.root, index, "<title>站点</title>"); put(config.root, brief, "{}");
+test("files serve directory indexes and reject outside-data paths and symlink escapes", async (t) => {
+  const base = await serve(t), index = "data/library/artifacts/media-fixture/index.html";
+  put(config.root, index, "<title>站点</title>");
   const outside = put(config.root, "workspace/media-http.txt", "private fixture");
   fs.symlinkSync(outside, path.join(config.data, "media-http-escape.txt"));
-  fs.symlinkSync(path.join(config.root, brief), path.join(config.data, "media-http-brief.json"));
   const request = (p, options = {}) => fetch(base + p, { ...options, headers: auth });
-  const site = await request(fileUrl("data/sites/media-fixture"));
+  const site = await request(fileUrl("data/library/artifacts/media-fixture"));
   assert.equal(site.status, 200); assert.equal(site.headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(await site.text(), "<title>站点</title>");
-  const head = await request(fileUrl("data/sites/media-fixture"), { method: "HEAD" });
+  const head = await request(fileUrl("data/library/artifacts/media-fixture"), { method: "HEAD" });
   assert.equal(head.status, 200); assert.equal(head.headers.get("content-length"), String(Buffer.byteLength("<title>站点</title>")));
   assert.equal(await head.text(), "");
-  for (const [route, status] of [[fileUrl(brief), 404], [fileUrl("data/media-http-brief.json"), 404],
-    [fileUrl("workspace/media-http.txt"), 400], ["/files/data%2F..%2Fworkspace%2Fmedia-http.txt", 400],
+  for (const [route, status] of [[fileUrl("workspace/media-http.txt"), 400], ["/files/data%2F..%2Fworkspace%2Fmedia-http.txt", 400],
     [fileUrl("data/media-http-escape.txt"), 400], [fileUrl("data/missing.mp4"), 404], ["/files/data/%E0.mp4", 400]]) {
     const res = await request(route); assert.equal(res.status, status, route); await res.arrayBuffer();
   }
 });
 
-test("real SDK reply sends media in turn_end and chat/hello, leaves deltas unchanged and omits media for errors and partial replies", { timeout: 45_000 }, async (t) => {
-  const rel = "data/files/native-media.png", text = `MEDIA_REPLY：![图片](${rel})`;
+test("real SDK reply sends media in turn_end and chat/hello, leaves deltas unchanged and preserves early prose bubbles when a later tool round fails", { timeout: 45_000 }, async (t) => {
+  const rel = "data/library/media/native-media.png", text = `MEDIA_REPLY：![图片](${rel})`;
   put(config.root, rel, "image fixture");
   let contextFailed = false;
   const api = await fakeAnthropic((body) => {
@@ -223,14 +219,15 @@ test("real SDK reply sends media in turn_end and chat/hello, leaves deltas uncha
     assert.equal(Boolean(end.error), error, prompt + ": " + JSON.stringify(end)); assert.equal("media" in end, false);
     assert.equal("media" in tailJsonl(config.chatLog, 100).findLast((r) => r.role === "assistant"), false);
   }
-  assert.ok(tailJsonl(config.chatLog, 100).some((r) => r.partial && r.text.includes(rel) && !("media" in r)));
+  assert.equal(tailJsonl(config.chatLog, 100).filter((r) => r.role === "assistant" && r.text === text && r.media?.length).length, 2);
+  assert.equal(tailJsonl(config.chatLog, 100).some((r) => r.partial), false);
   await until(() => received.filter((e) => e.t === "turn_end").length === 3);
   assert.ok(received.filter((e) => e.t === "turn_end").every((e) => !("media" in e)));
-  await harness.dispatchChain;
+  await harness.inputChain;
 });
 
 test("completed task transcript results and latest-result fallback get media; running, failed and stopped tasks omit it", (t) => {
-  const root = fixture(t), rel = "data/files/task.mp3", text = `[录音](${rel})`, sessions = path.join(root, "system/sessions");
+  const root = fixture(t), rel = "data/library/media/task.mp3", text = `[录音](${rel})`, sessions = path.join(root, "system/sessions");
   put(root, rel, "audio fixture");
   const history = new TaskHistory({ root, sessions, redact: (s) => s });
   history.put("media-task", { kind: "subagent", sessionId: "media-session", status: "done", title: "媒体任务", startedAt: 1 });
@@ -249,7 +246,7 @@ test("completed task transcript results and latest-result fallback get media; ru
 });
 
 test("real isolated task and continuation expose their final media under the same task id", { timeout: 30_000 }, async (t) => {
-  const original = "data/files/isolated-original.pdf", continued = "data/files/isolated-continued.mp4";
+  const original = "data/library/media/isolated-original.pdf", continued = "data/library/media/isolated-continued.mp4";
   put(config.root, original); put(config.root, continued);
   const api = await fakeAnthropic((body) => textReply(hasInput(body, "MEDIA_CONTINUE") ? `[续聊视频](${continued})` : `[原文档](${original})`));
   t.after(() => api.close());

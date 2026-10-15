@@ -7,6 +7,7 @@ for f in src/*.mjs; do node --check "$f"; done
 
 id agent >/dev/null 2>&1 || sudo useradd -m -d /home/agent -s /bin/bash agent
 sudo mkdir -p /srv/agent && sudo chown agent:agent /srv/agent && sudo chmod 750 /srv/agent
+bash deploy/browser-service-install.sh
 
 if ! sudo grep -q '^AGENT_TOKEN=' /etc/personal-agent.env; then
   echo "AGENT_TOKEN=$(openssl rand -hex 24)" | sudo tee -a /etc/personal-agent.env >/dev/null

@@ -9,10 +9,12 @@ export function managedSkillDirs(root) {
   const dir=path.join(root,".claude/skills");
   try{return fs.readdirSync(dir,{withFileTypes:true}).filter((e)=>e.isDirectory()&&fs.existsSync(path.join(dir,e.name,MANAGED_SKILL_MARKER))).map((e)=>path.join(dir,e.name));}catch{return [];}
 }
-export function checkDataAccess(input,{root=config.root}={}) {
+export function checkDataAccess(input,{root=config.root,feed=false}={}) {
   const name=input.tool_name,args=input.tool_input||{};
   if(!["Write","Edit","MultiEdit","NotebookEdit","Bash"].includes(name))return {};
   const dirs=[{dir:path.join(root,"data/health"),reason:"data/health/ 是系统从手机同步的原始健康数据，豆豆只能读取，不能写入、修改或删除。请通过健康同步更新。"},
+    {dir:path.join(root,"data/uploads"),reason:"data/uploads/ 是用户上传的原始文件，豆豆只能读取，不能修改或删除。"},
+    ...(feed?[{dir:path.join(root,"data/feed/动态说明.md"),reason:"[动态] 后台运行只能读取动态说明，不能修改或删除用户的偏好。请在主聊天中按用户要求更新。"}]:[]),
     ...managedSkillDirs(root).map((dir)=>({dir,reason:"这是连接器安装并维护的官方技能，不能修改或删除。需要更新或安装请使用连接器工具。"}))];
   if(name==="Bash") {
     const command=String(args.command||"");
@@ -22,7 +24,7 @@ export function checkDataAccess(input,{root=config.root}={}) {
     const readsData=/\b(?:readFileSync|readFile|read_text|read_bytes|json\.load|read_csv|read_json)\b/.test(command);
     const mutatesData=/\b(?:writeFileSync|writeFile|appendFile|write_text|write_bytes|unlink|rmdir|rename|remove|mkdir|truncate|chmod|chown|rm|mv|cp|rsync|tee|touch|eval|exec|subprocess|child_process)\b|open\([^\n]*,\s*["'](?:w|a|x)|[^<]>\s*[^=]/.test(command);
     if((readOnly||readsData&&!mutatesData)&&!/[`$]/.test(command))return {};
-    const tokens=command.match(/(?:\/(?:[^\s'";|<>]+)|(?:\.?\.?\/)?(?:data|\.claude|workspace)\/[^\s'";|<>]*)/g)||[];
+    const tokens=(command.match(/[^\s'"`;|<>&]+/g)||[]).filter((token)=>token.includes("/")||fs.existsSync(path.resolve(root,token)));
     for(const {dir,reason} of dirs) {
       const rel=path.relative(root,dir);
       if(command.includes(rel)||command.includes(dir))return deny(reason);

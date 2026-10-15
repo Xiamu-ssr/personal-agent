@@ -1,5 +1,4 @@
 // Personal Agent cloud body: harness + scheduler + App/device gateway.
-import fs from "node:fs";
 import path from "node:path";
 import { config, CODE } from "./config.mjs";
 import { DeviceHub } from "./devices.mjs";
@@ -8,7 +7,8 @@ import { ConnectorManager } from "./connectors.mjs";
 import { startScheduler } from "./scheduler.mjs";
 import { startServer } from "./server.mjs";
 import { HealthSync } from "./health.mjs";
-import { migrateV06 } from "./migrate-v06.mjs";
+import { migrateV08 } from "./migrate-v08.mjs";
+import { Content } from "./content.mjs";
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
@@ -17,33 +17,10 @@ if (!config.token) {
   process.exit(1);
 }
 
-// First boot: lay out the three zones and copy seed files that don't exist yet.
-function seed() {
-  for (const d of ["data/memory/profile", "data/briefs", "data/sites", "data/diary", "data/uploads", "data/health", "workspace", "system/connectors", "system/sync", "system/sessions", ".claude/skills"]) {
-    fs.mkdirSync(path.join(config.root, d), { recursive: true });
-  }
-  const seedDir = path.join(CODE, "seed");
-  const walk = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const src = path.join(dir, e.name);
-      const dst = path.join(config.root, path.relative(seedDir, src));
-      if (e.isDirectory()) {
-        fs.mkdirSync(dst, { recursive: true });
-        walk(src);
-      } else if (!fs.existsSync(dst)) {
-        fs.copyFileSync(src, dst);
-        log(`seeded ${path.relative(config.root, dst)}`);
-      }
-    }
-  };
-  walk(seedDir);
-}
-
 const listeners = new Set();
 const bus = { on: (fn) => listeners.add(fn), emit: (ev) => listeners.forEach((fn) => fn(ev)) };
 
-seed();
-migrateV06({root:config.root,seedDir:path.join(CODE,"seed"),timezone:config.timezone});
+migrateV08({ root: config.root, seedDir: path.join(CODE, "seed") });
 const hub = new DeviceHub();
 const connectors = new ConnectorManager();
 for(const failure of await connectors.initialize())log(`connector skills unavailable: ${failure.name} ${failure.error}`);
@@ -60,7 +37,22 @@ hub.onReconnect = (info) => {
 };
 
 harness.startMain();
-startScheduler({ harness, log, health });
-startServer({ harness, hub, bus, log, connectors, health });
+const content = new Content({ root: config.root, bus, timezone: config.timezone });
+const schedules = startScheduler({ harness, log, health, content });
+const server = startServer({ harness, hub, bus, log, connectors, health, content, schedules });
+
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  schedules.stop();
+  try { await harness.close(); } catch { log("shutdown: SDK cleanup did not finish"); }
+  try { await server.browserRoutes?.close(); } catch { log("shutdown: browser cleanup did not finish"); }
+  server.closeSockets();
+  server.closeAllConnections();
+  server.close(() => process.exit(0));
+}
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
 
 process.on("unhandledRejection", (e) => log("unhandledRejection:", e?.message || e));

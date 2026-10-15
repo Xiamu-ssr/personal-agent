@@ -26,7 +26,7 @@ export const config = {
   // Normal turns use max; compaction temporarily uses compactEffort.
   effort: "max",
   promptFile: path.join(CODE, "..", "spec", "prompts", "system-prompt.md"),
-  briefGuideFile: path.join(CODE, "..", "spec", "prompts", "brief-guide.md"),
+  prompts: path.join(CODE, "..", "spec", "prompts"),
   agentName: process.env.AGENT_NAME || "豆豆",
   userCall: process.env.AGENT_USER_CALL || "用户",
   // The agent's three zones
@@ -43,5 +43,5 @@ export const config = {
 
 export const MEMORY_CATEGORIES = [
   "profile", "people", "preferences", "life", "work", "project", "interests",
-  "history", "health", "finance", "feedback", "automation-prefs", "role", "voice-notes",
+  "history", "health", "finance", "feedback", "automation-prefs", "voice-notes",
 ];
