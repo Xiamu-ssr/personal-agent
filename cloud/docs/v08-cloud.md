@@ -67,7 +67,8 @@
 - 一组选项中任何一个被点击后，**整组永久失效**。先持久化消费记录，再发用户回复；跨 App 并发点击只有一次成功，后续 409。历史中带 `optionsUsed`，重启后仍失效。
 - `cards` 可省略，最多 20 张；每张的格式如下。
 - 工具本身返回 `{id:"气泡 id"}`，不把正文重新作为工具结果显示到聊天。
-- 模型直接输出的普通正文仍显示，标记 `fallback:true`。正文不能因忘记调用 say 而消失。多个 assistant 消息分别形成气泡；`turn_end` 不再负责创建气泡。
+- 一轮里只要通过 `say` 发出过气泡，模型在 say 之外的普通正文只进活动记录，不进入聊天，也不发送正文 delta；包括 say 之前的正文和之后的收尾旁白。主聊天和旁聊都适用。
+- 一轮完全没有调用 say 时，普通正文在轮结束后作为兜底气泡显示，标记 `fallback:true`；多个 assistant 消息仍分别形成气泡，防止模型忘记用 say 时吞掉回复。正文先保存在活动记录，待轮结束确认无 say 再进入聊天。主聊天以现有主轮结果为界，旁聊以当前独立运行为界；忙时插话、选项回复进入当前运行时不重置判定，后续新一轮重新判定。`turn_end` 不负责创建气泡。
 - 工具、thinking、中间步骤都不进入聊天气泡。工具摘要只在活动页显示。
 
 | type | 字段 | App 行为 |
@@ -117,11 +118,11 @@ assistant 历史/WS say 的结构：
 | --- | --- | --- |
 | `user` | `role:"user",id,text,source,ts,attachments` | 立即显示用户气泡；source 可能是 app/http/option/feed/idea/onboarding/maintenance |
 | `say` | 上述 assistant 消息 | 新增或按 id 完成气泡 |
-| `delta` | `id,text` | 只为普通正文的暂存流式文本，按 id 拼接；say 到来后用完整正文替换 |
+| `delta` | `id,text` | 仅在主轮结束、确认本轮没有 say 时发送兜底正文，随后发送同 id 的 `say`（fallback:true）完成气泡；按 id 拼接/替换。有 say 的轮次不发送普通正文 delta |
 | `options_used` | `messageId,optionId` | 禁用该气泡的全部按钮 |
 | `status` | `busy,reason?` | 主聊天运行情况；reason 如 user/task_result/activity_continuation |
 | `avatar` | `state,text?` | 更新头像和工作状态文字 |
-| `turn_end` | `activityId,text,error?,media?` | 主轮完成信号。text/media 是普通正文的本轮摘要；不要据此重复创建气泡，也不要据此推断 SDK 已 idle |
+| `turn_end` | `activityId,text,error?,media?` | 主轮完成信号。没有 say 时 text/media 为兜底正文摘要；有 say 且无异常时 text 为空、不带 media，普通正文只在活动记录中。不要据此重复创建气泡，也不要据此推断 SDK 已 idle |
 | `activity` | `phase:"started"|"done",id,title?,status?,ts,outputs?` | 刷新活动列表；状态以 history/list 为准 |
 | `activity_step` | `id,item:{kind,text,time,tool?,from?,attachments?}` | 活动详情增量，放在控制台；不显示在主聊天 |
 | `background_activities` | `phase:"snapshot",items:[{id,description,startedAt}]` | 替换原生后台活动集合；空数组清空 |
@@ -464,7 +465,7 @@ agent 的 PreToolUse 守卫始终拒绝修改 health、uploads 及连接器维�
 }
 ```
 
-messages 中的 `options,cards,media,fallback,error,attachments` 与主聊天消息格式相同，只有适用时出现；有选项的历史气泡带 `optionsUsed`。用户消息 source 为 `app`，点选项产生的消息为 `option`。工具调用和中间步骤只进 items。模型直接输出的普通正文同样保存在 messages，带 `fallback:true`。异常提示也留在这个旁聊，带 `error:true`。
+messages 中的 `options,cards,media,fallback,error,attachments` 与主聊天消息格式相同，只有适用时出现；有选项的历史气泡带 `optionsUsed`。用户消息 source 为 `app`，点选项产生的消息为 `option`。工具调用和中间步骤只进 items。当前独立运行内用过 say 时，模型直接输出的普通正文只保存在 items；完全没用 say 时，结束后才进入 messages，带 `fallback:true`。忙时插话不重置判定，下一次续聊开始新运行时重新判定。异常提示也留在这个旁聊，带 `error:true`。
 
 ### 旁聊消息事件与选项
 

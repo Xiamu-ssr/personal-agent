@@ -58,8 +58,11 @@ test("native side chats exclude main and sibling context, accept live input and 
   const sideSession = h.history.get(id).sessionId; assert.notEqual(sideSession, mainSession);
   const bubble = h.taskHistory(id).messages.find((m) => m.options?.length);
   assert.equal(bubble.cards[0].title, "旁聊资料");
+  assert.equal(h.taskHistory(id).messages.some((m) => m.text === "工具执行时的旁聊补充已收到。"), false);
+  assert.ok(h.taskHistory(id).items.some((i) => i.text === "工具执行时的旁聊补充已收到。"));
   await h.chooseOption(bubble.id, "0", id); await h.jobChain;
   assert.equal(queries.at(-1).resume, sideSession); assert.equal(h.taskHistory(id).messages.find((m) => m.id === bubble.id).optionsUsed, true);
+  assert.equal(h.taskHistory(id).messages.at(-1).text, "选项回复仍在旁聊。"); assert.equal(h.taskHistory(id).messages.at(-1).fallback, true);
   const sibling = await h.createSideChat("SIDE_B_ONLY_CONTEXT"); await h.jobChain;
   assert.notEqual(h.history.get(sibling).sessionId, sideSession); assert.equal(queries.at(-1).resume, null);
   assert.deepEqual(h.speech.history(), mainHistory);

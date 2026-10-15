@@ -124,8 +124,11 @@ export class Harness {
     this.history = new TaskHistory({ root: config.root, sessions: config.sessions, redact: (s) => connectors.redact(s) });
     this.pages = new PageScreenshot({root:config.root});
     this.speech = new Speech({ root: config.root, bus, redact: (s) => connectors.redact(s), onSay: (entry) => {
-      if (this.main?.activityId === entry.activityId) this.main.said = true;
-      if (entry.activityId && this.history.records.has(entry.activityId)) {
+      if (!entry.fallback && !entry.error) {
+        const turn = this.main?.activityId === entry.activityId ? this.main : this.isolated.get(entry.activityId)?.job;
+        if (turn) { turn.said = true; turn.fallbacks = []; }
+      }
+      if (!entry.fallback && entry.activityId && this.history.records.has(entry.activityId)) {
         if (this.history.get(entry.activityId).kind === "subagent") this.bus.emit({ t: "activity_step", id: entry.activityId, item: { kind: "text", text: entry.text, time: new Date(entry.ts).toISOString() } });
         else this.step(entry.activityId, "text", entry.text);
       }
@@ -434,7 +437,7 @@ export class Harness {
   beginMainTurn(main, active = null, reason = "task_result") {
     main.active = active;
     main.reason = reason;
-    main.toolsUsed = false; main.failure = null; main.reply = ""; main.said = false;
+    main.toolsUsed = false; main.failure = null; main.reply = ""; main.said = false; main.fallbacks = [];
     main.compacting = false; main.turnOpen = true;
     main.activityId = active?.id || crypto.randomUUID();
     const title = active?.entry?.text ? triggerTitle(active.entry.text) || "聊天 · " + active.entry.text.replace(/\s+/g, " ").slice(0, 36) : reason === "task_result" ? "后台活动汇报" : "整理对话";
@@ -620,9 +623,6 @@ export class Harness {
       const ev = m.event;
       if (ev?.type === "message_start") main.bubbleId = crypto.randomUUID();
       if (ev?.type === "content_block_start" && ev.content_block?.type === "tool_use") main.toolsUsed = true;
-      if (!main.compacting && !main.failure && ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") {
-        this.bus.emit({ t: "delta", id: main.bubbleId ||= crypto.randomUUID(), text: ev.delta.text });
-      }
       return;
     }
     if (m.type === "assistant") {
@@ -636,7 +636,10 @@ export class Harness {
         this.log(`[context] input=${tokens} target=${config.context.inputLimit} trigger=${config.context.triggerTokens}`);
         this.log(`[usage] estimated_usd=${estimateUsageCost(main.settings?.model||config.model,m.message.usage).toFixed(6)}`);
       }
-      if (raw.trim()) this.speech.emit({ text: raw }, { id: main.bubbleId, activityId: main.activityId, fallback: true });
+      if (raw.trim()) {
+        this.step(main.activityId, "text", raw);
+        if (!main.said) (main.fallbacks ||= []).push({ id: main.bubbleId || crypto.randomUUID(), text: raw });
+      }
       main.bubbleId = undefined;
       for (const b of m.message?.content || []) {
         if (b.type === "text") main.reply += (main.reply ? "\n\n" : "") + b.text;
@@ -685,9 +688,17 @@ export class Harness {
       writePrivateJson(config.stateFile, state);
       main.recoveryContext = null;
     }
+    if (!main.said) for (const bubble of main.fallbacks || []) {
+      this.bus.emit({ t: "delta", ...bubble });
+      this.speech.emit({ text: bubble.text }, { id: bubble.id, activityId: main.activityId, fallback: true });
+    }
+    main.fallbacks = [];
     if (!text && !main.said && typeof result.result === "string") {
       text = result.result;
-      if (text.trim()) this.speech.emit({ text }, { activityId: main.activityId, fallback: true });
+      if (text.trim()) {
+        this.step(main.activityId, "text", text);
+        this.speech.emit({ text }, { activityId: main.activityId, fallback: true });
+      }
     }
     if (error) this.speech.emit({ text }, { activityId: main.activityId, error: true });
     const status = error || result.subtype !== "success" ? "error" : "done";
@@ -696,8 +707,9 @@ export class Harness {
       this.bus.emit({ t: "activity", phase: "done", id: main.activityId, status, ts: Date.now() });
     }
     main.reply = ""; main.active = null; main.turnOpen = false;
-    const media = !error && result.subtype === "success" && !result.is_error ? replyMedia(config.root, text) : [], fields = media.length ? { media } : {};
-    this.bus.emit({ t: "turn_end", activityId: main.activityId, text, error, ...fields });
+    const chatText = main.said && !error ? "" : text;
+    const media = !error && result.subtype === "success" && !result.is_error ? replyMedia(config.root, chatText) : [], fields = media.length ? { media } : {};
+    this.bus.emit({ t: "turn_end", activityId: main.activityId, text: chatText, error, ...fields });
     // Older/fake queries without state events retain the result fallback; 0.3.295 waits for native idle.
     if (!main.hasSessionStateSignal || main.sdkState === "idle") this.releaseMainTurn();
   }
@@ -864,7 +876,7 @@ export class Harness {
         this.bus.emit({ t: "activity", phase: "done", id, title: label, status: "stopped", ts: Date.now(), ...chat });
         return { ok: false, stopped: true, outputs: new Set() };
       }
-      const job = { id, label, outputs: new Set(), text: "" };
+      const job = { id, label, outputs: new Set(), text: "", said: false, fallbacks: [] };
       const started = Date.now();
       const current=resumeTask&&this.history.get(resumeTask);
       const resume=current?.kind==="isolated"&&this.history.transcript(current).length?current.sessionId:null;
@@ -901,7 +913,11 @@ export class Harness {
             if(m.message?.usage)this.log(`[usage] estimated_usd=${estimateUsageCost(options.model,m.message.usage).toFixed(6)}`);
             for (const b of m.message?.content || []) if (b.type === "text") {
               if (m.error || (m.message?.model === "<synthetic>" && contextFailure(b.text))) job.error = b.text;
-              else if (b.text?.trim()) { job.text = b.text; this.speech.emit({ text: b.text }, { activityId: id, fallback: true, ...chat }); }
+              else if (b.text?.trim()) {
+                job.text = b.text;
+                this.step(id, "text", b.text);
+                if (!job.said) job.fallbacks.push({ text: b.text });
+              }
             }
             for (const b of m.message?.content || []) if (b.type === "tool_use") { this.step(id, "tool", `${b.name} ${toolHint(b)}`.trim(), b.name); this.avatar.working(b.name, b.input); }
           }
@@ -928,6 +944,7 @@ export class Harness {
         this.sideInputs.delete(id);
       }
       if (job.ok === undefined && !job.stopped) { job.ok = false; job.error ||= "SDK process ended before a result"; }
+      if (!job.said) for (const bubble of job.fallbacks) this.speech.emit(bubble, { activityId: id, fallback: true, ...chat });
       if (job.stopped) job.text = "已停止";
       if (job.error) {
         this.log("[job model error]", this.connectors.redact(job.error));

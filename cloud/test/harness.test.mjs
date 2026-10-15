@@ -86,17 +86,67 @@ test("say emits separate bubbles, options produce waiting and only one click win
   await assert.rejects(restarted.chooseOption(second.id, "1"), (e) => e.status === 409); restarted.avatar.close();
 });
 
-test("plain model prose stays visible and tools live only in activity steps", async (t) => {
+test("plain model prose without say stays visible and tools live only in activity steps", async (t) => {
   const { h, calls, events } = setup(t); await flush(h); await h.send("查邮件"); const id = h.main.activityId;
   calls[0].emit({ type: "assistant", message: { content: [{ type: "text", text: "正文也要显示" }, { type: "tool_use", id: "read-mail", name: "mcp__qq-mail__read", input: { account: "fake" } }] } });
   await flush(h); assert.equal(h.avatar.value.text, "在看你的邮件");
   calls[0].emit({ type: "result", subtype: "success" }); await flush(h);
   assert.equal(h.speech.history().filter((m) => m.role === "assistant").length, 1);
+  assert.equal(h.speech.history().find((m) => m.role === "assistant").fallback, true);
   assert.equal(events.some((e) => e.t === "tool"), false);
   assert.ok(h.taskHistory(id).items.some((i) => i.kind === "tool"));
   assert.equal(h.history.get(id).status, "done");
   const restarted = new Harness({ hub: new DeviceHub(), bus: { emit() {} }, log() {}, queryFactory: queryFixture([]) });
   assert.ok(restarted.taskHistory(id).items.some((i) => i.text === "正文也要显示")); restarted.avatar.close();
+});
+
+test("main say hides prose before and after speech, including streamed text and busy interjections", async (t) => {
+  const { h, calls, events } = setup(t); await flush(h); await h.send("检查浏览器");
+  const q = calls[0], id = h.main.activityId;
+  const prose = (text) => {
+    q.emit({ type: "stream_event", event: { type: "message_start" } });
+    q.emit({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text } } });
+    q.emit({ type: "assistant", message: { content: [{ type: "text", text }] } });
+  };
+  prose("先检查一下浏览器"); await flush(h);
+  assert.equal(events.some((e) => e.t === "say" || e.t === "delta"), false);
+  const say = h.speech.tools(() => ({ activityId: id }))[0];
+  await say.handler({ text: "找到了标题。" }, {});
+  await h.send("顺便保留链接"); await flush(h);
+  assert.equal(h.main.activityId, id); assert.equal(h.main.said, true);
+  await say.handler({ text: "还要继续吗？", options: [{ label: "继续" }] }, {});
+  prose("云端浏览器自检完成，已把标题发给用户");
+  q.emit({ type: "result", subtype: "success", result: "这也是内部收尾说明" }); await flush(h);
+  const bubbles = h.speech.history().filter((m) => m.role === "assistant");
+  assert.deepEqual(bubbles.map((m) => m.text), ["找到了标题。", "还要继续吗？"]);
+  assert.ok(bubbles.every((m) => !("fallback" in m)));
+  assert.equal(events.some((e) => e.t === "delta"), false);
+  assert.equal(events.findLast((e) => e.t === "turn_end").text, "");
+  for (const text of ["先检查一下浏览器", "云端浏览器自检完成，已把标题发给用户"]) {
+    assert.equal(h.taskHistory(id).items.filter((i) => i.text === text).length, 1);
+    assert.ok(events.some((e) => e.t === "activity_step" && e.id === id && e.item.text === text));
+  }
+  assert.equal(h.avatar.value.state, "waiting");
+  await h.send("下一轮忘了说话工具");
+  assert.notEqual(h.main.activityId, id);
+  q.emit({ type: "result", subtype: "success", result: "结果字段也能兜底" }); await flush(h);
+  assert.equal(h.speech.history().at(-1).text, "结果字段也能兜底"); assert.equal(h.speech.history().at(-1).fallback, true);
+});
+
+test("main fallback keeps multiple prose bubbles in one turn and interjections do not reset it", async (t) => {
+  const { h, calls, events } = setup(t); await flush(h); await h.send("不用工具也能回答");
+  const q = calls[0], id = h.main.activityId;
+  q.emit({ type: "assistant", message: { content: [{ type: "text", text: "第一段回复" }] } }); await flush(h);
+  await h.send("再加一句");
+  q.emit({ type: "assistant", message: { content: [{ type: "text", text: "第二段回复" }] } }); await flush(h);
+  assert.equal(h.main.activityId, id); assert.equal(events.some((e) => e.t === "say"), false);
+  q.emit({ type: "result", subtype: "success", result: "不要重复生成结果气泡" }); await flush(h);
+  const bubbles = h.speech.history().filter((m) => m.role === "assistant");
+  assert.deepEqual(bubbles.map((m) => m.text), ["第一段回复", "第二段回复"]);
+  assert.ok(bubbles.every((m) => m.fallback && m.activityId === id)); assert.notEqual(bubbles[0].id, bubbles[1].id);
+  assert.equal(h.main.said, false);
+  assert.deepEqual(events.filter((e) => e.t === "delta").map((e) => e.id), bubbles.map((m) => m.id));
+  for (const bubble of bubbles) assert.equal(h.taskHistory(id).items.filter((i) => i.text === bubble.text).length, 1);
 });
 
 test("context recovery retries once without tools, includes all interjections and never duplicates user envelopes", async (t) => {
