@@ -5,7 +5,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-const dir = path.dirname(fileURLToPath(import.meta.url));
+const dir = await fs.realpath(path.dirname(fileURLToPath(import.meta.url)));
 const pageFile = path.join(dir, "index.html");
 const START = "<!-- spec-build:start -->", END = "<!-- spec-build:end -->";
 const [page, yamlText, parser, markdown] = await Promise.all([
@@ -23,16 +23,19 @@ vm.runInContext(validation[1], context, { timeout: 1000 });
 const errors = context.validateSpec(spec);
 if (errors.length) throw new Error("spec.yaml 校验失败：\n" + errors.join("\n"));
 
-// Only these three prompt sources are read. Cloud modules are never imported or evaluated.
-const files = ["prompts/system-prompt.md", "../cloud/seed/system/schedule.json", "prompts/brief-guide.md"];
+// Read only referenced text files; cloud modules are never evaluated.
+const scheduleFile = "../cloud/seed/system/schedule.json";
+const promptDir = path.join(dir, "prompts") + path.sep;
+const files = [...new Set(spec.prompts.map(prompt => prompt.source.file))];
 async function readSource(file) {
   const resolved = path.resolve(dir, file);
+  if (file !== scheduleFile && (!resolved.startsWith(promptDir) || path.extname(resolved) !== ".md")) throw new Error(`提示词来源必须在 prompts/ 目录内：${file}`);
   const full = await fs.realpath(resolved);
   if (full !== resolved) throw new Error(`提示词来源不能是符号链接：${file}`);
-  return (await fs.readFile(full, "utf8")).replace(/\r\n/g, "\n").trimEnd();
+  return (await fs.readFile(full, "utf8")).replace(/\r\n/g, "\n");
 }
 const sources = Object.fromEntries(await Promise.all(files.map(async file => [file, await readSource(file)])));
-const schedule = JSON.parse(sources["../cloud/seed/system/schedule.json"]);
+const schedule = sources[scheduleFile] === undefined ? [] : JSON.parse(sources[scheduleFile]);
 if (!Array.isArray(schedule)) throw new Error("定时配置必须是数组");
 
 function trigger(cron) {
@@ -44,14 +47,12 @@ function trigger(cron) {
 
 spec.prompts = spec.prompts.map(prompt => {
   const { source, ...product } = prompt;
-  if (!source || !files.includes(source.file)) throw new Error(`提示词 ${prompt.id} 的来源无效`);
   const raw = sources[source.file];
-  if (source.file === "../cloud/seed/system/schedule.json") {
-    const rows = schedule.filter(item => item.id === source.item);
+  if (source.file === scheduleFile) {
+    const rows = schedule.filter(item => item?.id === source.item);
     if (rows.length !== 1 || typeof rows[0].prompt !== "string" || !rows[0].prompt.trim()) throw new Error(`定时提示词缺失或重复：${source.item}`);
     return { ...product, when: trigger(rows[0].cron), text: rows[0].prompt };
   }
-  if (!product.when) throw new Error(`提示词 ${prompt.id} 缺少触发条件`);
   // The system prompt's author notes above its separator are not part of the prompt.
   const separator = source.file === "prompts/system-prompt.md" ? raw.indexOf("\n---\n") : -1;
   const text = (separator < 0 ? raw : raw.slice(separator + 5)).trim();
@@ -72,4 +73,4 @@ const start = page.indexOf(START), end = page.indexOf(END);
 if (start < 0 || end < start || page.indexOf(START, start + START.length) >= 0 || page.indexOf(END, end + END.length) >= 0) throw new Error("index.html 的生成区标记缺失或重复");
 const output = page.slice(0, start) + generated + page.slice(end + END.length);
 if (output !== page) await fs.writeFile(pageFile, output);
-console.log(`已构建 spec/index.html：${spec.domains.length} 个域、${spec.flows.length} 个场景、${spec.connectors.items.length} 个连接器、${spec.prompts.length} 条提示词`);
+console.log(`已构建 spec/index.html：${spec.domains.length} 个域、${spec.connectors.items.length} 个连接器、${spec.prompts.length} 条提示词`);
