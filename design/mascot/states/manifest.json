@@ -1,0 +1,832 @@
+{
+  "generated_utc": "2026-10-15T05:19:50.983387+00:00",
+  "character": "A / Sprout / 芽豆",
+  "generator": "design/mascot/scripts/state_scene.py",
+  "states": {
+    "idle": {
+      "still": {
+        "state": "idle",
+        "mode": "still",
+        "engine": "CYCLES",
+        "resolution": 1024,
+        "samples": 96,
+        "fps": 24,
+        "frames": 1,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.527,
+        "total_seconds": 4.689,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ]
+      },
+      "files": {
+        "dark.mp4": {
+          "bytes": 175240,
+          "sha256": "837deae258ee2809be725b07940a952f861691db20454edbb14814b4f0f056e9"
+        },
+        "frames.png": {
+          "bytes": 210079,
+          "sha256": "2cbffe646efd07aafa601dcdcd4c80f350d19b99dacddfe57d6823a7fd9ffdc5"
+        },
+        "light.mp4": {
+          "bytes": 138700,
+          "sha256": "246899ecece98529480f658c43174262d83e3f8a6fa8fe092811b2e47e12a9b6"
+        },
+        "still.png": {
+          "bytes": 755576,
+          "sha256": "50cf88ea6dc4d29ec043aa77d9f6d78bc4d96ea60708d6cf8ed650484b38e677"
+        }
+      },
+      "animation": {
+        "state": "idle",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "resolution": 512,
+        "samples": 32,
+        "fps": 24,
+        "frames": 60,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.54,
+        "total_seconds": 46.397,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ],
+        "composite_and_encode_seconds": 1.269
+      },
+      "contact_sheet_frame_indices": [
+        0,
+        16,
+        32,
+        45
+      ]
+    },
+    "working": {
+      "still": {
+        "state": "working",
+        "mode": "still",
+        "engine": "CYCLES",
+        "resolution": 1024,
+        "samples": 96,
+        "fps": 24,
+        "frames": 1,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.73,
+        "total_seconds": 5.243,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ]
+      },
+      "files": {
+        "dark.mp4": {
+          "bytes": 168748,
+          "sha256": "29482fe06184c4c6e174594b2537dbf5f98c74d3ee3c64a0cf3fc8b0855547f4"
+        },
+        "frames.png": {
+          "bytes": 239722,
+          "sha256": "630566421ffd9c3599c61819cfd6f01d73994707eb91c9d233c812905b88e8be"
+        },
+        "light.mp4": {
+          "bytes": 140950,
+          "sha256": "02109369693c4ec12edf32999240e2a0ce31be5067fd9fc961c6b8445de58881"
+        },
+        "still.png": {
+          "bytes": 782645,
+          "sha256": "226cee11a66ba5ba7dd9c3501d17980962134b516e9c58128796b14e940001fe"
+        }
+      },
+      "animation": {
+        "state": "working",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "resolution": 512,
+        "samples": 32,
+        "fps": 24,
+        "frames": 60,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.73,
+        "total_seconds": 48.457,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ],
+        "composite_and_encode_seconds": 1.311
+      },
+      "contact_sheet_frame_indices": [
+        0,
+        7,
+        19,
+        41
+      ]
+    },
+    "waiting": {
+      "still": {
+        "state": "waiting",
+        "mode": "still",
+        "engine": "CYCLES",
+        "resolution": 1024,
+        "samples": 96,
+        "fps": 24,
+        "frames": 1,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.545,
+        "total_seconds": 4.349,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ]
+      },
+      "files": {
+        "dark.mp4": {
+          "bytes": 223237,
+          "sha256": "3d0c1552f545c23528bb392359d4bdbf6b64b42be91c7e546b5d1cefa1a4e1ac"
+        },
+        "frames.png": {
+          "bytes": 214270,
+          "sha256": "e5f8b6313f0104537788e74e990cf73c34f0e7127fd5c18ddeb4edceafc31460"
+        },
+        "light.mp4": {
+          "bytes": 184496,
+          "sha256": "912ea8fb2104f403e4ea5707c2d6446b8f421781300de2ea2f888d5b0f7c38aa"
+        },
+        "still.png": {
+          "bytes": 757582,
+          "sha256": "fcfb6b28fe1d18b0dd081a17dfc12ad80cdf22b82336ae87c32f0bb9351edba2"
+        }
+      },
+      "animation": {
+        "state": "waiting",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "resolution": 512,
+        "samples": 32,
+        "fps": 24,
+        "frames": 60,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.549,
+        "total_seconds": 52.791,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ],
+        "composite_and_encode_seconds": 1.399
+      },
+      "contact_sheet_frame_indices": [
+        0,
+        16,
+        41,
+        50
+      ]
+    },
+    "happy": {
+      "still": {
+        "state": "happy",
+        "mode": "still",
+        "engine": "CYCLES",
+        "resolution": 1024,
+        "samples": 96,
+        "fps": 24,
+        "frames": 1,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.595,
+        "total_seconds": 5.046,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ]
+      },
+      "files": {
+        "dark.mp4": {
+          "bytes": 291434,
+          "sha256": "eefa4a5d8751302a05346ba8374756ce011e7c77ac9851ac1dbf90d987f4479e"
+        },
+        "frames.png": {
+          "bytes": 232757,
+          "sha256": "672df64c0e93769716e612d5f5f6dd775746f842c6461c050745cdf73bf7cfed"
+        },
+        "light.mp4": {
+          "bytes": 238218,
+          "sha256": "7792fffa70a2c05a8b25363914deb93f9dbba29df689efaf4ea14f1ec01d6dd4"
+        },
+        "still.png": {
+          "bytes": 778428,
+          "sha256": "979443275717fe74a8c8181d62bdad5ffdacdbd06174b1a798f640537de54bdf"
+        }
+      },
+      "animation": {
+        "state": "happy",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "resolution": 512,
+        "samples": 32,
+        "fps": 24,
+        "frames": 60,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.646,
+        "total_seconds": 57.131,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ],
+        "composite_and_encode_seconds": 1.367
+      },
+      "contact_sheet_frame_indices": [
+        0,
+        15,
+        30,
+        45
+      ]
+    },
+    "error": {
+      "still": {
+        "state": "error",
+        "mode": "still",
+        "engine": "CYCLES",
+        "resolution": 1024,
+        "samples": 96,
+        "fps": 24,
+        "frames": 1,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.59,
+        "total_seconds": 4.892,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ]
+      },
+      "files": {
+        "dark.mp4": {
+          "bytes": 223670,
+          "sha256": "6faee6be615a8ccd9be4661c8cbd688569336e44ea258e5f1a965a6aa39f77a5"
+        },
+        "frames.png": {
+          "bytes": 212422,
+          "sha256": "4dd18206a57af57b6379ea59c2a19ffb41e6ea7bcfb291bb0c2173f458dbb412"
+        },
+        "light.mp4": {
+          "bytes": 182415,
+          "sha256": "3dc084ebd6256f836ffc4306f21fb47f88d276e695e3f9ba237abef2a0fb19bd"
+        },
+        "still.png": {
+          "bytes": 757902,
+          "sha256": "ead1160c2deda790272ae8a6d40d7ca9e7df3a5a5796ef9ed2f824ab0da6c720"
+        }
+      },
+      "animation": {
+        "state": "error",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "resolution": 512,
+        "samples": 32,
+        "fps": 24,
+        "frames": 60,
+        "endpoint_pose_max_abs": 0.0,
+        "seed": 80415,
+        "setup_seconds": 0.602,
+        "total_seconds": 56.551,
+        "blender": "5.2.1 LTS",
+        "camera": {
+          "location": [
+            3.5,
+            -8.5,
+            3.25
+          ],
+          "rotation": [
+            1.379525065422058,
+            -5.9224788628853275e-08,
+            0.3906070291996002
+          ],
+          "ortho_scale": 3.7200000286102295
+        },
+        "lights": [
+          {
+            "name": "Key / large silk",
+            "location": [
+              -3.5,
+              -4.5,
+              6.0
+            ],
+            "energy": 420.0,
+            "size": 4.199999809265137
+          },
+          {
+            "name": "Fill / neutral silk",
+            "location": [
+              4.0,
+              -2.0,
+              3.5
+            ],
+            "energy": 235.0,
+            "size": 3.799999952316284
+          },
+          {
+            "name": "Rim / top silk",
+            "location": [
+              1.5,
+              3.200000047683716,
+              5.0
+            ],
+            "energy": 520.0,
+            "size": 3.0
+          },
+          {
+            "name": "Front / eye softbox",
+            "location": [
+              -0.800000011920929,
+              -4.0,
+              2.0
+            ],
+            "energy": 35.0,
+            "size": 2.0
+          }
+        ],
+        "composite_and_encode_seconds": 1.297
+      },
+      "contact_sheet_frame_indices": [
+        0,
+        15,
+        30,
+        45
+      ]
+    }
+  }
+}

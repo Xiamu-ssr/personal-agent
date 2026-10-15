@@ -1,0 +1,456 @@
+{
+  "status": "passed",
+  "mae_scale": "RGB code values, 0..255",
+  "states": {
+    "idle": {
+      "still_alpha_bounds": [
+        226,
+        100,
+        793,
+        916
+      ],
+      "light": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 138700,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.026709,
+        "penultimate_to_last_rgb_mae": 0.381791,
+        "max_animation_rgb_mae_from_start": 1.828045,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      },
+      "dark": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 175240,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.042294,
+        "penultimate_to_last_rgb_mae": 0.390185,
+        "max_animation_rgb_mae_from_start": 2.943879,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      }
+    },
+    "working": {
+      "still_alpha_bounds": [
+        173,
+        102,
+        775,
+        916
+      ],
+      "light": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 140950,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.071456,
+        "penultimate_to_last_rgb_mae": 0.414562,
+        "max_animation_rgb_mae_from_start": 1.178373,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      },
+      "dark": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 168748,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.082624,
+        "penultimate_to_last_rgb_mae": 0.423865,
+        "max_animation_rgb_mae_from_start": 1.67071,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      }
+    },
+    "waiting": {
+      "still_alpha_bounds": [
+        256,
+        87,
+        811,
+        916
+      ],
+      "light": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 184496,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.08194,
+        "penultimate_to_last_rgb_mae": 0.419111,
+        "max_animation_rgb_mae_from_start": 2.849177,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      },
+      "dark": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 223237,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.115191,
+        "penultimate_to_last_rgb_mae": 0.448516,
+        "max_animation_rgb_mae_from_start": 5.196528,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      }
+    },
+    "happy": {
+      "still_alpha_bounds": [
+        173,
+        40,
+        805,
+        871
+      ],
+      "light": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 238218,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.134888,
+        "penultimate_to_last_rgb_mae": 0.495752,
+        "max_animation_rgb_mae_from_start": 8.879784,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      },
+      "dark": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 291434,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.193794,
+        "penultimate_to_last_rgb_mae": 0.545306,
+        "max_animation_rgb_mae_from_start": 19.253904,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      }
+    },
+    "error": {
+      "still_alpha_bounds": [
+        202,
+        96,
+        741,
+        916
+      ],
+      "light": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 182415,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.080121,
+        "penultimate_to_last_rgb_mae": 0.418048,
+        "max_animation_rgb_mae_from_start": 2.260794,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            255,
+            255,
+            255
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      },
+      "dark": {
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "frames": 60,
+        "duration_seconds": 2.5,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio_streams": 0,
+        "bytes": 223670,
+        "endpoint_rgb_mae_0_255": 0.0,
+        "endpoint_max_channel_delta": 0,
+        "endpoint_changed_pixels": 0,
+        "first_to_second_rgb_mae": 0.117233,
+        "penultimate_to_last_rgb_mae": 0.445541,
+        "max_animation_rgb_mae_from_start": 4.273966,
+        "midpoint_corner_rgb_tl_tr_bl_br": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        "all_frames_corner_checks": 240,
+        "all_frames_12px_border_max_channel_error": 0
+      }
+    }
+  }
+}

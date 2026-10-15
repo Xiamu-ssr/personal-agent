@@ -1,0 +1,159 @@
+{
+  "generated_utc": "2026-10-15T02:18:09.957359+00:00",
+  "generator": "design/mascot/scripts/scene.py",
+  "candidates": {
+    "a": {
+      "still": {
+        "candidate": "a",
+        "mode": "still",
+        "engine": "CYCLES",
+        "samples": 96,
+        "resolution": 1024,
+        "fps": 24,
+        "frames": 1,
+        "setup_seconds": 0.537,
+        "total_seconds": 4.423,
+        "blender": "5.2.1 LTS",
+        "seed": 80415,
+        "fuzz": 1
+      },
+      "files": {
+        "portrait.png": {
+          "bytes": 754244,
+          "sha256": "ed3ce4d68d7bb2cf1e4abc0be3c1e56a8cb2d0cdb160aaa4994165bfb3f48b3c"
+        },
+        "preview-black.png": {
+          "bytes": 414056,
+          "sha256": "f15692e69cf70ff7dee12ed587a759b149a82b71e93167e94f5b514546d4cd1d"
+        },
+        "preview-white.png": {
+          "bytes": 411828,
+          "sha256": "f58a78117db4aefa80e8b66f001b536ce98245cb7242643752284230c4517045"
+        },
+        "turntable-white.mp4": {
+          "bytes": 217251,
+          "sha256": "d86f90e67f077f247bba88648df200848600c41786f61f20bc325e3bfa6f2caa"
+        }
+      },
+      "animation": {
+        "candidate": "a",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "samples": 32,
+        "resolution": 512,
+        "fps": 24,
+        "frames": 72,
+        "setup_seconds": 0.53,
+        "total_seconds": 54.971,
+        "blender": "5.2.1 LTS",
+        "seed": 80415,
+        "fuzz": 1,
+        "composite_and_encode_seconds": 0.754
+      }
+    },
+    "b": {
+      "still": {
+        "candidate": "b",
+        "mode": "still",
+        "engine": "CYCLES",
+        "samples": 96,
+        "resolution": 1024,
+        "fps": 24,
+        "frames": 1,
+        "setup_seconds": 0.788,
+        "total_seconds": 6.243,
+        "blender": "5.2.1 LTS",
+        "seed": 80415,
+        "fuzz": 1
+      },
+      "files": {
+        "portrait.png": {
+          "bytes": 841518,
+          "sha256": "bca1f98eacb1a9bda89c413bd68b1064929ab613992c3b334db41f287ae9227f"
+        },
+        "preview-black.png": {
+          "bytes": 483170,
+          "sha256": "d3e593dfaabff66cf5da43354a7267ca433c091db5fa886e02e493e4487ff02b"
+        },
+        "preview-white.png": {
+          "bytes": 466770,
+          "sha256": "5e8f3d1f17d1f5901f3c9339a32962b572098369ab6460c84507758736f5bf42"
+        },
+        "turntable-white.mp4": {
+          "bytes": 266676,
+          "sha256": "9d964d3f0e1df1be59a0132499d21d7ec02e1941d6b31948b8e7e34ca846d3c5"
+        }
+      },
+      "animation": {
+        "candidate": "b",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "samples": 32,
+        "resolution": 512,
+        "fps": 24,
+        "frames": 72,
+        "setup_seconds": 0.882,
+        "total_seconds": 60.666,
+        "blender": "5.2.1 LTS",
+        "seed": 80415,
+        "fuzz": 1,
+        "composite_and_encode_seconds": 0.917
+      }
+    },
+    "c": {
+      "still": {
+        "candidate": "c",
+        "mode": "still",
+        "engine": "CYCLES",
+        "samples": 96,
+        "resolution": 1024,
+        "fps": 24,
+        "frames": 1,
+        "setup_seconds": 0.553,
+        "total_seconds": 5.114,
+        "blender": "5.2.1 LTS",
+        "seed": 80415,
+        "fuzz": 1
+      },
+      "files": {
+        "portrait.png": {
+          "bytes": 859599,
+          "sha256": "5c4774bf948f8797f72f01076fbfce97b98402aef5d3aa459175a1a483a477ba"
+        },
+        "preview-black.png": {
+          "bytes": 511566,
+          "sha256": "dc089f5a6816baadd4d8433874861a985bcec1487d8abab99f5bc7421d8c7548"
+        },
+        "preview-white.png": {
+          "bytes": 500709,
+          "sha256": "32828444794119f09b44efeee1992cf6defac34925f4d33f6181ae176a8804f3"
+        },
+        "turntable-white.mp4": {
+          "bytes": 283219,
+          "sha256": "f08946a2667193b9d482a32496a364a4ac6ad6e4d937b234944fa799f7ca478a"
+        }
+      },
+      "animation": {
+        "candidate": "c",
+        "mode": "animation",
+        "engine": "CYCLES",
+        "samples": 32,
+        "resolution": 512,
+        "fps": 24,
+        "frames": 72,
+        "setup_seconds": 0.559,
+        "total_seconds": 58.495,
+        "blender": "5.2.1 LTS",
+        "seed": 80415,
+        "fuzz": 1,
+        "composite_and_encode_seconds": 0.833
+      }
+    }
+  },
+  "selected_candidate": "a",
+  "removed_candidate_outputs": [
+    "b",
+    "c"
+  ],
+  "archive_note": "B/C file hashes and render timings describe stage-one history; their output directories were removed after selecting A."
+}
