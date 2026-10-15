@@ -52,7 +52,7 @@ final class DeviceClient {
         Task {
             guard await Capabilities.notifyAllowed() else { return }
             let c = UNMutableNotificationContent()
-            c.title = kind == "job" ? "豆豆 · 任务完成" : "豆豆"
+            c.title = "豆豆"
             c.body = text
             c.sound = .default
             try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))

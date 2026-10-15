@@ -7,19 +7,11 @@ final class Session {
     static let shared = Session()
 
     var configured = LocalVerification.explicitLoopback || Prefs.configured
-    var onboarded = Prefs.onboarded
 
     func signedIn() {
         configured = true
-        onboarded = Prefs.onboarded
         ChatClient.shared.reconnect()
         DeviceClient.shared.reregister()
-    }
-
-    func finishOnboarding() {
-        Prefs.onboarded = true
-        onboarded = true
-        if Prefs.notifyMessages, let permit = Capabilities.all.first(where: { $0.name == "notify" })?.permit { Task { _ = await permit() } }
     }
 
     @MainActor
@@ -29,7 +21,6 @@ final class Session {
         Composer.shared.reset()
         ConnectorStore.shared.reset()
         ProfileStore.shared.reset()
-        SitePreviewCache.shared.clear()
         Api.clearCache()
         Markdown.clearCache()
         Prefs.signOut()
@@ -50,16 +41,16 @@ struct LoginView: View {
         VStack(spacing: 0) {
             Spacer()
             VStack(spacing: 22) {
-                Orb(size: 84)
+                AgentAvatar(size: 84)
                 VStack(spacing: 8) {
                     Text("登录豆豆").font(Theme.font(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
                     Text("你的个人 agent，住在你自己的云主机上").font(Theme.font(size: 13.5)).foregroundStyle(Theme.sub)
                 }
                 VStack(alignment: .leading, spacing: 14) {
-                    field("账号", hint: "云端地址") {
+                    field("云端地址", hint: "你的服务器") {
                         TextField("https://你的服务器/agent", text: $server).textFieldStyle(.plain)
                     }
-                    field("密码", hint: "6 位配对码，或口令") {
+                    field("配对码", hint: "6 位一次性配对码") {
                         SecureField("配对码或口令", text: $password).textFieldStyle(.plain).onSubmit(login)
                     }
                     if !error.isEmpty {
@@ -68,7 +59,7 @@ struct LoginView: View {
                     Button(action: login) {
                         Text(checking ? "登录中…" : "登录").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(GoldButtonStyle(height: 44))
+                    .buttonStyle(PrimaryButtonStyle(height: 44))
                     .disabled(checking || server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.defaultAction)
                     .padding(.top, 4)
@@ -117,38 +108,6 @@ struct LoginView: View {
                 self.error = error.localizedDescription
             }
             checking = false
-        }
-    }
-}
-
-/// 开通本机能力: shown once after the first login.
-struct OnboardingView: View {
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 14) {
-                        Orb(size: 52)
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("开通本机能力").font(Theme.font(size: 26, weight: .bold)).foregroundStyle(Theme.ink)
-                            Text("开了的，豆豆可以随时用；没开的，它碰不到。之后在「设置 → 连接应用」里随时改。")
-                                .font(Theme.font(size: 13)).foregroundStyle(Theme.sub)
-                        }
-                    }
-                    LocalCapabilityList()
-                }
-                .frame(maxWidth: 640)
-                .padding(.horizontal, 36)
-                .padding(.top, 48)
-                .padding(.bottom, 20)
-                .frame(maxWidth: .infinity)
-            }
-            .scrollContentBackground(.hidden)
-            Button { Session.shared.finishOnboarding() } label: { Text("开始使用").frame(width: 220) }
-                .buttonStyle(GoldButtonStyle(height: 44))
-                .keyboardShortcut(.defaultAction)
-                .padding(.bottom, 28)
-                .padding(.top, 8)
         }
     }
 }

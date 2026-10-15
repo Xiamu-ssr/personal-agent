@@ -1,201 +1,100 @@
 import SwiftUI
 
-struct MainView: View {
+struct MainView:View {
+    private var nav:Nav { .shared }
     @Environment(\.openWindow) private var openWindow
-    private var session: Session { .shared }
-    private var nav: Nav { .shared }
-    @State private var dropping = false
-    @State private var windowActivity = WindowActivity()
-
+    @Environment(\.colorScheme) private var systemScheme
+    @State private var activity=WindowActivity()
+    @State private var dropping=false
     var body: some View {
-        GeometryReader { windowGeometry in
         ZStack {
-            Theme.canvas.ignoresSafeArea()
-            if !session.configured {
-                LoginView()
-            } else if !session.onboarded {
-                OnboardingView()
-            } else {
-                HStack(spacing: 0) {
+            Theme.background.ignoresSafeArea()
+            if Session.shared.configured {
+                HStack(spacing:0) {
                     Sidebar()
-                    content
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .onDrop(of: [.fileURL, .image], isTargeted: $dropping) {
-                            guard nav.tab.prompt != nil, nav.stacks[nav.tab]?.isEmpty ?? true else { return false }
-                            return Composer.shared.drop($0)
+                    Rectangle().fill(Theme.line).frame(width:1)
+                    content.frame(maxWidth:.infinity,maxHeight:.infinity)
+                        .overlay(alignment:.top) {
+                            if nav.stacks[nav.tab]?.isEmpty != false {AvatarHeader(sideChat:nav.tab == .chat && nav.sideChat != nil).padding(.top,14)}
                         }
-                        .overlay { if dropping { dropHint } }
+                        .onDrop(of:[.fileURL,.image],isTargeted:$dropping) { (nav.tab == .chat ? nav.sideChat?.composer ?? .shared : .shared).drop($0) }
+                        .overlay { if dropping { RoundedRectangle(cornerRadius:20).strokeBorder(Theme.ink,style:StrokeStyle(lineWidth:2,dash:[6])).padding(18).allowsHitTesting(false) } }
                 }
-            }
-            if let p = nav.preview { ImagePreview(path: p) }
+            } else { LoginView() }
+            if let p=nav.preview { ImagePreview(path:p) }
             if !nav.toast.isEmpty {
-                VStack {
-                    Spacer()
-                    Text(nav.toast).font(Theme.font(size: 13)).foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 18).padding(.vertical, 10)
-                        .background(Capsule().fill(Theme.card))
-                        .padding(.bottom, 100)
-                }
-                .transition(.opacity)
-                .allowsHitTesting(false)
+                VStack { Spacer(); Text(nav.toast).font(Theme.font(size:13)).padding(14).background(Theme.card,in:Capsule()).padding(.bottom,80) }.allowsHitTesting(false)
             }
         }
-        .environment(\.briefWindowHeight, windowGeometry.size.height)
+        .frame(minWidth:920,minHeight:650).foregroundStyle(Theme.ink).font(Theme.font(size:15))
+        .preferredColorScheme(Theme.scheme).tint(Theme.ink)
+        .background(WindowActivityReader(activity:activity).frame(width:0,height:0))
+        .environment(\.interactiveWindow,activity.active)
+        .sheet(isPresented:Binding(get:{nav.console},set:{nav.console=$0})) { ConsoleView() }
+        .onAppear {
+            AppDelegate.openMain={openWindow(id:"main")}
+            AppearanceStore.shared.systemDark=systemScheme == .dark
         }
-        .ignoresSafeArea(.container, edges: .top)
-        .frame(minWidth: 920, minHeight: 640)
-        .preferredColorScheme(Theme.scheme)
-        .tint(Theme.accent)
-        .foregroundStyle(Theme.ink)
-        .font(Theme.font(size: Theme.bodySize))
-        .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
-        .environment(\.interactiveWindow, windowActivity.active)
-        .onAppear { AppDelegate.openMain = { openWindow(id: "main") } }
-        .task(id: "\(ChatClient.shared.connected)-\(ChatClient.shared.filesVersion)-\(windowActivity.active)") {
-            if session.configured { await ProfileStore.shared.load() }
-        }
-        .animation(.easeOut(duration: 0.2), value: nav.toast)
+        .onChange(of:systemScheme) { _,v in if AppearanceStore.shared.selection == .system { AppearanceStore.shared.systemDark=v == .dark } }
     }
-
-    @ViewBuilder
-    private var content: some View {
-        let stack = nav.stacks[nav.tab] ?? []
-        Group {
-            if let top = stack.last {
-                RouteView(route: top).id(top)
-            } else {
-                switch nav.tab {
-                case .chat: ChatPage()
-                case .today: TodayPage()
-                case .tasks: TasksPage()
-                case .memory: MemoryPage()
-                case .home: HomePage()
-                case .settings: SettingsPage()
-                }
+    @ViewBuilder private var content:some View {
+        if let route=nav.stacks[nav.tab]?.last { RouteView(route:route).id(route) }
+        else {
+            switch nav.tab {
+            case .chat: ChatPage(thread:nav.sideChat).id(nav.sideChat?.id)
+            case .feed: FeedPage()
+            case .ideas: IdeasPage()
+            case .goals: GoalsPage()
+            case .library: LibraryPage()
+            case .settings: SettingsPage()
             }
         }
-        .padding(.top, 26)
-    }
-
-    private var dropHint: some View {
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
-            .foregroundStyle(Theme.accent)
-            .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.card))
-            .overlay {
-                VStack(spacing: 10) {
-                    Image(systemName: "tray.and.arrow.down").font(Theme.font(size: 30, weight: .light))
-                    Text("松开，把文件加到消息里").font(Theme.font(size: 15, weight: .medium))
-                }
-                .foregroundStyle(Theme.goldText)
-            }
-            .padding(20)
-            .allowsHitTesting(false)
     }
 }
-
-struct Sidebar: View {
-    private var nav: Nav { .shared }
-    private var chat: ChatClient { .shared }
-    private var device: DeviceClient { .shared }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 10) {
-                AgentAvatar(size: 34)
-                Text(ProfileStore.shared.agentName).font(Theme.font(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                AgentStatusDot()
+struct Sidebar:View {
+    private var nav:Nav { .shared }
+    private var side:SideChats { .shared }
+    var body:some View {
+        VStack(alignment:.leading,spacing:7) {
+            Button { nav.console=true } label: {
+                HStack(spacing:11) { AgentAvatar(size:42); VStack(alignment:.leading,spacing:4) {
+                    Text(ProfileStore.shared.agentName).font(Theme.font(size:15,weight:.semibold))
+                    Text(ChatClient.shared.connected ? "你的个人助手" : "连接中…").font(Theme.font(size:11)).foregroundStyle(Theme.sub)
+                }; Spacer() }
+            }.buttonStyle(.plain).padding(.vertical,24).padding(.horizontal,10)
+            ForEach([Tab.chat,.feed,.ideas,.goals,.library],id:\.self) { t in
+                Button { nav.go(t) } label: {
+                    HStack(spacing:13) { Image(systemName:t.icon).font(.system(size:18)).frame(width:23)
+                        Text(t.title).font(Theme.font(size:14,weight:nav.tab == t && (t != .chat || nav.sideChat == nil) ? .semibold : .regular)); Spacer()
+                        if t == .feed && FeedBadge.shared.unread { Circle().fill(.red).frame(width:6,height:6).accessibilityLabel("有新动态") }
+                    }.padding(.horizontal,13).frame(height:43).background(nav.tab == t && (t != .chat || nav.sideChat == nil) ? Theme.card : .clear,in:RoundedRectangle(cornerRadius:12)).contentShape(Rectangle())
+                }.buttonStyle(.plain).verificationAction("tab-"+t.rawValue)
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 52)
-            .padding(.bottom, 22)
-
-            ForEach([Tab.chat, .today, .tasks, .memory, .home], id: \.self) { item($0) }
-            Spacer()
-            item(.settings)
-                .padding(.bottom, 16)
-        }
-        .padding(.horizontal, 12)
-        .frame(width: 208)
-        .frame(maxHeight: .infinity)
-        .background(Theme.card)
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.card).frame(width: 1) }
-    }
-
-    private func item(_ t: Tab) -> some View {
-        SidebarItem(tab: t, selected: nav.tab == t, badge: t == .tasks ? Set(chat.live.map(\.id) + chat.backgroundTasks.map(\.id)).count : 0) { nav.go(t) }
-    }
-}
-
-struct SidebarItem: View {
-    let tab: Tab
-    let selected: Bool
-    var badge = 0
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 11) {
-                ZStack {
-                    if selected { GoldBase(radius: 10) }
-                    Image(systemName: tab.icon)
-                        .font(Theme.font(size: 14, weight: .medium))
-                        .foregroundStyle(selected ? Theme.goldText : tab.tint)
-                }
-                .frame(width: 32, height: 28)
-                Text(tab.title)
-                    .font(Theme.font(size: 14, weight: selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? Theme.goldText : Theme.ink.opacity(0.82))
-                Spacer()
-                if badge > 0 {
-                    Text("\(badge)").font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.goldText)
-                        .padding(.horizontal, 7).frame(height: 18).background(Capsule().fill(Theme.userBubble))
+            HStack { Text("旁聊").font(Theme.font(size:11,weight:.medium)).foregroundStyle(Theme.sub); Spacer()
+                Button { nav.openSide(SideChatThread()) } label:{ Image(systemName:"square.and.pencil") }.buttonStyle(.plain).help("新建旁聊").verificationAction("new-side-chat")
+            }.padding(.top,28).padding(.horizontal,14).padding(.bottom,5)
+            ScrollView {
+                VStack(alignment:.leading,spacing:6) {
+                    if side.items.isEmpty { Text("单独聊的话题会出现在这里").font(Theme.font(size:11)).foregroundStyle(Theme.sub).padding(.horizontal,14).padding(.top,6) }
+                    ForEach(side.items) { s in Button { nav.openSide(side.thread(s.id)) } label: {
+                        Text(s.title).font(Theme.font(size:12)).lineLimit(1).frame(maxWidth:.infinity,alignment:.leading).padding(12).background(nav.sideChat?.activityID == s.id && nav.tab == .chat ? Theme.card : .clear,in:RoundedRectangle(cornerRadius:12)).contentShape(Rectangle())
+                    }.buttonStyle(.plain).verificationAction("side-chat-"+s.id) }
+                    if side.next != nil {Button("更早的旁聊"){Task {await side.load(reset:false)}}.buttonStyle(.plain).font(Theme.font(size:11)).padding(12).disabled(side.loading).task(id:side.next){await side.load(reset:false)}}
+                    if !side.error.isEmpty {Button("旁聊加载失败，重试"){Task {await side.load()}}.buttonStyle(.plain).font(Theme.font(size:11)).padding(12)}
                 }
             }
-            .padding(.horizontal, 8)
-            .frame(height: 42)
-            .background {
-                if selected {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.goldWash)
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
-                        .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 3)
-                } else if hover {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.card)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
+            Spacer(minLength:8)
+            Button { nav.go(.settings) } label:{ Label("设置",systemImage:"gearshape").font(Theme.font(size:13)).frame(maxWidth:.infinity,alignment:.leading).padding(14) }.buttonStyle(.plain)
+        }.padding(.horizontal,12).padding(.top,12).padding(.bottom,12).frame(width:214).background(Theme.sidebar)
+        .task(id:ChatClient.shared.jobsVersion) { await side.load() }
     }
 }
-
-/// Full-window image viewer for picture attachments.
-struct ImagePreview: View {
-    let path: String
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.55).ignoresSafeArea()
-                .onTapGesture { Nav.shared.preview = nil }
-            RemoteImage(path: path, maxSide: 900)
-                .shadow(color: .black.opacity(0.3), radius: 30, y: 10)
-                .padding(40)
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { Nav.shared.preview = nil } label: {
-                        Image(systemName: "xmark").font(Theme.font(size: 13, weight: .semibold)).foregroundStyle(.white)
-                            .frame(width: 32, height: 32).background(Circle().fill(Theme.card))
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.cancelAction)
-                }
-                Spacer()
-            }
-            .padding(.top, 40)
-            .padding(.trailing, 24)
+struct ImagePreview:View {
+    let path:String
+    var body:some View {
+        ZStack { Color.black.opacity(0.8).ignoresSafeArea().onTapGesture { Nav.shared.preview=nil }
+            RemoteImage(path:path,maxSide:850).padding(40)
+            VStack { HStack { Spacer(); CircleIconButton(icon:"xmark",help:"关闭") { Nav.shared.preview=nil } }; Spacer() }.padding(24)
         }
     }
 }

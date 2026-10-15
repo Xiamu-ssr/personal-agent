@@ -170,7 +170,7 @@ struct ConnectorDetailPage: View {
                 accounts(connector)
                 if connector.canAdd {
                     Button("添加账号") { Nav.shared.push(.connectorForm(name: name, accountID: nil)) }
-                        .buttonStyle(GoldButtonStyle(height: 40)).disabled(working != nil)
+                        .buttonStyle(PrimaryButtonStyle(height: 40)).disabled(working != nil)
                 }
 
             } else { Note(text: store.loaded ? "这个连接器已不在目录中，返回后刷新试试" : "加载中…") }
@@ -265,7 +265,7 @@ struct ConnectorFormPage: View {
                 .frame(maxWidth: 640, alignment: .leading)
                 if !error.isEmpty { Note(text: error, icon: "exclamationmark.circle").frame(maxWidth: 640, alignment: .leading) }
                 Button(verifying ? "正在验证…" : draft.editing ? "保存并验证" : "验证并添加") { save(draft) }
-                    .buttonStyle(GoldButtonStyle(height: 42)).disabled(verifying)
+                    .buttonStyle(PrimaryButtonStyle(height: 42)).disabled(verifying)
             } else { Note(text: "找不到这个账号的表单，返回后刷新试试") }
         }
         .task {
@@ -407,7 +407,7 @@ struct ConnectorListRow: View {
                     Text(connector.description).font(Theme.font(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
                 }
                 Spacer(minLength: 10)
-                if connected { GoldTag(text: "已连接") }
+                if connected { StatusTag(text: "已连接") }
                 else { Text("连接").font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.accent).padding(.horizontal, 14).frame(height: 28).background(Theme.field, in: Capsule()) }
             }.padding(.vertical, 12).padding(.horizontal, 6).contentShape(Rectangle())
         }.buttonStyle(.plain)

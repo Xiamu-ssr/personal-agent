@@ -29,7 +29,7 @@ struct GrowingInput: NSViewRepresentable {
         if view.editor.textColor != color {
             view.editor.textColor = color; view.editor.insertionPointColor = color; view.editor.needsDisplay = true
         }
-        let font = NSFont.systemFont(ofSize: fontSize, weight: Theme.skin == .night ? .light : .regular)
+        let font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
         if view.editor.font != font { view.editor.font = font; view.textChanged(force: true) }
         let coordinator = context.coordinator
         coordinator.owner = self

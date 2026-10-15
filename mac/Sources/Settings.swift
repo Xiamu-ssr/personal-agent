@@ -38,7 +38,7 @@ final class ConnectorStore {
     var loaded = false
     var error = ""
     var cloudOnline = false
-    var cloudName = "云电脑"
+    var cloudName = "云端"
     private var generation = 0
 
     var others: [RemoteDevice] { devices.filter { $0.id != Prefs.deviceId } }
@@ -60,7 +60,7 @@ final class ConnectorStore {
             guard generation == version, !Task.isCancelled else { return }
             let cloud = r["cloud"] as? [String: Any] ?? [:]
             cloudOnline = cloud["online"] as? Bool ?? false
-            cloudName = cloud["name"] as? String ?? "云电脑"
+            cloudName = "云端"
             installed = (cloud["installed"] as? [[String: Any]] ?? []).map { CloudConnector($0) }
             catalog = (cloud["catalog"] as? [[String: Any]] ?? []).map { CloudConnector($0) }
             devices = (r["devices"] as? [[String: Any]] ?? []).map { d in
@@ -129,10 +129,10 @@ struct LocalCapabilityList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                Button(enabling ? "正在开启…" : "一键开启") { enable() }.buttonStyle(GoldButtonStyle(height: 36)).disabled(enabling)
+                Button(enabling ? "正在开启…" : "一键开启") { enable() }.buttonStyle(PrimaryButtonStyle(height: 36)).disabled(enabling)
                 Text(progress).font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
             }
-            Rows(items: Capabilities.all) { CapRow(cap: $0) }.id(revision).disabled(enabling).card(radius: 16, padding: 10)
+            Rows(items: Capabilities.all) { CapRow(cap: $0).id($0.name) }.id(revision).disabled(enabling).card(radius: 16, padding: 10)
             ForEach(Capabilities.all.filter { failures[$0.name] != nil }) { cap in
                 Text("\(cap.title)：\(failures[cap.name] ?? "")").font(Theme.font(size: 12)).foregroundStyle(Theme.danger)
             }
@@ -166,7 +166,7 @@ struct PairCodeView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 14) {
                 Button(working ? "生成中…" : (code.isEmpty ? "生成配对码" : "重新生成")) { generate() }
-                    .buttonStyle(GoldButtonStyle(height: 32))
+                    .buttonStyle(PrimaryButtonStyle(height: 32))
                     .disabled(working)
                 if !code.isEmpty {
                     Text(code.map(String.init).joined(separator: " "))
@@ -212,12 +212,14 @@ struct RowDivider: View {
 // MARK: - 设置
 
 struct SettingsPage: View {
+    @Environment(\.interactiveWindow) private var active
     private var chat: ChatClient { .shared }
     private var device: DeviceClient { .shared }
     private var store: ConnectorStore { .shared }
     @State private var notify = Prefs.notifyMessages
     @State private var notifyNote = ""
     @State private var confirmSignOut = false
+    @State private var serverEditor = false
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
@@ -225,8 +227,15 @@ struct SettingsPage: View {
 
     var body: some View {
         PageScaffold(title: "设置", tab: .settings) {
-            SkinPicker()
-            MembershipCard()
+            CardSection(title: "外观") {
+                HStack {
+                    Text("外观").font(Theme.font(size: 14, weight: .medium))
+                    Spacer()
+                    Picker("外观", selection: Binding(get: { AppearanceStore.shared.selection }, set: { AppearanceStore.shared.select($0) })) {
+                        ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
+                    }.labelsHidden().frame(width: 180)
+                }.padding(12)
+            }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 18, alignment: .top)], alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 18) {
@@ -237,13 +246,6 @@ struct SettingsPage: View {
                         }
                         .accessibilityLabel("模型")
                         .verificationAction("模型")
-                        RowDivider()
-                        ListRow(icon: "checkmark.shield", tint: Theme.accent, title: "权限",
-                                subtitle: AgentSettingsStore.shared.snapshot?.label(.permissionMode) ?? "加载中…") {
-                            Nav.shared.push(.agentSetting(.permissionMode))
-                        }
-                        .accessibilityLabel("权限")
-                        .verificationAction("权限")
                     }
                     CardSection(title: "能力与连接") {
                         ListRow(icon: "square.grid.2x2", tint: Theme.accent, title: "连接应用",
@@ -262,14 +264,14 @@ struct SettingsPage: View {
                     }
                     CardSection(title: "通知") {
                         ListRow(icon: "bell", tint: Theme.accent, title: "接收消息通知",
-                                subtitle: notifyNote.isEmpty ? "豆豆回复或任务完成时，豆豆不在前台就弹系统通知" : notifyNote) {
+                                subtitle: notifyNote.isEmpty ? "豆豆说话时，App 不在前台就弹系统通知" : notifyNote) {
                             Toggle("", isOn: Binding(get: { notify }, set: setNotify)).toggleStyle(.switch).labelsHidden().tint(Theme.accent)
                         }
                     }
                 }
                 VStack(alignment: .leading, spacing: 18) {
                     CardSection(title: "账号") {
-                        ListRow(icon: "cloud", tint: Theme.accent, title: "云端地址", subtitle: Prefs.server)
+                        ListRow(icon: "cloud", tint: Theme.accent, title: "云端地址", subtitle: Prefs.server) { serverEditor = true }
                         RowDivider()
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 12) {
@@ -292,11 +294,13 @@ struct SettingsPage: View {
                 }
             }
         }
-        .task(id: chat.devicesVersion) {
+        .task(id: "\(chat.devicesVersion)-\(active)") {
             await AgentSettingsStore.shared.load()
             await ProfileStore.shared.load()
             await store.load()
+            while active && !Task.isCancelled { do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }; await AgentSettingsStore.shared.load() }
         }
+        .sheet(isPresented: $serverEditor) { ServerAddressEditor() }
         .alert("退出登录？", isPresented: $confirmSignOut) {
             Button("退出登录", role: .destructive) { Session.shared.signOut() }
             Button("取消", role: .cancel) {}
@@ -386,17 +390,22 @@ struct ConnectorsPage: View {
                 }
                 .card(radius: 16, padding: 10)
             }
+            let featured = off.filter { ["qq-mail", "gmail", "github", "tavily"].contains($0.name) }
+            if !featured.isEmpty { connectorGroup("精选", items: featured) }
+            connectorGroup("邮箱", items: off.filter { ["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap"].contains($0.name) })
+            connectorGroup("调研与阅读", items: off.filter { ["tavily", "weread"].contains($0.name) })
+            connectorGroup("工作与金融", items: off.filter { ["github", "wind"].contains($0.name) })
+            let known = Set(["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap", "tavily", "weread", "github", "wind"])
+            connectorGroup("更多应用", items: off.filter { !known.contains($0.name) })
+        }
+    }
+
+    @ViewBuilder private func connectorGroup(_ title: String, items: [CloudConnector]) -> some View {
+        if !items.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                SectionTitle(text: "可以接入")
-                Text("点「连接」填写账号，验证成功后豆豆就能使用这个服务。").font(Theme.font(size: 12)).foregroundStyle(Theme.sub).padding(.horizontal, 4)
-                Group {
-                    if off.isEmpty { Note(text: store.loaded ? "没有更多可接入的了" : "加载中…") } else {
-                        Rows(items: off) { c in
-                            ConnectorListRow(connector: c, connected: false) { Nav.shared.openConnector(c.name, from: tab, focus: focus) }
-                        }
-                    }
-                }
-                .card(radius: 16, padding: 10)
+                SectionTitle(text: title)
+                Rows(items: items) { c in ConnectorListRow(connector: c, connected: false) { Nav.shared.openConnector(c.name, from: tab, focus: focus) } }
+                    .card(radius: 16, padding: 10)
             }
         }
     }
@@ -505,7 +514,7 @@ struct DevicesPage: View {
     private func deviceRow(icon: String, name: String, tag: String?, online: Bool, detail: String, action: @escaping () -> Void) -> some View {
         ListRow(icon: icon, tint: Theme.accent, title: name, subtitle: detail, action: action) {
             HStack(spacing: 8) {
-                if let tag { GoldTag(text: tag) }
+                if let tag { StatusTag(text: tag) }
                 Dot(on: online)
             }
         }
@@ -521,14 +530,14 @@ struct DevicesPage: View {
             if expanded == id {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(id == "mac"
-                         ? "1. 在那台 Mac 上下载豆豆（.dmg），拖进「应用程序」打开\n2. 登录页「账号」保持默认云端地址，「密码」填下面生成的 6 位配对码"
-                         : "1. 在手机上下载豆豆（.apk）并安装\n2. 登录页「账号」保持默认云端地址，「密码」填下面生成的 6 位配对码")
+                         ? "1. 在那台 Mac 上下载豆豆（.dmg），拖进「应用程序」打开\n2. 登录页填写同一个云端地址，配对码填下面生成的 6 位码"
+                         : "1. 在手机上下载豆豆（.apk）并安装\n2. 登录页填写同一个云端地址，配对码填下面生成的 6 位码")
                         .font(Theme.font(size: 12.5)).foregroundStyle(Theme.ink.opacity(0.85)).lineSpacing(4)
                     Link(destination: URL(string: "https://github.com/Xiamu-ssr/personal-agent/releases")!) {
                         Label("下载地址：github.com/Xiamu-ssr/personal-agent/releases", systemImage: "arrow.down.circle")
                             .font(Theme.font(size: 12.5, weight: .medium))
                     }
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.link)
                     PairCodeView()
                 }
                 .padding(.leading, 50)
@@ -573,35 +582,28 @@ struct SkillsPage: View {
     }
 }
 
-struct MembershipCard: View {
-    private var profile: ProfileStore { .shared }
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 24).fill(Theme.gold)
-            Canvas { context, size in
-                for x in stride(from: 12.0, to: size.width, by: 14) {
-                    for y in stride(from: 10.0, to: size.height, by: 14) {
-                        context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1.5, height: 1.5)), with: .color(Theme.goldText.opacity(0.10)))
-                    }
-                }
-            }.clipShape(RoundedRectangle(cornerRadius: 24)).allowsHitTesting(false)
-            VStack(alignment: .leading, spacing: 14) {
-                Text("\(profile.userCall) Pro").font(Theme.font(size: 30, weight: .semibold)).foregroundStyle(Theme.goldText)
-                Text(ProfileStore.companionDays(profile.firstChat).map { "陪伴第 \($0) 天" } ?? "从第一次对话起陪伴你")
-                    .font(Theme.font(size: 14)).foregroundStyle(Theme.goldText.opacity(0.75))
-            }.padding(28)
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    ZStack {
-                        Circle().strokeBorder(Theme.goldText.opacity(0.3), lineWidth: 2)
-                        Circle().strokeBorder(Theme.goldText.opacity(0.25), lineWidth: 1).padding(5)
-                        VStack(spacing: 1) { Text(profile.agentName).font(Theme.font(size: 13, weight: .semibold)); Text("COMPANION").font(Theme.font(size: 5.5, weight: .semibold)).tracking(1) }
-                            .foregroundStyle(Theme.goldText.opacity(0.6))
-                    }.frame(width: 70, height: 70).rotationEffect(.degrees(-12)).padding(18)
-                }
-            }
-        }.frame(height: 164).overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Theme.line, lineWidth: 0.5))
+struct ServerAddressEditor:View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var address=Prefs.server
+    @State private var code=""
+    @State private var saving=false
+    @State private var error=""
+    var body:some View {
+        VStack(alignment:.leading,spacing:20) {
+            Text("云端地址").font(Theme.titleFont(22))
+            TextField("https://你的服务器/agent",text:$address).textFieldStyle(.roundedBorder)
+            SecureField("新服务器的配对码",text:$code).textFieldStyle(.roundedBorder)
+            Text("填写新服务器生成的配对码后连接。").font(Theme.font(size:12)).foregroundStyle(Theme.sub)
+            if !error.isEmpty {Text(error).font(Theme.font(size:12))}
+            HStack {Button("取消"){dismiss()}.buttonStyle(SoftButtonStyle());Spacer();Button(saving ? "连接中…":"连接"){save()}.buttonStyle(PrimaryButtonStyle()).disabled(saving || code.isEmpty)}
+        }.padding(30).frame(width:460).background(Theme.background).foregroundStyle(Theme.ink).preferredColorScheme(Theme.scheme)
+    }
+    private func save() {
+        saving=true;Task {defer{saving=false};do {
+            let address=address.trimmingCharacters(in:.whitespacesAndNewlines).trimmingCharacters(in:CharacterSet(charactersIn:"/"))
+            let token=try await Api.authenticate(server:address,password:code)
+            ChatClient.shared.stop();CloudBrowserClient.shared.stop();ConnectorStore.shared.reset();ProfileStore.shared.reset();Api.clearCache()
+            Prefs.server=address;Prefs.token=token;Session.shared.signedIn();dismiss()
+        }catch{self.error=error.localizedDescription}}
     }
 }

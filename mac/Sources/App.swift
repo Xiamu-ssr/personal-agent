@@ -66,9 +66,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 struct DoudouApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
-    init() {
-        if !LocalVerification.explicitLoopback { Prefs.migrate() }
-    }
 
     var body: some Scene {
         Window("豆豆", id: "main") {

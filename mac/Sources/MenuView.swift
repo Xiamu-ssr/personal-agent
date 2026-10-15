@@ -5,8 +5,6 @@ struct MenuView: View {
     @State private var input = ""
     @State private var focused = false
     @State private var windowActivity = WindowActivity()
-    @State private var follower = BottomFollower()
-    @State private var scrollState = ChatScrollState()
     private var chat: ChatClient { .shared }
     private var session: Session { .shared }
 
@@ -20,9 +18,9 @@ struct MenuView: View {
             } else {
                 VStack(spacing: 14) {
                     Spacer()
-                    Orb(size: 56)
+                    AgentAvatar(size: 56)
                     Text("还没登录").font(Theme.font(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                    Button("打开豆豆登录", action: openMain).buttonStyle(GoldButtonStyle(height: 34))
+                    Button("打开豆豆登录", action: openMain).buttonStyle(PrimaryButtonStyle(height: 34))
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -46,7 +44,6 @@ struct MenuView: View {
         HStack(spacing: 10) {
             AgentAvatar(size: 28)
             Text(ProfileStore.shared.agentName).font(Theme.font(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
-            AgentStatusDot()
             Spacer()
             MenuActionButton(symbol: "macwindow", label: "打开主窗口", action: openMain).frame(width: 20, height: 24)
             MenuActionButton(symbol: "power", label: "退出豆豆") { NSApp.terminate(nil) }.frame(width: 20, height: 24)
@@ -56,50 +53,10 @@ struct MenuView: View {
         .padding(.vertical, 10)
     }
 
-    private var messages: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(chat.items.suffix(60)) { MessageRow(item: $0, compact: true) }
-                    }
-                    if !chat.streaming.isEmpty { AssistantBubble(text: chat.streaming, compact: true, messageID: chat.streamID).id("streaming") }
-                    if chat.busy && chat.streaming.isEmpty { Thinking(hint: chat.replyStatus) }
-                    Color.clear.frame(height: 1).id("end")
-                }
-                .background(ChatScrollReader(state: scrollState).frame(width: 0, height: 0))
-                .padding(12)
-            }
-            .overlay(alignment: .bottomTrailing) { ReturnToBottom(state: scrollState) { scrollState.returnToBottom(); follower.request() } }
-            .onAppear { scrollState.messages(chat.items); follower.request() }
-            .onChange(of: chat.items.map(\.id)) {
-                scrollState.messages(chat.items)
-                if windowActivity.active && scrollState.atBottom { follower.request() }
-            }
-            .onChange(of: chat.sentRevision) { scrollState.returnToBottom(); follower.request() }
-            .onChange(of: chat.streaming) {
-                if !chat.streaming.isEmpty { scrollState.stream(chat.streamID, text: chat.streaming) }
-                if windowActivity.active && scrollState.atBottom { follower.request() }
-            }
-            .onChange(of: windowActivity.active) { _, active in
-                if active && scrollState.atBottom { follower.request() } else { follower.cancel() }
-            }
-            .onChange(of: follower.revision) {
-                guard windowActivity.active && scrollState.atBottom else { return }
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { proxy.scrollTo("end", anchor: .bottom) }
-                #if MAC_PERF
-                PerfProbe.shared.record("scroll_to_bottom")
-                #endif
-            }
-            .onDisappear { follower.cancel() }
-        }
-    }
+    private var messages: some View { ChatMessages(compact: true) }
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TaskControls(compact: true)
             HStack(alignment: .bottom, spacing: 8) {
                 GrowingInput(text: $input, focused: $focused, placeholder: "跟豆豆说…（⌥↩ 换行）",
                              enabled: !Composer.shared.sending, fontSize: 13, verticalPadding: 8,
@@ -107,8 +64,8 @@ struct MenuView: View {
                     .frame(maxWidth: .infinity)
                 Button(action: send) {
                     ZStack {
-                        GoldBase()
-                        Image(systemName: "arrow.up").font(Theme.font(size: 13, weight: .bold)).foregroundStyle(Theme.goldText)
+                        CapsuleBase()
+                        Image(systemName: "arrow.up").font(Theme.font(size: 13, weight: .bold)).foregroundStyle(Theme.actionText)
                     }
                     .frame(width: 30, height: 30)
                 }

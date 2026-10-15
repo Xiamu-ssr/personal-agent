@@ -1,9 +1,13 @@
 import Foundation
 
 enum Prefs {
-    private static let d = UserDefaults.standard
+    static let isolatedRoot: URL? = {
+        guard let path = ProcessInfo.processInfo.environment["DOUDOU_DATA_DIR"], path.hasPrefix("/"), !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }()
+    static let d: UserDefaults = isolatedRoot.map { UserDefaults(suiteName: "Doudou.Test." + $0.path.utf8.map { String(format: "%02x", $0) }.joined())! } ?? .standard
     /// Local acceptance keeps UI preferences separate from the installed app.
-    static var uiDefaults: UserDefaults { LocalVerification.explicitLoopback ? UserDefaults(suiteName: "Doudou.LocalVerification")! : .standard }
+    static var uiDefaults: UserDefaults { d }
 
     static var server: String {
         get { trim(d.string(forKey: "server") ?? "") }
@@ -17,7 +21,7 @@ enum Prefs {
     }
 
     static var supportDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Doudou")
+        isolatedRoot ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Doudou")
     }
 
     private static var tokenFile: URL { supportDir.appendingPathComponent("token") }
@@ -32,21 +36,6 @@ enum Prefs {
     }
 
     static var configured: Bool { !server.isEmpty && !token.isEmpty }
-
-    /// The capability walkthrough after the first login. Installs that were already paired before v0.2 skip it.
-    static var onboarded: Bool {
-        get { d.bool(forKey: "onboarded") }
-        set { d.set(newValue, forKey: "onboarded") }
-    }
-
-    /// Run once at launch, before anything reads [onboarded].
-    static func migrate() {
-        if d.object(forKey: "onboarded") == nil { onboarded = configured }
-        for key in ["battery", "clipboard_read", "clipboard_write", "open_url", "frontmost_app", "shortcuts", "folder"] {
-            d.removeObject(forKey: "cap.\(key)")
-        }
-        d.removeObject(forKey: "folder")
-    }
 
     /// 接收消息通知: pop a system notification for replies and finished jobs while the app is in the background.
     static var notifyMessages: Bool {
@@ -63,6 +52,8 @@ enum Prefs {
     static func signOut() {
         token = ""
         d.removeObject(forKey: "firstChatAt")
+        d.removeObject(forKey: "sideChats")
+        d.removeObject(forKey: "feedUnread")
     }
 
     static var deviceId: String {

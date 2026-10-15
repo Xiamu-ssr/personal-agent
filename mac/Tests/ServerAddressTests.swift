@@ -11,7 +11,7 @@ private func check(_ condition: @autoclosure () -> Bool, _ message: String) thro
 struct ServerAddressTests {
     static func main() async {
         // The test executable has its own defaults domain, separate from the installed app.
-        let defaults = UserDefaults.standard
+        let defaults = Prefs.d
         let previous = defaults.object(forKey: "server")
         defer {
             if let previous { defaults.set(previous, forKey: "server") }
@@ -21,7 +21,7 @@ struct ServerAddressTests {
             defaults.removeObject(forKey: "server")
             try check(Prefs.server.isEmpty, "unsaved address must be empty")
             try check(!Prefs.configured, "unsaved address must show login without reading a credential")
-            try check(Api.fileURL("data/sites/example/index.html") == nil, "empty file URL")
+            try check(Api.fileURL("data/library/artifacts/example/index.html") == nil, "empty file URL")
             try check(Api.wsRequest("app") == nil && Api.wsRequest("device") == nil, "empty websocket URL")
             print("PASS: fresh preferences require login; empty file and websocket URLs are skipped")
 
@@ -46,7 +46,7 @@ struct ServerAddressTests {
             for address in ["/agent", "https://", "https://user:secret@example.invalid/agent", "https://example.invalid/agent?other=1"] {
                 Prefs.server = address
                 try check(Api.serverURL() == nil, "invalid base URL")
-                try check(Api.fileURL("data/sites/example/index.html") == nil, "invalid preview URL")
+                try check(Api.fileURL("data/library/artifacts/example/index.html") == nil, "invalid preview URL")
                 try check(Api.wsRequest("app") == nil, "invalid websocket URL")
             }
             print("PASS: invalid base addresses cannot produce preview or websocket requests")
@@ -55,7 +55,7 @@ struct ServerAddressTests {
             try check(Prefs.server == "https://example.invalid/agent", "saved address is preserved")
             let request = try Api.request("/api/state", server: Prefs.server, token: "fixture-token")
             try check(request.url?.absoluteString == "https://example.invalid/agent/api/state", "saved HTTP base")
-            try check(Api.fileURL("data/sites/example/index.html")?.absoluteString == "https://example.invalid/agent/files/data/sites/example/index.html", "saved file base")
+            try check(Api.fileURL("data/library/artifacts/example/index.html")?.absoluteString == "https://example.invalid/agent/files/data/library/artifacts/example/index.html", "saved file base")
             print("PASS: saved user addresses still build the expected endpoints")
         } catch {
             print("FAIL: \(error)")

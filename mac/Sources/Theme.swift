@@ -4,88 +4,58 @@ import SwiftUI
 
 extension Color {
     init(hex: UInt32, alpha: Double = 1) {
-        self.init(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
-                  blue: Double(hex & 0xFF) / 255, opacity: alpha)
+        self.init(.sRGB, red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255,
+                  blue: Double(hex & 255) / 255, opacity: alpha)
     }
 }
-
-enum Skin: String, CaseIterable, Identifiable {
-    case silver, paper, night
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system, light, dark
     var id: String { rawValue }
-    var title: String { switch self { case .silver: "银蓝"; case .paper: "纸墨"; case .night: "夜幕" } }
-    var palette: [UInt32] {
-        switch self {
-        case .silver: [0xF3F5F8, 0xFFFFFF, 0x1E2733, 0x6B7686, 0xE3E7ED, 0x4A78A8, 0xE6EEF7, 0xB89A5E, 0x3E8E6A, 0xC2873A, 0x4A78A8]
-        case .paper: [0xF5F0E6, 0xFBF8F2, 0x231F1A, 0x7A7065, 0xE6DDCD, 0xB4442E, 0xF3E3DA, 0x9C7A3C, 0x5B7F4E, 0xB0782C, 0x5E6F8C]
-        case .night: [0x0F1216, 0x181C22, 0xE6E8EB, 0x8C95A1, 0x262B33, 0x5CCFB0, 0x1E3330, 0xE0A54B, 0x5CCFB0, 0xE0A54B, 0x7BA7E0]
-        }
-    }
+    var title: String { switch self { case .system: "跟随系统"; case .light: "浅色"; case .dark: "深色" } }
 }
-
-@Observable final class SkinStore {
-    static let shared = SkinStore(defaults: Prefs.uiDefaults)
-    private(set) var skin: Skin
-    @ObservationIgnored private let defaults: UserDefaults
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        skin = defaults.string(forKey: "skin").flatMap(Skin.init) ?? .silver
-    }
-    func select(_ skin: Skin) {
-        guard self.skin != skin else { return }
-        self.skin = skin
-        defaults.set(skin.rawValue, forKey: "skin")
-    }
+@Observable final class AppearanceStore {
+    static let shared = AppearanceStore()
+    var selection = AppAppearance(rawValue: Prefs.uiDefaults.string(forKey: "appearance") ?? "") ?? .system
+    var systemDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    func select(_ value: AppAppearance) { selection = value; Prefs.uiDefaults.set(value.rawValue, forKey: "appearance") }
 }
-
-/// Every lookup observes the local skin, without replacing a page or its native views.
 enum Theme {
-    static var skin: Skin { SkinStore.shared.skin }
-    private static func color(_ i: Int) -> Color { Color(hex: skin.palette[i]) }
-    static var background: Color { color(0) }
-    static var card: Color { color(1) }
-    static var ink: Color { color(2) }
-    static var sub: Color { color(3) }
+    static var dark: Bool { AppearanceStore.shared.selection == .dark || (AppearanceStore.shared.selection == .system && AppearanceStore.shared.systemDark) }
+    static var scheme: ColorScheme? { switch AppearanceStore.shared.selection { case .system: nil; case .light: .light; case .dark: .dark } }
+    static var appearance: NSAppearance? { AppearanceStore.shared.selection == .system ? nil : NSAppearance(named: dark ? .darkAqua : .aqua) }
+    static var background: Color { dark ? .black : .white }
+    static var card: Color { Color(hex: dark ? 0x1C1C1E : 0xF3F3F3) }
+    static var ink: Color { dark ? .white : .black }
+    static var sub: Color { Color(hex: dark ? 0x99999E : 0x77777B) }
     static var faint: Color { sub }
-    static var line: Color { color(4) }
-    static var accent: Color { color(5) }
-    static var field: Color { background }
-    static var userBubble: Color { color(6) }
-    static var ornament: Color { color(7) }
-    static var online: Color { color(8) }
-    static var warning: Color { color(9) }
-    static var info: Color { color(10) }
-    static var danger: Color { skin == .night ? Color(hex: 0xE49B91) : Color(hex: 0xB4442E) }
-    static var goldText: Color { accent }
-    static var canvas: LinearGradient { LinearGradient(colors: [background, background], startPoint: .top, endPoint: .bottom) }
-    static var gold: LinearGradient { goldWash }
-    static var goldWash: LinearGradient { LinearGradient(colors: [userBubble, userBubble], startPoint: .top, endPoint: .bottom) }
-    static var scheme: ColorScheme { skin == .night ? .dark : .light }
-    static var appearance: NSAppearance? { NSAppearance(named: skin == .night ? .darkAqua : .aqua) }
-    static var sidebar: Color { card }
+    static var line: Color { ink.opacity(0.09) }
+    static var accent: Color { ink }
+    static var link: Color { Color(hex: dark ? 0x64A8FF : 0x007AFF) }
+    static var field: Color { card }
+    static var userBubble: Color { Color(hex: dark ? 0x303033 : 0xE8E8EA) }
+    static var ornament: Color { sub }
+    static var online: Color { ink }
+    static var warning: Color { ink }
+    static var info: Color { ink }
+    static var danger: Color { ink }
+    static var actionText: Color { ink }
+    static var canvas: Color { background }
+    static var selection: Color { userBubble }
+    static var sidebar: Color { background }
     static var bodySize: CGFloat { 15 }
     static var secondarySize: CGFloat { 13 }
-    static var cardTitleSize: CGFloat { 17 }
-    static func font(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
-        Font.system(size: size, weight: skin == .night && weight == .regular ? .light : weight, design: design).monospacedDigit()
-    }
-    static func titleFont(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-        skin == .paper ? .custom("Songti SC", size: size).weight(weight).monospacedDigit() : font(size: size, weight: weight)
-    }
+    static func font(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font { .system(size: size, weight: weight, design: design) }
+    static func titleFont(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font { font(size: size, weight: weight) }
     static var categories: [(dir: String, name: String, icon: String, color: Color)] {
-        [("work", "工作", "briefcase", accent), ("project", "项目", "folder", accent),
-         ("life", "生活", "house", ornament), ("health", "健康", "heart", online),
-         ("people", "人际", "person.2", accent), ("preferences", "偏好", "slider.horizontal.3", accent),
-         ("interests", "兴趣", "sparkles", ornament), ("finance", "财务", "yensign.circle", accent),
-         ("feedback", "反馈", "text.bubble", accent), ("history", "历史", "clock.arrow.circlepath", accent),
-         ("automation-prefs", "自动化偏好", "gearshape.2", accent), ("voice-notes", "语音笔记", "waveform", accent),
-         ("role", "角色", "person.crop.circle", accent)]
+        [("profile","总档","person.text.rectangle",ink),("work","工作","briefcase",ink),("project","项目","folder",ink),
+         ("life","生活","house",ink),("health","健康","heart",ink),("people","人际","person.2",ink),
+         ("preferences","偏好","slider.horizontal.3",ink),("interests","兴趣","sparkles",ink),("finance","财务","yensign.circle",ink),
+         ("feedback","反馈","text.bubble",ink),("history","历史","clock",ink),("automation-prefs","自动化偏好","gearshape.2",ink),("voice-notes","语音笔记","waveform",ink)]
     }
     static func category(_ dir: String) -> (name: String, icon: String, color: Color) {
-        if let c = categories.first(where: { $0.dir == dir }) { return (c.name, c.icon, c.color) }
-        return (dir == "profile" ? "总档" : dir, "doc.text", accent)
+        let c = categories.first { $0.dir == dir }; return (c?.name ?? dir,c?.icon ?? "doc.text",ink)
     }
 }
-
 struct CardStyle: ViewModifier {
     var radius: CGFloat = 16
     var padding: CGFloat = 18
@@ -103,8 +73,8 @@ extension View {
     func card(radius: CGFloat = 16, padding: CGFloat = 18) -> some View { modifier(CardStyle(radius: radius, padding: padding)) }
 }
 
-/// The champagne-gold metallic capsule used for selected states, 已连接 and primary buttons.
-struct GoldBase: View {
+/// Monochrome capsule for actions and selected states.
+struct CapsuleBase: View {
     var radius: CGFloat = 999
 
     var body: some View {
@@ -112,22 +82,22 @@ struct GoldBase: View {
     }
 }
 
-struct GoldButtonStyle: ButtonStyle {
+struct PrimaryButtonStyle: ButtonStyle {
     var height: CGFloat = 40
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Theme.font(size: 14, weight: .semibold))
-            .foregroundStyle(Theme.goldText)
+            .foregroundStyle(Theme.actionText)
             .padding(.horizontal, 20)
             .frame(height: height)
-            .background(GoldBase())
+            .background(CapsuleBase())
             .opacity(configuration.isPressed ? 0.8 : 1)
             .contentShape(Capsule())
     }
 }
 
-/// Light blue-gray pill (e.g. 连接, 立即运行).
+/// Secondary capsule action.
 struct SoftButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -156,30 +126,11 @@ struct CircleIconButton: View {
                 .frame(width: 36, height: 36)
                 .background(Circle().fill(Theme.card))
                 .overlay(Circle().strokeBorder(Theme.line, lineWidth: 0.5))
-                .shadow(color: Color(hex: 0x253751, alpha: 0.06), radius: 8, y: 4)
+
         }
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)
-    }
-}
-
-/// The silver metal ball that stands in for 豆豆.
-struct Orb: View {
-    var size: CGFloat = 40
-
-    var body: some View {
-        ZStack {
-            Circle().fill(RadialGradient(colors: [.white, Color(hex: 0xDCE6F2), Color(hex: 0xAFC0D3)],
-                                         center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: size * 0.62))
-            Circle().fill(RadialGradient(colors: [Color(hex: 0x8EA2BA, alpha: 0.55), .clear],
-                                         center: UnitPoint(x: 0.7, y: 0.85), startRadius: 0, endRadius: size * 0.5))
-            Ellipse().fill(.white.opacity(0.9)).frame(width: size * 0.3, height: size * 0.18)
-                .blur(radius: size * 0.03).offset(x: -size * 0.14, y: -size * 0.22)
-            Circle().strokeBorder(.white.opacity(0.8), lineWidth: max(1, size / 40))
-        }
-        .frame(width: size, height: size)
-        .shadow(color: Color(hex: 0x4A5F7A, alpha: 0.25), radius: size / 8, y: size / 16)
     }
 }
 
@@ -294,7 +245,7 @@ struct Rows<Item: Identifiable, Row: View>: View {
     }
 }
 
-/// Champagne capsule tabs: 进行中 · 已完成 · 定时, 本机 · 云端 · 其他设备.
+/// Capsule navigation.
 struct PillTabs: View {
     let titles: [String]
     @Binding var selection: Int
@@ -305,26 +256,27 @@ struct PillTabs: View {
                 Button { selection = i } label: {
                     Text(titles[i])
                         .font(Theme.font(size: 13, weight: selection == i ? .semibold : .regular))
-                        .foregroundStyle(selection == i ? Theme.goldText : Theme.sub)
+                        .foregroundStyle(selection == i ? Theme.actionText : Theme.sub)
                         .padding(.horizontal, 14)
                         .frame(height: 30)
-                        .background { if selection == i { GoldBase() } }
+                        .background { if selection == i { CapsuleBase() } }
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .verificationAction("pill-"+titles[i])
                 .accessibilityLabel(titles[i])
             }
         }
     }
 }
 
-/// Gold 已连接 tag.
-struct GoldTag: View {
+/// Status tag.
+struct StatusTag: View {
     let text: String
 
     var body: some View {
-        Text(text).font(Theme.font(size: 11.5, weight: .semibold)).foregroundStyle(Theme.goldText)
-            .padding(.horizontal, 12).frame(height: 24).background(GoldBase())
+        Text(text).font(Theme.font(size: 11.5, weight: .semibold)).foregroundStyle(Theme.actionText)
+            .padding(.horizontal, 12).frame(height: 24).background(CapsuleBase())
     }
 }
 

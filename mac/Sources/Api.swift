@@ -119,6 +119,8 @@ enum Api {
         return object
     }
 
+    static func query(_ value: String) -> String { value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "" }
+
     private static let queryAllowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+?#"))
 
     /// Store a file under data/uploads/<date>/ and return the attachment the chat message should carry.
@@ -170,8 +172,8 @@ enum Api {
     static func wsRequest(_ role: String) -> URLRequest? {
         guard let base = serverURL(), var parts = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
         parts.scheme = base.scheme?.lowercased() == "https" ? "wss" : "ws"
-        parts.percentEncodedPath += "/ws"
-        parts.queryItems = [URLQueryItem(name: "role", value: role)]
+        parts.percentEncodedPath += role == "browser" ? "/ws/browser" : "/ws"
+        parts.queryItems = role == "browser" ? nil : [URLQueryItem(name: "role", value: role)]
         guard let u = parts.url else { return nil }
         var r = URLRequest(url: u)
         r.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
@@ -197,7 +199,7 @@ enum Api {
         try validate(Data(), response)
         try Task.checkCancellation()
         let key = SHA256.hash(data: Data((server + "/" + dataPath).utf8)).map { String(format: "%02x", $0) }.joined()
-        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let dir = (Prefs.isolatedRoot ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0])
             .appendingPathComponent("com.xiamu.agent.mac/media", isDirectory: true).appendingPathComponent(key, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appendingPathComponent((dataPath as NSString).lastPathComponent)

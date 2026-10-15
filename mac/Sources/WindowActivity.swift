@@ -18,7 +18,7 @@ final class WindowActivity {
 struct WindowActivityReader: NSViewRepresentable {
     let activity: WindowActivity
     func makeNSView(context: Context) -> ActivityView { ActivityView(activity: activity) }
-    func updateNSView(_ nsView: ActivityView, context: Context) { nsView.applySkin() }
+    func updateNSView(_ nsView: ActivityView, context: Context) { nsView.applyAppearance() }
 }
 
 final class ActivityView: NSView {
@@ -43,11 +43,11 @@ final class ActivityView: NSView {
                 observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in self?.refresh() })
             }
         }
-        applySkin()
+        applyAppearance()
         refresh()
     }
 
-    func applySkin() {
+    func applyAppearance() {
         window?.appearance = Theme.appearance
         window?.backgroundColor = NSColor(Theme.background)
     }

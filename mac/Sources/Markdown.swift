@@ -148,7 +148,7 @@ enum Markdown {
 
     /// Inline Markdown (bold, italics, code, links) with a soft background behind code spans.
     static func inline(_ s: String) -> AttributedString {
-        let cacheKey = (Theme.skin.rawValue + ":" + s) as NSString
+        let cacheKey = (String(Theme.dark) + ":" + s) as NSString
         if let cached = inlineCache.object(forKey: cacheKey) { return cached.value }
         #if MAC_PERF
         PerfProbe.shared.record("markdown_inline")
@@ -186,7 +186,7 @@ struct MarkdownView: View {
             ForEach(Array(Markdown.blocks(text, id: cacheID).enumerated()), id: \.offset) { _, b in block(b) }
         }
         .foregroundStyle(Theme.ink)
-        .tint(Theme.accent)
+        .tint(Theme.link)
     }
 
     @ViewBuilder
@@ -292,7 +292,7 @@ struct MarkdownParagraph: NSViewRepresentable {
         view.editor.isEditable = false
         view.editor.identifier = NSUserInterfaceItemIdentifier("markdown-paragraph")
         view.editor.isSelectable = true
-        view.editor.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
+        view.editor.linkTextAttributes = [.foregroundColor: NSColor(Theme.link)]
         return view
     }
 
@@ -300,7 +300,7 @@ struct MarkdownParagraph: NSViewRepresentable {
         let key = NativeMarkdownContent(text: text, refs: [], size: size, lineHeight: lineHeight)
         guard context.coordinator.content != key else { return }
         context.coordinator.content = key
-        view.editor.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
+        view.editor.linkTextAttributes = [.foregroundColor: NSColor(Theme.link)]
         view.editor.textStorage?.setAttributedString(MemoryPointerText.rendered(text: text, refs: [], size: size, lineHeight: lineHeight))
         view.textChanged(force: true)
     }
@@ -319,7 +319,7 @@ struct NativeMarkdownContent: Hashable {
     let refs: [String]
     let size: CGFloat
     let lineHeight: CGFloat?
-    var skin: Skin = Theme.skin
+    var dark: Bool = Theme.dark
 }
 
 private final class NativeMarkdownCacheKey: NSObject {
@@ -335,7 +335,7 @@ private final class NativeMarkdownCacheKey: NSObject {
         let cache = NSCache<NSString, NSImage>(); cache.countLimit = 128; cache.totalCostLimit = 4 << 20; return cache
     }()
     static func image(path: String) -> NSImage? {
-        let cacheKey = (Theme.skin.rawValue + ":" + path) as NSString
+        let cacheKey = (String(Theme.dark) + ":" + path) as NSString
         if let cached = images.object(forKey: cacheKey) { return cached }
         #if MAC_PERF
         PerfProbe.shared.record("pointer_image")
@@ -447,7 +447,7 @@ struct MemoryPointerText: NSViewRepresentable {
         view.isVerticallyResizable = false
         view.isHorizontallyResizable = false
         view.delegate = context.coordinator
-        view.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
+        view.linkTextAttributes = [.foregroundColor: NSColor(Theme.link)]
         return view
     }
 
@@ -479,7 +479,7 @@ struct MemoryPointerText: NSViewRepresentable {
         PerfProbe.shared.record("richtext_render")
         #endif
         let result = NSMutableAttributedString()
-        let base = NSFont.systemFont(ofSize: size, weight: Theme.skin == .night ? .light : .regular)
+        let base = NSFont.systemFont(ofSize: size, weight: .regular)
         let markdown = Markdown.inline(text)
         for run in markdown.runs {
             var font = base
@@ -532,7 +532,7 @@ struct MemoryPointerText: NSViewRepresentable {
         @MainActor @discardableResult func apply(_ content: NativeMarkdownContent, to view: MemoryPointerTextView) -> Bool {
             guard self.content != content else { return false }
             self.content = content
-            view.linkTextAttributes = [.foregroundColor: NSColor(Theme.accent)]
+            view.linkTextAttributes = [.foregroundColor: NSColor(Theme.link)]
             view.setContent(MemoryPointerText.rendered(text: content.text, refs: content.refs, size: content.size, lineHeight: content.lineHeight))
             return true
         }

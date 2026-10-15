@@ -226,7 +226,7 @@ struct MediaFileCard: View {
                 IconTile(icon: Self.icon(item.path), size: 34)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.name).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                    Text(failed || unavailable ? "文件不可用" : Fmt.size(item.size)).font(Theme.font(size: 11)).foregroundStyle(Theme.sub)
+                    Text(failed || unavailable ? "文件不可用" : (item.size > 0 ? Fmt.size(item.size) : "打开文件")).font(Theme.font(size: 11)).foregroundStyle(Theme.sub)
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if loading { ActiveProgress().controlSize(.small) }
                 else { Image(systemName: "arrow.up.right").font(Theme.font(size: 11)).foregroundStyle(Theme.faint) }

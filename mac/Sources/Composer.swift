@@ -30,11 +30,13 @@ enum PasteContent {
     }
 }
 
-/// The one input box shared by 聊天 · 今日 · 任务 · 记忆 (and its draft survives switching pages).
+/// Shared attachment and voice input for main chat, side chats and activity continuations.
 @Observable
 final class Composer {
     static let shared = Composer()
     let taskID: String?
+    @ObservationIgnored var delivery:((String,[Attachment]) async throws -> Void)?
+    var canDeliver:Bool { delivery != nil || taskID != nil || ChatClient.shared.connected }
     var sentRevision = 0
     init(taskID: String? = nil) { self.taskID = taskID }
 
@@ -74,7 +76,7 @@ final class Composer {
     }
 
     private func toChat() {
-        guard taskID == nil else { return }
+        guard taskID == nil && delivery == nil else { return }
         Nav.shared.go(.chat)
         Nav.shared.stacks[.chat] = []
     }
@@ -177,7 +179,7 @@ final class Composer {
         guard !sending, !transcribing, recording == nil, !preparing, hasContent else { return false }
         let text = self.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let drafts = self.drafts
-        if taskID == nil && !ChatClient.shared.connected { fail("还没连上，稍等再发"); return false }
+        if !canDeliver { fail("还没连上，稍等再发"); return false }
         sending = true
         defer { sending = false }
         do {
@@ -199,10 +201,12 @@ final class Composer {
     }
 
     @MainActor private func deliver(_ text: String, attachments: [Attachment] = []) async throws {
-        if let taskID {
+        if let delivery {
+            try await delivery(text,attachments)
+        } else if let taskID {
             var body: [String: Any] = ["text": text]
             if !attachments.isEmpty { body["attachments"] = attachments.map(\.json) }
-            let response = try await Api.json(TaskHistoryStore.endpoint(taskID, action: "send"), method: "POST", body: body)
+            let response = try await Api.json(ActivityStore.endpoint(taskID, action: "send"), method: "POST", body: body)
             guard response["ok"] as? Bool == true, response["id"] as? String == taskID else {
                 throw ApiError(code: 0, message: "续聊没有发出去，请重试")
             }
@@ -263,7 +267,7 @@ final class Composer {
 
     func retryTranscribe() {
         guard let data = retryAudio, !transcribing, !sending else { return }
-        guard taskID != nil || ChatClient.shared.connected else { return fail("豆豆还没准备好，录音已保留，稍后再试") }
+        guard canDeliver else { return fail("豆豆还没准备好，录音已保留，稍后再试") }
         transcribing = true
         operation = Task { @MainActor in
             do {
@@ -304,7 +308,7 @@ final class Composer {
         guard let (data, _) = recorder.finish() else { return fail("没录到声音") }
         let name = "语音笔记-\(Fmt.hm.string(from: Date()).replacingOccurrences(of: ":", with: "")).m4a"
         let draft = Draft(data: data, name: name, kind: "voice")
-        guard taskID != nil || ChatClient.shared.connected else { drafts.append(draft); return fail("还没连上，录音已保留在输入框") }
+        guard canDeliver else { drafts.append(draft); return fail("还没连上，录音已保留在输入框") }
         sending = true
         operation = Task { @MainActor in
             var att: Attachment?
@@ -342,10 +346,10 @@ struct ComposerBar: View {
     @Bindable var c: Composer = .shared
     private var chat: ChatClient { .shared }
     @State private var focused = false
+    @State private var takingPhoto = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if c.taskID == nil { TaskControls() }
             if c.recording != nil || c.transcribing { RecordingPanel(c: c) }
             if !c.drafts.isEmpty { drafts }
             if !c.error.isEmpty {
@@ -357,7 +361,7 @@ struct ComposerBar: View {
                     Text("录音已保留，可稍后重新转写").font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
                     Spacer()
                     Button("清除") { c.retryAudio = nil }.buttonStyle(SoftButtonStyle())
-                    Button("重新转写") { c.retryTranscribe() }.buttonStyle(SoftButtonStyle()).disabled(c.taskID == nil && !chat.connected)
+                    Button("重新转写") { c.retryTranscribe() }.buttonStyle(SoftButtonStyle()).disabled(!c.canDeliver)
                 }
                 .padding(.horizontal, 8)
             }
@@ -374,6 +378,7 @@ struct ComposerBar: View {
         .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Theme.card))
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
         .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 2)
+        .sheet(isPresented: $takingPhoto) { PhotoCaptureView { c.add(image: $0, name: "照片") } }
         #if MAC_VERIFY
         .onAppear { if c.taskID != nil { ComposerVerification.currentTask = c } }
         #endif
@@ -383,6 +388,7 @@ struct ComposerBar: View {
         Menu {
             Button { c.pick(images: false) } label: { Label("上传文件", systemImage: "doc") }
             Button { c.pick(images: true) } label: { Label("图片", systemImage: "photo") }
+            Button { takingPhoto = true } label: { Label("拍照", systemImage: "camera") }
             Button { c.startNote() } label: { Label("录制语音笔记", systemImage: "waveform") }
         } label: {
             Image(systemName: "plus").font(Theme.font(size: 16, weight: .regular)).foregroundStyle(Theme.ink.opacity(0.7))
@@ -405,9 +411,9 @@ struct ComposerBar: View {
     private var holdButton: some View {
         Text(c.holding ? (c.holdCancel ? "松开 取消" : "松开 发送") : "按住 说话")
             .font(Theme.font(size: 14, weight: .medium))
-            .foregroundStyle(c.holding ? Theme.goldText : Theme.ink)
+            .foregroundStyle(c.holding ? Theme.actionText : Theme.ink)
             .frame(maxWidth: .infinity, minHeight: 38)
-            .background { if c.holding { GoldBase() } else { Capsule().fill(Theme.card) } }
+            .background { if c.holding { CapsuleBase() } else { Capsule().fill(Theme.card) } }
             .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
             .contentShape(Capsule())
             .gesture(DragGesture(minimumDistance: 0)
@@ -430,14 +436,14 @@ struct ComposerBar: View {
         } else if c.hasContent {
             Button { c.send() } label: {
                 ZStack {
-                    GoldBase()
+                    CapsuleBase()
                     if c.sending { ActiveProgress().controlSize(.small) } else {
-                        Image(systemName: "arrow.up").font(Theme.font(size: 15, weight: .bold)).foregroundStyle(Theme.goldText)
+                        Image(systemName: "arrow.up").font(Theme.font(size: 15, weight: .bold)).foregroundStyle(Theme.actionText)
                     }
                 }
                 .frame(width: 38, height: 38)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).verificationAction("composer-send")
             .disabled(c.sending)
             .help("发送（↩︎）· ⌥↩︎ 换行")
             .accessibilityLabel(c.taskID == nil ? "发送" : "发送续聊")
@@ -507,7 +513,7 @@ struct RecordingPanel: View {
                 Wave(levels: c.recorder.levels).frame(height: 26)
                 if c.recording == .note {
                     Button("取消") { c.cancelRecording() }.buttonStyle(SoftButtonStyle())
-                    Button("完成") { c.finishNote() }.buttonStyle(GoldButtonStyle(height: 28))
+                    Button("完成") { c.finishNote() }.buttonStyle(PrimaryButtonStyle(height: 28))
                 } else {
                     Text(c.holdCancel ? "松开取消" : "松开发送 · 上滑取消")
                         .font(Theme.font(size: 12)).foregroundStyle(c.holdCancel ? Theme.danger : Theme.sub)

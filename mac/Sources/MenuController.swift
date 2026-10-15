@@ -9,7 +9,7 @@ enum LocalVerification {
         guard let i = args.firstIndex(of: "-server"), args.indices.contains(i + 1),
               let url = URL(string: args[i + 1]), url.scheme == "http",
               ["127.0.0.1", "localhost", "::1"].contains(url.host ?? "") else { return false }
-        return Prefs.server == args[i + 1].trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return Prefs.isolatedRoot != nil && Prefs.server == args[i + 1].trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
     static var openMenuOnLaunch: Bool { explicitLoopback && CommandLine.arguments.contains("--open-menu-on-launch") }
 }

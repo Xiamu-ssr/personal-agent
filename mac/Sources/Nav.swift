@@ -3,154 +3,47 @@ import Observation
 import SwiftUI
 
 enum Tab: String, CaseIterable {
-    case chat, today, tasks, memory, home, settings
-
-    var title: String {
-        switch self {
-        case .chat: "聊天"
-        case .today: "今日"
-        case .tasks: "任务"
-        case .memory: "记忆"
-        case .home: "豆豆"
-        case .settings: "设置"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .chat: "bubble.left"
-        case .today: "calendar"
-        case .tasks: "list.bullet.rectangle"
-        case .memory: "sparkles"
-        case .home: "person"
-        case .settings: "gearshape"
-        }
-    }
-
-    /// Each tab's own cool tint when not selected (spec §四).
-    var tint: Color { Theme.accent }
-
-    /// Composer placeholder on the pages that have one.
-    var prompt: String? {
-        switch self {
-        case .chat: "说说你想做什么…"
-        case .today: "告诉我今天的安排…"
-        case .tasks: "交给豆豆一个任务…"
-        case .memory: "告诉豆豆更多关于你的事…"
-        default: nil
-        }
-    }
+    case chat, feed, ideas, goals, library, settings
+    var title: String { switch self { case .chat:"聊天"; case .feed:"动态"; case .ideas:"点子"; case .goals:"目标"; case .library:"资源库"; case .settings:"设置" } }
+    var icon: String { switch self { case .chat:"bubble.left"; case .feed:"newspaper"; case .ideas:"lightbulb"; case .goals:"checkmark.square"; case .library:"square.grid.2x2"; case .settings:"gearshape" } }
+    var prompt: String? { self == .chat ? "消息" : nil }
 }
-
 enum Route: Hashable {
-    /// A site (or any file the web view can show).
-    case web(title: String, path: String)
-    /// A Markdown/text file rendered natively.
-    case doc(title: String, path: String)
-    case memoryCategory(String)
-    case health
-    case healthBrief(path: String, title: String)
-    case diaries
-    case connectors(tab: Int, focus: String? = nil)
-    case connector(String)
-    case connectorForm(name: String, accountID: String?)
-    case devices
-    case skills
-    case agentSetting(AgentSetting)
-    case taskDetail(id: String, title: String, briefPath: String?)
+    case web(title:String,path:String), doc(title:String,path:String)
+    case connectors(tab:Int,focus:String?=nil), connector(String), connectorForm(name:String,accountID:String?)
+    case devices, skills, agentSetting(AgentSetting), activity(id:String,title:String), goal(String), memoryItem(title:String,path:String)
 }
-
-/// Which page is showing: a sidebar tab, plus a stack of pages pushed inside it.
-@Observable
-final class Nav {
-    static let shared = Nav()
-
+@Observable final class Nav {
+    static let shared=Nav()
     var tab: Tab = .chat
-    var stacks: [Tab: [Route]] = [:]
-    /// Full-window image viewer.
-    var preview: String? = nil
-    var toast = ""
-    var briefFocus: String?
-    var todaySection = 0
-    var tasksSection = 0
-
-    func go(_ t: Tab) {
-        if t == .today { todaySection = 0 }
-        if t == .tasks { tasksSection = 0 }
-        if tab == t || t == .settings { stacks[t] = [] }
-        tab = t
+    var sideChat:SideChatThread?
+    var stacks: [Tab:[Route]]=[:]
+    var preview: String?
+    var toast=""
+    var console=false
+    var consoleTab=0
+    func go(_ t: Tab) { if t == tab { stacks[t]=[] }; tab=t; if t == .chat {sideChat=nil} }
+    func openSide(_ thread:SideChatThread) {stacks[.chat]=[]; tab = .chat; sideChat=thread; console=false}
+    func push(_ r: Route, in tab: Tab?=nil) { let t=tab ?? self.tab; self.tab=t; stacks[t,default:[]].append(r) }
+    func pop() { if !(stacks[tab]?.isEmpty ?? true) { stacks[tab]?.removeLast() } }
+    func openConnector(_ name:String,from:Int,focus:String?=nil) { push(.connector(name)) }
+    func show(_ s:String) { toast=s; DispatchQueue.main.asyncAfter(deadline:.now()+3) { [weak self] in if self?.toast == s { self?.toast="" } } }
+    enum FilePresentation { case image,text,web,external }
+    static func filePresentation(_ p:String) -> FilePresentation {
+        let ext=(p as NSString).pathExtension.lowercased()
+        if ["png","jpg","jpeg","gif","webp","heic","bmp","tiff"].contains(ext) { return .image }
+        if ["md","txt","csv","json","log"].contains(ext) { return .text }
+        if ["","html","htm","svg","pdf"].contains(ext) { return .web }; return .external
     }
-
-    func push(_ r: Route, in t: Tab? = nil) {
-        let t = t ?? tab
-        tab = t
-        stacks[t, default: []].append(r)
-    }
-
-    /// Keep the selected host tab when returning from a connector detail.
-    func openConnector(_ name: String, from hostTab: Int, focus: String? = nil) {
-        if var stack = stacks[tab], case .connectors? = stack.last {
-            stack[stack.count - 1] = .connectors(tab: hostTab, focus: focus)
-            stacks[tab] = stack
-        }
-        push(.connector(name))
-    }
-
-    func pop() {
-        if !(stacks[tab]?.isEmpty ?? true) { stacks[tab]?.removeLast() }
-    }
-
-    func show(_ message: String) {
-        toast = message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-            if self?.toast == message { self?.toast = "" }
+    func open(_ p:String,title:String?=nil,onFailure:(()->Void)?=nil) {
+        guard DataPath.valid(p.trimmingCharacters(in:CharacterSet(charactersIn:"/"))) else { show("文件地址不对"); return }
+        let title=title ?? ((p as NSString).lastPathComponent as NSString).deletingPathExtension
+        switch Self.filePresentation(p) {
+        case .image: preview=p
+        case .text: push(.doc(title:title,path:p))
+        case .web: push(.web(title:title,path:p))
+        case .external: Task { @MainActor in do { try await Api.openExternally(p) } catch { if let onFailure { onFailure() } else { show(error.localizedDescription) } } }
         }
     }
-
-    private static let imageExts: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff"]
-    private static let textExts: Set<String> = ["md", "txt", "csv", "json", "log"]
-
-    enum FilePresentation { case brief, image, text, web, external }
-    static func filePresentation(_ path: String) -> FilePresentation {
-        if path.hasPrefix("data/briefs/") { return .brief }
-        let ext = (path as NSString).pathExtension.lowercased()
-        if imageExts.contains(ext) { return .image }
-        if textExts.contains(ext) { return .text }
-        if ext.isEmpty || ["html", "htm", "svg", "pdf"].contains(ext) { return .web }
-        return .external
-    }
-
-    /// Open a data/ path the best way we can: web view, Markdown page, image viewer, or the default app.
-    func open(_ path: String, title: String? = nil, onFailure: (() -> Void)? = nil) {
-        let name = title ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension
-        switch Self.filePresentation(path) {
-        case .brief:
-            guard BriefItem.validPath(path) else { show("这份简报暂时读不到"); return }
-            stacks[.today] = []
-            todaySection = 0
-            tab = .today
-            briefFocus = path
-        case .image:
-            preview = path
-        case .text:
-            push(.doc(title: name, path: path))
-        case .web:
-            push(.web(title: name, path: path))
-        case .external:
-            Task { @MainActor in
-                do { try await Api.openExternally(path) }
-                catch { if let onFailure { onFailure() } else { show("打不开：\(error.localizedDescription)") } }
-            }
-        }
-    }
-
-    /// Say something in the chat on the user's behalf (推荐任务, 连接 a catalog connector) and jump there.
-    func ask(_ text: String) {
-        if ChatClient.shared.send(text) {
-            go(.chat)
-            stacks[.chat] = []
-        } else {
-            show("还没连上，稍等再试")
-        }
-    }
+    func ask(_ s:String) { if ChatClient.shared.send(s) { stacks[.chat]=[]; tab = .chat; sideChat=nil; console=false } else { show("还没连上，稍等再试") } }
 }

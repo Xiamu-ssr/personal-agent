@@ -1,10 +1,10 @@
 #!/bin/bash
 # Build 豆豆.app (universal, fixed local identity) with only the Command Line Tools.
 #   bash mac/tools/make-signing-identity.sh   # user runs once; may show Keychain dialogs
-#   VERSION=0.7.1 bash mac/build.sh         # -> mac/build/doudou-0.7.1.dmg
+#   VERSION=0.8.0 bash mac/build.sh         # -> mac/build/doudou-0.8.0.dmg
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION=${VERSION:-0.7.1}
+VERSION=${VERSION:-0.8.0}
 BUILD=${BUILD:-1}
 OUT=${OUT:-build}
 APP="$OUT/豆豆.app"
@@ -40,6 +40,8 @@ for arch in arm64 x86_64; do
   swiftc -swift-version 5 -O -parse-as-library -target "$arch-apple-macos14" -sdk "$SDK" "${FIX[@]}" "${SOURCES[@]}" -o "$OUT/Doudou-$arch"
 done
 lipo -create -output "$APP/Contents/MacOS/Doudou" "$OUT/Doudou-arm64" "$OUT/Doudou-x86_64"
+bash tools/sync-mascot.sh
+cp -R Resources/. "$APP/Contents/Resources/"
 cp Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist"
 

@@ -97,7 +97,7 @@ struct AgentSettingPage: View {
                     Button { Task { await store.select(setting, id: option.id) } } label: {
                         HStack(spacing: 16) {
                             Image(systemName: snapshot.selected(setting) == option.id ? "largecircle.fill.circle" : "circle")
-                                .font(Theme.font(size: 20)).foregroundStyle(snapshot.selected(setting) == option.id ? Theme.goldText : Theme.faint)
+                                .font(Theme.font(size: 20)).foregroundStyle(snapshot.selected(setting) == option.id ? Theme.actionText : Theme.faint)
                             VStack(alignment: .leading, spacing: 7) {
                                 Text(option.label).font(Theme.font(size: 16, weight: .medium)).foregroundStyle(Theme.ink)
                                 Text(option.note).font(Theme.font(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
@@ -120,6 +120,9 @@ struct AgentSettingPage: View {
                 Button("重试") { Task { await store.load() } }.buttonStyle(SoftButtonStyle())
             }
         }
-        .task(id: "\(ChatClient.shared.connected)-\(active)") { await store.load() }
+        .task(id: "\(ChatClient.shared.connected)-\(active)") {
+            await store.load()
+            while active && !Task.isCancelled { do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }; await store.load() }
+        }
     }
 }
