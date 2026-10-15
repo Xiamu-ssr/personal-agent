@@ -127,11 +127,14 @@ test("ordinary auth failure keeps the session and yields error avatar with Chine
 });
 
 test("first chat is single-flight, validates the device and refuses to repeat after main history exists", async (t) => {
-  const { h, calls } = setup(t); await flush(h);
+  const { h, calls, events } = setup(t); await flush(h);
   await assert.rejects(h.firstChat("web"), (e) => e.status === 400);
   const results = await Promise.all([h.firstChat("android"), h.firstChat("android")]); await flush(h);
   assert.equal(results[0].id, results[1].id); assert.equal(calls[0].received.length, 1);
   assert.equal(calls[0].received[0].message.content, "[第一次聊天] 设备：android");
+  assert.equal(h.history.get(results[0].id).title, "第一次聊天");
+  assert.deepEqual(h.speech.history(), []);
+  assert.equal(events.some((e) => e.t === "user"), false);
   assert.deepEqual(await h.firstChat("mac"), { started: false });
 });
 

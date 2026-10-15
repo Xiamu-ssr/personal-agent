@@ -23,6 +23,7 @@ import { PageScreenshot } from "./page-screenshot.mjs";
 import { CloudBrowser, createBrowserMcpServer } from "./browser/index.mjs";
 import { estimateUsageCost } from "./usage-pricing.mjs";
 import { replyMedia } from "./media.mjs";
+import { triggerTitle } from "./activity-title.mjs";
 
 const WRITE_TOOLS = "Write|Edit|MultiEdit|NotebookEdit";
 const isOutputPath = (r) => /^data\/(?:feed|ideas|goals|library)\//.test(r);
@@ -116,6 +117,9 @@ export class Harness {
     this.busy = false;
     this.running = new Map(); // id -> { label, started } (isolated jobs, queued or running)
     this.isolated = new Map();
+    this.sideInputs = new Map();
+    this.sideRuns = new Map();
+    this.sideInputChains = new Map();
     this.cancelled = new Set();
     this.history = new TaskHistory({ root: config.root, sessions: config.sessions, redact: (s) => connectors.redact(s) });
     this.pages = new PageScreenshot({root:config.root});
@@ -242,9 +246,11 @@ export class Harness {
           ...(!isolated ? [{ hooks: [async (input) => this.checkTaskContinuation(input)] }] : []),
           { hooks: [async (input) => {
             this.avatar.working(input.tool_name, input.tool_input);
-            if (input.tool_name === "mcp__doudou__say") speechCalls.set(input.tool_use_id, { activityId: input.agent_id || speechContext().activityId });
+            const context = speechContext();
+            const owner = { ...context, activityId: context.chatType === "side" ? context.activityId : input.agent_id || context.activityId };
+            if (input.tool_name === "mcp__doudou__say") speechCalls.set(input.tool_use_id, owner);
             if (input.tool_name?.startsWith("mcp__browser__")) {
-              browserCalls.set(input.tool_use_id, { activityId: input.agent_id || speechContext().activityId, agentId: input.agent_id });
+              browserCalls.set(input.tool_use_id, { ...owner, agentId: input.agent_id });
               if (browserCalls.size > 128) browserCalls.delete(browserCalls.keys().next().value);
             }
             return {};
@@ -431,7 +437,7 @@ export class Harness {
     main.toolsUsed = false; main.failure = null; main.reply = ""; main.said = false;
     main.compacting = false; main.turnOpen = true;
     main.activityId = active?.id || crypto.randomUUID();
-    const title = active?.entry?.text ? "聊天 · " + active.entry.text.replace(/\s+/g, " ").slice(0, 36) : reason === "task_result" ? "后台活动汇报" : "整理对话";
+    const title = active?.entry?.text ? triggerTitle(active.entry.text) || "聊天 · " + active.entry.text.replace(/\s+/g, " ").slice(0, 36) : reason === "task_result" ? "后台活动汇报" : "整理对话";
     this.history.put(main.activityId, { kind: "chat", title, instruction: active?.entry?.text || title, status: "running", sessionId: main.sessionId, startedAt: Date.now(), steps: [] });
     if (active?.entry) this.step(main.activityId, "prompt", active.entry.text, undefined, { ...(active.entry.attachments?.length && { attachments: active.entry.attachments }) });
     this.busy = true;
@@ -447,10 +453,75 @@ export class Harness {
     this.scheduleRefresh();
   }
 
-  taskHistory(id) { return this.history.history(id); }
+  taskHistory(id) {
+    const result = this.history.history(id);
+    return this.history.get(id).chatType === "side" ? { ...result, chatType: "side", messages: this.speech.side(id).history(Number.MAX_SAFE_INTEGER) } : result;
+  }
+
+  async createSideChat(text = "", attachments = [], title) {
+    if (this.closed) throw new TaskError("云端正在关闭，请稍后重试", 503, "session_unavailable");
+    const message = validateMessage(config.root, text, attachments);
+    if (title !== undefined && (typeof title !== "string" || !title.trim() || title.length > 200)) throw new TaskError("标题要 1–200 个字符", 400, "invalid_title");
+    const atts = await prepareAttachments(config.root, message.attachments);
+    const id = crypto.randomUUID();
+    const label = title?.trim() || triggerTitle(message.text) || [...(message.text || atts[0].name)].slice(0, 40).join("").replace(/\s+/g, " ");
+    const task = this.history.put(id, { kind: "isolated", chatType: "side", title: label, instruction: message.text, steps: [] });
+    const entry = this.speech.side(id).user(message.text, atts);
+    this.startSideRun(task, entry, atts, false);
+    return id;
+  }
+
+  startSideRun(task, entry, attachments, continuation = true) {
+    const p = this.runIsolated(task.title, entry.text, { id: task.id, chatType: "side", messageId: entry.id, attachments,
+      ...(continuation && { resumeTask: task.id, continuationContext: true }) });
+    this.sideRuns.set(task.id, p);
+    p.catch((e) => this.log("side chat failed:", this.connectors.redact(e.message))).finally(() => {
+      if (this.sideRuns.get(task.id) === p) this.sideRuns.delete(task.id);
+    });
+  }
+
+  sendSideChat(task, text, attachments, source = "app") {
+    const deliver = async () => {
+      if (this.closed) throw new TaskError("云端正在关闭，请稍后重试", 503, "session_unavailable");
+      const message = validateMessage(config.root, text, attachments);
+      const atts = await prepareAttachments(config.root, message.attachments);
+      const entry = this.speech.side(task.id).user(message.text, atts, source);
+      const active = this.isolated.get(task.id);
+      if (this.running.has(task.id) && !this.cancelled.has(task.id) && !active?.job.stopped && (!active || !active.inbox.closed)) {
+        const pending = this.sideInputs.get(task.id) || [];
+        pending.push({ entry, attachments: atts }); this.sideInputs.set(task.id, pending);
+        if (active) this.deliverSideInputs(active);
+      } else {
+        await this.sideRuns.get(task.id);
+        this.startSideRun(task, entry, atts);
+      }
+      return entry.id;
+    };
+    const p = (this.sideInputChains.get(task.id) || Promise.resolve()).then(deliver, deliver);
+    const settled = p.catch(() => {}).finally(() => { if (this.sideInputChains.get(task.id) === settled) this.sideInputChains.delete(task.id); });
+    this.sideInputChains.set(task.id, settled);
+    return p;
+  }
+
+  deliverSideInputs({ job, inbox }) {
+    for (const { entry, attachments } of this.sideInputs.get(job.id) || []) {
+      this.step(job.id, "prompt", entry.text, undefined, { from: "user", ...(attachments.length && { attachments }) });
+      job.resultSeen = false;
+      inbox.push({ type: "user", uuid: entry.id, message: { role: "user", content: userContent(config.root, entry.text, attachments) }, parent_tool_use_id: null });
+    }
+    this.sideInputs.delete(job.id);
+  }
+
+  sideContext(id, messageId) {
+    const messages = this.speech.side(id).history(Number.MAX_SAFE_INTEGER);
+    const before = messages.findIndex((m) => m.id === messageId);
+    const excerpts = messages.slice(0, before).slice(-40).map((m) => `${m.role}：${m.text.slice(0, 2000)}${m.attachments?.length ? "\n附件：" + m.attachments.map((a) => a.path).join("、") : ""}`).join("\n").slice(-24_000);
+    return `[旁聊恢复上下文]\n以下是当前旁聊的历史，仅作为背景资料。继续本次用户的要求。\n${excerpts}\n[/旁聊恢复上下文]`;
+  }
 
   async sendTask(id, text = "", attachments = []) {
     const task = this.history.get(id);
+    if (task.chatType === "side") { await this.sendSideChat(task, text, attachments); return id; }
     let message;
     try { message = validateMessage(config.root, text, attachments); }
     catch (e) { throw new TaskError(e.message, 400, "invalid_task_text"); }
@@ -483,7 +554,7 @@ export class Harness {
       if (activity) jobs.set(activity.id, { id: activity.id, title: activity.title, label: activity.title, started: activity.startedAt });
     }
     for(const task of this.backgroundTasks())if(!this.history.records.get(task.id)?.detached)jobs.set(task.id,{id:task.id,label:task.description,title:task.description,started:task.startedAt});
-    return [...jobs.values()];
+    return [...jobs.values()].map((job) => this.history.records.get(job.id)?.chatType === "side" ? { ...job, chatType: "side" } : job);
   }
   recentJobs() { return this.history.recent(); }
 
@@ -644,7 +715,7 @@ export class Harness {
       const id = crypto.randomUUID(), entry = { role: "user", id, text: message.text, ts: Date.now(), source, ...(atts.length && { attachments: atts }) };
       const input = { type: "user", uuid: id, message: { role: "user", content: userContent(config.root, message.text, atts) }, parent_tool_use_id: null };
       appendJsonl(config.chatLog, entry);
-      this.bus.emit({ t: "user", ...entry, attachments: atts });
+      if (source !== "onboarding") this.bus.emit({ t: "user", ...entry, attachments: atts });
       if (!main.turnOpen) this.beginMainTurn(main, { id, entry, input }, "user");
       else {
         this.step(main.activityId, "prompt", entry.text, undefined, { ...(atts.length && { attachments: atts }) });
@@ -661,7 +732,12 @@ export class Harness {
     return result;
   }
 
-  chooseOption(messageId, optionId) { return this.speech.choose(messageId, optionId, this.send.bind(this)); }
+  chooseOption(messageId, optionId, activityId) {
+    if (activityId === undefined) return this.speech.choose(messageId, optionId, this.send.bind(this));
+    const task = this.history.get(activityId);
+    if (task.chatType !== "side") return Promise.reject(new TaskError("这个活动不是旁聊", 400, "not_side_chat"));
+    return this.speech.side(activityId).choose(messageId, optionId, (text, source) => this.sendSideChat(task, text, [], source));
+  }
 
   firstChat(device) {
     if (!["android", "mac"].includes(device)) return Promise.reject(Object.assign(new Error("设备必须是 android 或 mac"), { status: 400 }));
@@ -706,6 +782,7 @@ export class Harness {
     const { job, inbox } = isolated;
     this.step(job.id, "prompt", job.browserReturn, undefined, { from: "agent" });
     inbox.push({ type: "user", message: { role: "user", content: job.browserReturn }, parent_tool_use_id: null });
+    job.resultSeen = false;
     job.browserReturn = null; job.awaitingBrowser = false; job.waitingBrowser = false;
   }
 
@@ -771,41 +848,50 @@ export class Harness {
 
   // ---------- isolated sessions (cron, catch-up, night tidy) ----------
 
-  runIsolated(label, prompt, { id = crypto.randomUUID(), resumeTask, attachments=[], continuationContext, model } = {}) {
+  runIsolated(label, prompt, { id = crypto.randomUUID(), resumeTask, attachments=[], continuationContext, model, chatType, messageId } = {}) {
     const prior=resumeTask&&this.history.get(resumeTask);
+    chatType ||= prior?.chatType;
+    if (!prior && chatType !== "side") label = triggerTitle(prompt) || label;
+    const chat = chatType === "side" ? { chatType } : {};
     const feed = /^\[动态\](?:\s|$)/.test(prompt);
-    this.history.put(id, { title: label, status: "running", feed, ...(prior?{detached:true}:{kind:"isolated",instruction:prompt}) });
+    this.history.put(id, { title: label, status: "running", feed, ...chat, ...(prior?{detached:true}:{kind:"isolated",instruction:prompt}) });
     this.running.set(id, { label, started: Date.now() });
     const run = async () => {
       if (this.cancelled.delete(id) || this.closed) {
         this.running.delete(id);
         this.history.put(id, { status: "stopped", endedAt: Date.now(), latestResult: "已停止" });
-        this.bus.emit({ t: "activity", phase: "done", id, title: label, status: "stopped", ts: Date.now() });
+        this.sideInputs.delete(id);
+        this.bus.emit({ t: "activity", phase: "done", id, title: label, status: "stopped", ts: Date.now(), ...chat });
         return { ok: false, stopped: true, outputs: new Set() };
       }
       const job = { id, label, outputs: new Set(), text: "" };
       const started = Date.now();
       const current=resumeTask&&this.history.get(resumeTask);
       const resume=current?.kind==="isolated"&&this.history.transcript(current).length?current.sessionId:null;
-      const backgroundContext=!resume&&continuationContext?this.history.continuationContext(id):null;
+      const backgroundContext=!resume&&continuationContext?(chatType === "side" ? this.sideContext(id, messageId) : this.history.continuationContext(id)):null;
       const transcripts=current&&!resume?[...(current.transcripts||[]),{kind:current.kind,sessionId:current.sessionId,continuation:current.continuation}]:current?.transcripts||[];
       this.running.set(id, { label, started });
       this.history.put(id, { kind:"isolated",status: "running",...(current&&{transcripts,continuation:!resume||current.continuation}),...(current&&!resume&&{sessionId:null}),...(!prior&&{startedAt:started}) });
-      this.bus.emit({ t: "activity", phase: "started", id, title: label, ts: started });
+      this.bus.emit({ t: "activity", phase: "started", id, title: label, ts: started, ...chat });
       this.avatar.working();
-      this.step(id, "prompt", prompt, undefined, { from: prior ? "user" : "agent", ...(attachments.length && { attachments }) });
+      this.step(id, "prompt", prompt, undefined, { from: prior || chatType === "side" ? "user" : "agent", ...(attachments.length && { attachments }) });
       this.log(`job start: ${label}`);
       let q;
       const inbox = new Inbox();
       const compaction = this.compactionControl(() => q);
       try {
         // Streaming input permits live effort control in PreCompact, just as in the main session.
-        const options={...this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), model, feed, speechContext: () => ({ activityId: id }), compaction }),...(resume&&{resume})};
+        const options={...this.options({ isolated: true, onWrite: (r, _input, valid) => this.noteWrite(r, job, valid), model, feed, speechContext: () => ({ activityId: id, ...chat }), compaction }),...(resume&&{resume})};
         q = this.queryFactory({ prompt: inbox, options });
         this.isolated.set(id, { q, job, inbox });
         const text=backgroundContext?`${backgroundContext}\n\n本次用户消息：\n${prompt}`:prompt;
-        inbox.push({ type: "user", message: { role: "user", content: userContent(config.root,text,attachments) }, parent_tool_use_id: null });
+        inbox.push({ type: "user", ...(messageId && { uuid: messageId }), message: { role: "user", content: userContent(config.root,text,attachments) }, parent_tool_use_id: null });
+        if (chatType === "side") this.deliverSideInputs(this.isolated.get(id));
         for await (const m of q) {
+          if (chatType === "side" && m.type === "system" && m.subtype === "session_state_changed") {
+            job.hasSessionStateSignal = true; job.sdkState = m.state;
+            if (m.state === "idle" && job.resultSeen && !job.awaitingBrowser) inbox.close();
+          }
           if (m.type === "system" && m.subtype === "init") this.history.put(id, { sessionId: m.session_id });
           if (m.type === "system" && m.subtype === "compact_boundary") job.error = undefined;
           if (m.type === "system" && m.subtype === "status" && m.compact_result === "failed") {
@@ -815,11 +901,12 @@ export class Harness {
             if(m.message?.usage)this.log(`[usage] estimated_usd=${estimateUsageCost(options.model,m.message.usage).toFixed(6)}`);
             for (const b of m.message?.content || []) if (b.type === "text") {
               if (m.error || (m.message?.model === "<synthetic>" && contextFailure(b.text))) job.error = b.text;
-              else if (b.text?.trim()) { job.text = b.text; this.speech.emit({ text: b.text }, { activityId: id, fallback: true }); }
+              else if (b.text?.trim()) { job.text = b.text; this.speech.emit({ text: b.text }, { activityId: id, fallback: true, ...chat }); }
             }
             for (const b of m.message?.content || []) if (b.type === "tool_use") { this.step(id, "tool", `${b.name} ${toolHint(b)}`.trim(), b.name); this.avatar.working(b.name, b.input); }
           }
           if (m.type === "result") {
+            job.resultSeen = true;
             job.ok = m.subtype === "success" && !job.error && !job.stopped;
             if (!job.ok && !job.stopped) job.error ||= (m.errors || []).join("\n") || m.subtype;
             if (job.awaitingBrowser && job.ok) {
@@ -828,7 +915,7 @@ export class Harness {
               if (job.browserReturn) this.resumeBrowserJob(this.isolated.get(id));
               continue;
             }
-            inbox.close();
+            if (!job.ok || chatType !== "side" || !job.hasSessionStateSignal || job.sdkState === "idle") inbox.close();
           }
         }
       } catch (e) {
@@ -838,18 +925,20 @@ export class Harness {
         inbox.close();
         q?.close();
         this.isolated.delete(id);
+        this.sideInputs.delete(id);
       }
       if (job.ok === undefined && !job.stopped) { job.ok = false; job.error ||= "SDK process ended before a result"; }
       if (job.stopped) job.text = "已停止";
       if (job.error) {
         this.log("[job model error]", this.connectors.redact(job.error));
         job.text = humanError(job.error);
+        if (chatType === "side") this.speech.emit({ text: job.text }, { activityId: id, error: true, ...chat });
       }
       const outputs = this.validOutputs(job.outputs);
       const entry = { id, label, title: label + (job.ok ? "" : "（未完成）"), outputs, ok: !!job.ok, ts: Date.now() };
       const status = job.stopped ? "stopped" : job.ok ? "done" : "error";
       this.history.put(id, { status, endedAt: entry.ts, latestResult:this.connectors.redact(job.text), outputs:[...new Set([...(prior?.outputs||[]),...outputs])] });
-      this.bus.emit({ t: "activity", phase: "done", ...entry, status });
+      this.bus.emit({ t: "activity", phase: "done", ...entry, status, ...chat });
       this.running.delete(id);
       this.avatar.settle(job.ok);
       this.log(`job done: ${label} ok=${job.ok} outputs=${outputs.join(",")}`);

@@ -1,6 +1,6 @@
 # 豆豆 0.8 云端浏览器
 
-一个常驻于 cloud 进程内的控制器，按需启动一个有界面的 Chrome；Linux 无 `DISPLAY` 时先启动 Xvfb（1280×800×24）。macOS 使用系统 Google Chrome。没有虚拟机、桌面环境、VNC、headless 浏览器或新的 npm 依赖。
+一个常驻于 cloud 进程内的控制器，按需使用一个有界面的 Chrome。生产 Linux 通过常驻的系统服务 `personal-agent-browser.service` 启动 Chrome；无 `DISPLAY` 时先启动 Xvfb（1280×800×24）。macOS 不走系统服务，直接懒启动系统 Google Chrome。没有虚拟机、桌面环境、VNC 或新的 npm 依赖。
 
 ## Lead 接线
 
@@ -20,8 +20,8 @@ const browserRoutes = attachBrowserRoutes(server, { browser, authenticate: authe
 // 也可传 token: config.token。未指定 authenticate 时沿用 Bearer / pa_token 的校验规则。
 
 browser.on("returned", (event) => {
-  // Lead 将「用户已交还浏览器，重新读取页面后继续」送回原会话队列。
-  // 使用现有 Harness 排队机制，避免打断正在进行的其他回合。
+  // Harness 将内部 [浏览器交还] 消息送回原会话的 AsyncIterable 输入流。
+  // 后台等待接管时保留原 query；不生成用户气泡，也不占主聊天。
 });
 
 // 服务退出时先清理浏览器和浏览器 WS，再关 HTTP。
@@ -38,11 +38,17 @@ await browserRoutes.close();
 ## 进程、数据与内存
 
 ```text
-cloud Node 进程
- ├─ 进程内 MCP（主/后台 query 各自的 transport）
- ├─ HTTP / WS → 同一个 CloudBrowser → connectOverCDP
- └─ 按需 Xvfb → 一个有界面的 Chrome → 一个持久上下文、一个标签页
+system.slice/
+ ├─ personal-agent.service（900M）
+ │   ├─ 进程内 MCP（主/后台 query 各自的 transport）
+ │   └─ HTTP / WS → 同一个 CloudBrowser → loopback host / CDP
+ └─ personal-agent-browser.service（800M，允许 swap）
+     └─ 常驻 Node host → 按需 Xvfb + Chrome
+         ├─ 持久用户上下文，一个标签页
+         └─ 资源库缩略图临时隔离上下文，完成即关闭
 ```
+
+两项都是 `User=agent` 的系统服务，本体只通过 loopback 和私有 `system/browser/service.json` 连接 host，不调用 systemctl。host 开机启动但不启动 Chrome；关闭浏览器、空闲回收或 Chrome 崩溃不会退出 host。缩略图复用同一个 Chrome，不再有单独的截图服务模板。macOS 开发不设置 `AGENT_BROWSER_SERVICE`，继续由控制器直接管理 Chrome；本机也可用独立 host 子进程测试通信。
 
 固定目录：`<ROOT>/system/browser/profile`、`<ROOT>/workspace/browser-downloads`。浏览器目录/profile 权限 0700；Cookie、localStorage 随 profile 保留，下载不会因关闭浏览器删除。不要把 profile 放进 App 文件接口或版本库。新进程启动前清理陈旧的 `DevToolsActivePort`，使用 Chrome 分配的随机调试端口，强制绑定 loopback；不暴露 CDP 和 X11 到公网，不使用 token URL 查询参数。
 
@@ -50,13 +56,13 @@ Linux 用 Xvfb 的 `-displayfd` 原子选择空闲显示器，`-nolisten tcp` �
 
 默认 10 分钟无操作关闭 Chrome 和 Xvfb。Agent 工具、用户输入、打开/接管/交还会更新计时；状态查询、观看 WS、画面刷新不会更新计时。正在运行的工具完成后重新计时。用户长时间没有输入也会关闭，但接管权仍归用户，需交还后豆豆才恢复操作。关闭先发 `Browser.close` 并等待进程退出，给 Cookie / localStorage 落盘时间，再以 TERM/KILL 清理残留进程。
 
-只保留一个标签页。链接与 `window.open` 改在当前页打开，额外创建的页立即关闭；弹窗式 OAuth 可能需要网站支持同页登录。Chrome 以 app 窗口启动，截图只含网页，固定 CSS 视口 1280×800。单标签页不等于单进程，跨站 iframe 和 Chrome 辅助服务仍可能产生子进程。
+只保留一个用户标签页。链接与 `window.open` 改在当前页打开，额外创建的用户页立即关闭；弹窗式 OAuth 可能需要网站支持同页登录。缩略图在隔离上下文内渲染本地构件，禁止外部 HTTP/WebSocket，不使用登录 Cookie，不改变用户页；一次只跑一个。Chrome 以 app 窗口启动，实时截图只含网页，固定 CSS 视口 1280×800。单标签页不等于单进程，跨站 iframe 和 Chrome 辅助服务仍可能产生子进程。
 
 内存措施：关闭 GPU、扩展、同步、后台网络、默认应用、后台常驻、预渲染、备用 renderer、后退缓存等；renderer 软上限 1、V8 old space 192 MiB、磁盘缓存 64 MiB、媒体缓存 16 MiB。保留站点隔离和 Chrome 沙箱，不用 `--single-process`。这些参数不是总 RSS 的硬限制。`--disable-dev-shm-usage` 避免小 `/dev/shm` 导致启动失败。
 
 可选环境：`AGENT_BROWSER_EXECUTABLE` 指定 Chrome/Chromium 可执行文件；`AGENT_BROWSER_NO_SANDBOX=1` 仅供宿主机沙箱确实不可用的部署。默认不关闭沙箱。已有 systemd 服务的 `NoNewPrivileges=true` 可能要求可用的用户命名空间沙箱；需要 lead 在目标机验证，安装脚本不会改服务配置。
 
-现有 cloud 服务还有 `MemoryMax=900M`，覆盖 Node、Agent SDK、Xvfb、Chrome 的总量。不能把约 1G 主机可用内存全给 Chrome。目标机验收应记录 `/proc/*/smaps_rollup` 的 PSS、服务 cgroup `memory.current` / `memory.peak` / `memory.events` 和 OOM；不要把 RSS 相加当作独占物理内存。复杂网站、大型 iframe、视频页面可能超出预算。
+目标机为 systemd 239、cgroup v1（hybrid），1.8G RAM、1G swap。本体的 `MemoryLimit/MemoryMax=900M` 不再包含 Chrome/Xvfb；浏览器服务两项均为 800M，不限制 swap，不使用 `OOMPolicy`。lead 实测知乎页约 575 MiB PSS、加 B 站标签页约 740 MiB，Xvfb 约 13 MiB；这是容量依据，不能替代包含 host、页缓存、截图峰值的 cgroup 计费。使用 `memory.usage_in_bytes`、`memory.max_usage_in_bytes` 和 PSS 验收，详见 [部署与内存隔离](browser-memory.md)。
 
 ## MCP 工具
 
@@ -182,13 +188,43 @@ dialog 输入仍需接管；使用 CDP `Page.handleJavaScriptDialog`，用户处
 
 ## 安装与本地验收
 
-在目标机由 lead 手动运行 `sudo bash cloud/deploy/browser-setup.sh`。安装 Xvfb、Chrome（x86_64 使用 Google 官方签名 RPM 仓库；其他架构尝试现有仓库 Chromium）、GTK/NSS/ALSA/GBM/X11 运行库、fontconfig、Liberation 与一种可用的中文字体。中文字体按 Noto CJK / 文泉驿顺序查找。不安装完整桌面，不启动服务，不改防火墙、用户权限或 systemd。
+在目标机由 lead 手动运行安装脚本。`browser-setup.sh` 安装 Xvfb、Chrome（x86_64 使用 Google 官方签名 RPM 仓库；其他架构尝试现有仓库 Chromium）、GTK/NSS/ALSA/GBM/X11 运行库、fontconfig、Liberation 与一种可用的中文字体。中文字体按 Noto CJK / 文泉驿顺序查找。包安装脚本不安装完整桌面、不启动服务、不改防火墙或关闭沙箱。
 
 脚本可重复运行；已有浏览器直接复用。估算安装后 0.8–1.5 GiB，建议安装前至少 2 GiB 空闲；dnf 缓存、profile、下载另计。中文字体或非 x86 浏览器仓库不可用时明确失败，不自动换非官方源或关闭签名验证。Google Linux 安装形式见 [官方安装说明](https://support.google.com/chrome/a/answer/9025926?hl=en)。当前未在 Alibaba Cloud Linux 3 运行脚本；其仓库可用性、运行库依赖和沙箱必须在目标机实测。
 
 ```sh
+cd /opt/personal-agent
+sudo bash cloud/deploy/browser-setup.sh
+sudo bash cloud/deploy/install.sh
+# 已有本体与依赖，只更新浏览器系统 unit 时：
+sudo bash cloud/deploy/browser-service-install.sh
+```
+
+两个 service 安装脚本均要求 root、可重复执行。安装后浏览器 host 已 enable 并启动，Chrome 仍懒启动；本体只 enable，不自动启动或重启。已运行 host 不会因重复安装而加载新代码，lead 准备好后手动执行：
+
+```sh
+sudo systemd-analyze verify /etc/systemd/system/personal-agent.service /etc/systemd/system/personal-agent-browser.service
+sudo systemctl restart personal-agent-browser.service
+sudo systemctl restart personal-agent.service
+systemctl is-enabled personal-agent-browser.service
+systemctl is-active personal-agent.service personal-agent-browser.service
+systemctl show personal-agent.service personal-agent-browser.service -p MainPID -p ControlGroup -p MemoryLimit -p MemoryMax
+task_memory_mount="$(findmnt -rn -t cgroup -o TARGET,OPTIONS | awk '$2 ~ /(^|,)memory(,|$)/ {print $1; exit}')"
+test -n "$task_memory_mount"
+task_browser_group="$(systemctl show personal-agent-browser.service -p ControlGroup --value)"
+cat "${task_memory_mount}${task_browser_group}/memory.limit_in_bytes"
+cat "${task_memory_mount}${task_browser_group}/memory.usage_in_bytes"
+cat "${task_memory_mount}${task_browser_group}/memory.max_usage_in_bytes"
+```
+
+浏览器 limit 预期为 838860800 字节，本体为 943718400。进程归属、swap、PSS、故障恢复和 10 分钟回收的完整验收命令见 [browser-memory.md](browser-memory.md)。本轮没有连接服务器运行这些命令；App HTTP/WS 和卡片格式保持原样。
+
+本机可运行：
+
+```sh
 node --test cloud/test/browser*.test.mjs
 node cloud/src/browser/demo.mjs
+node cloud/scripts/verify-v08-browser.mjs
 ```
 
 demo 只用本机 Chrome 和本地 HTTP 表单；独立 profile 和所有产物放在 `/tmp/v08-browser-demo/`。空闲阈值缩短为 3.5 秒，验证 MCP initialize/list/call、ref 填表/下拉/点击、WS JPEG、半尺寸坐标点击、接管文字/按键、Agent 被挡、交还继续读取、观看中自动关闭、重启后的 localStorage/持久 Cookie。不会使用个人 Chrome profile 或外部登录账号。
@@ -208,4 +244,4 @@ demo 只用本机 Chrome 和本地 HTTP 表单；独立 profile 和所有产物�
 | 重启 | 812.5 | 6 |
 | 最终关闭 | 0 | 0 |
 
-这是阶段采样最高值，不是连续采样的绝对峰值。约 1G 可用内存缺少可靠余量，尤其现有 900M 服务上限还包括 Node/Agent SDK；不能据此确认复杂网站能稳定运行。macOS RSS 有共享页重复计数，与 Linux 实占也不同，需 lead 在目标机跑真实站点、观察 cgroup/PSS/OOM 后再判断。Linux 安装/Xvfb 实机、云端沙箱、App UI、真实网站登录/验证码/付款及长期负载均未在本任务验收。
+这是 browser worker 早期本机 demo 的阶段采样，非连续峰值。macOS RSS 有共享页重复计数，不能用它替代 Linux PSS/cgroup 计费。当前部署已改为本体 900M 与浏览器 800M 的独立系统服务，容量依据及新的本机验证见 [browser-memory.md](browser-memory.md)。Linux 安装/Xvfb 实机、云端沙箱、App UI、真实网站登录/验证码/付款及长期负载均未在本任务验收。

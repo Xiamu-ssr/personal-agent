@@ -26,7 +26,7 @@ export function browserExecutable() {
 }
 const TYPES={".html":"text/html; charset=utf-8",".css":"text/css",".js":"text/javascript",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".woff2":"font/woff2",".woff":"font/woff"};
 export class PageScreenshot {
-  constructor({root,executablePath,timeoutMs=30_000,service=!!process.env.AGENT_BROWSER_SERVICE}={}) {Object.assign(this,{root,executablePath,timeoutMs,service});}
+  constructor({root,executablePath,timeoutMs=30_000,service=!!process.env.AGENT_BROWSER_SERVICE,browserProvider,terminateBrowser}={}) {Object.assign(this,{root,executablePath,timeoutMs,service,browserProvider,terminateBrowser});}
   async screenshot({path:rel}) {
     const target=screenshotTarget(this.root,rel);
     if(active)throw new Error("已有页面正在截图，请等它结束后再试");
@@ -36,12 +36,13 @@ export class PageScreenshot {
       finally {active=false;}
     }
     const executablePath=this.executablePath??browserExecutable();
-    if(!executablePath||!fs.existsSync(executablePath))throw new Error("页面截图暂不可用：浏览器尚未安装，请管理员运行 install-screenshot.sh");
+    if(!this.browserProvider&&(!executablePath||!fs.existsSync(executablePath)))throw new Error("页面截图暂不可用：浏览器尚未安装，请管理员运行 install-screenshot.sh");
     active=true;
-    let browserServer,browser,timer,timedOut=false,closing;
+    let browserServer,browser,context,timer,timedOut=false,closing;
     const deadline=Date.now()+this.timeoutMs;
     const cleanupBudget=Math.min(1000,this.timeoutMs/10);
     const killBrowser=()=> {
+      if(this.browserProvider) { if(!closing)closing=Promise.resolve().then(()=>this.terminateBrowser?.()).catch(()=>{});return closing; }
       if(!browserServer)return Promise.resolve();
       if(!closing)closing=browserServer.kill().catch(()=>{});
       return closing;
@@ -50,11 +51,15 @@ export class PageScreenshot {
       timedOut=true;void killBrowser();reject(new Error("页面截图超时（30 秒），请精简页面后再试"));
     },Math.max(1,this.timeoutMs-cleanupBudget));});
     const run=async()=> {
-      browserServer=await chromium.launchServer({executablePath,headless:true,timeout:Math.max(1,deadline-Date.now()),
-        args:["--disable-dev-shm-usage","--disable-gpu","--no-sandbox","--renderer-process-limit=1","--js-flags=--max-old-space-size=128","--no-proxy-server","--disable-background-networking"]});
+      if(this.browserProvider)browser=await this.browserProvider();
+      else {
+        browserServer=await chromium.launchServer({executablePath,headless:true,timeout:Math.max(1,deadline-Date.now()),
+          args:["--disable-dev-shm-usage","--disable-gpu","--no-sandbox","--renderer-process-limit=1","--js-flags=--max-old-space-size=128","--no-proxy-server","--disable-background-networking"]});
+        if(timedOut){void killBrowser();throw new Error("页面截图超时");}
+        browser=await chromium.connect(browserServer.wsEndpoint());
+      }
       if(timedOut){void killBrowser();throw new Error("页面截图超时");}
-      browser=await chromium.connect(browserServer.wsEndpoint());
-      const context=await browser.newContext({viewport:{width:WIDTH,height:SCREEN},deviceScaleFactor:1,serviceWorkers:"block",acceptDownloads:false});
+      context=await browser.newContext({viewport:{width:WIDTH,height:SCREEN},deviceScaleFactor:1,serviceWorkers:"block",acceptDownloads:false});
       await context.routeWebSocket("**/*",(socket)=>socket.close());
       const siteRoot=path.join(this.root,"data/library/artifacts",target.rel.split("/")[3]);
       // All requests are handled here; there is never a route.continue() to HTTP.
@@ -92,8 +97,9 @@ export class PageScreenshot {
         requestAnimationFrame(()=>requestAnimationFrame(()=>{clearTimeout(timer);resolve();}));
       }));
       captures.push({input:await page.screenshot({type:"jpeg",quality:85,animations:"disabled",clip:{x:0,y:0,width:WIDTH,height}}),top:0,left:0});
-      // The browser is already closed during image compression, keeping peak RAM small.
-      await browser.close();await browserServer.close();browser=null;browserServer=null;
+      await context.close();context=null;
+      if(browserServer){await browser.close();await browserServer.close();browserServer=null;}
+      browser=null;
       sharp.cache(false);sharp.concurrency(1);
       const composite=await sharp({create:{width:WIDTH,height,channels:3,background:"#ffffff"}}).composite(captures).png().toBuffer();
       let data;
@@ -106,6 +112,11 @@ export class PageScreenshot {
     try {return await Promise.race([run(),timeout]);}
     finally {
       clearTimeout(timer);
+      if(context) {
+        let cleanupTimer;
+        await Promise.race([context.close().catch(()=>{}),new Promise((resolve)=>{cleanupTimer=setTimeout(resolve,500);})]);
+        clearTimeout(cleanupTimer);
+      }
       if(browserServer) {
         let cleanupTimer;
         await Promise.race([killBrowser(),new Promise((resolve)=>{cleanupTimer=setTimeout(resolve,Math.max(1,deadline-Date.now()));})]);

@@ -172,7 +172,7 @@ working 文案从当前工具推导，如「在看你的邮件」「在浏览网
 
 `[动态]` 也有浏览器工具，说明明确限制为读取用户已登录的网站；不需要时不启动 Chrome。未登录、验证码或确认操作跳过，动态的 request_takeover 返回 blocked，不唤起用户接管；登录状态是否可用仍由模型读取页面判断。
 
-部署使用独立用户 unit 和浏览器 slice，Chrome/Xvfb 与构件缩略图合计上限 450M，本体保留 900M。配置和目标机验证步骤见 [browser-memory.md](browser-memory.md)。此限制是保守预算，未做目标机实测；浏览器崩溃后下次使用可重开。
+部署使用常驻的系统服务 `personal-agent-browser.service`（User=agent），兼容目标机 systemd 239 / cgroup v1。Chrome/Xvfb 按需启动、10 分钟空闲关闭，构件缩略图复用同一个 Chrome；浏览器服务 800M、允许 swap，本体单独保留 900M。配置和目标机验证步骤见 [browser-memory.md](browser-memory.md)。App HTTP/WS 与卡片字段不变；浏览器崩溃后下次使用可重开。
 
 ## 动态
 
@@ -408,3 +408,104 @@ agent 的 PreToolUse 守卫始终拒绝修改 health、uploads 及连接器维�
 `node scripts/verify-v08.mjs` 会启动临时数据根、真实 SDK、假模型和 HTTP/WS 服务，日志在 `/tmp/v08-cloud-demo/`。覆盖两次 say、工具期间插话、带选项、首次/重复点击、普通正文保留、活动步骤，以及聊天选择 Opus 时动态的真实 wire model 仍为 Haiku。没有调用外部模型或真实设备，不代表线上/App 集成已验收。
 
 `node scripts/verify-v08-browser.mjs` 用本机真 Chrome、假模型和本地测试页，验证主聊天与独立后台各自的接管→App 点击→交还→原输入流继续→say；包括鉴权、实时画面、waiting 和不使用浏览器的动态懒启动。日志在 `/tmp/v08-cloud-demo/browser/`。没有访问真实网站、个人 profile 或服务器；systemd/cgroup 隔离未在 macOS 上宣称实测。
+
+## 0.8 补充：新建旁聊
+
+旁聊是抽屉中可另开的独立聊天。每个旁聊对应一个持久化的活动 id；新建时创建全新的 SDK 会话，不复制、不恢复、不注入主聊天或其他旁聊的消息上下文。用户数据、记忆、权限、连接器和云端浏览器仍属于同一个豆豆。随后一律用原有活动续聊、详情、停止接口，不新建活动 id。重启后恢复该旁聊自己的 SDK 会话；其会话文件不可用时，只用该旁聊自己的记录补充上下文。
+
+本节只新增接口、事件及可选字段，已有请求、响应字段和主聊天事件保持原义。早于本补充的 App 可以忽略新增字段和事件。
+
+### 创建与继续
+
+`POST /api/side-chats`，使用与其他 API 相同的鉴权：
+
+```json
+{"text":"单独帮我研究一下这个想法","title":"研究想法","attachments":[]}
+```
+
+`text`、`attachments` 的格式、上传流程及限制与 `/api/send` 相同；两者不能同时为空。`title` 可省略，提供时为 1–200 个字符且不能全空白；省略时从第一条文字或附件名生成简短标题。第一条用户消息随请求持久化并开始处理，无需再调用 send。
+
+成功 **201**，返回的是活动 id：
+
+```json
+{"ok":true,"id":"side-activity-id","chatType":"side"}
+```
+
+创建成功表示消息已接受，不表示豆豆已回复。未鉴权 401；无效 JSON、空消息、无效附件或标题 400；服务正在关闭 503。校验失败不会留下空旁聊。
+
+后续使用已有接口，id 均为创建时返回的活动 id：
+
+| HTTP | 请求 | 成功 |
+| --- | --- | --- |
+| `POST /api/activities/<id>/send` | `{text,attachments?}` | 200 `{ok:true,id}`，id 仍是同一个活动 id |
+| `GET /api/activities/<id>/history` | 无 | 原有 `{id,title,status,items}`，另加本节的 `chatType,messages` |
+| `POST /api/activities/<id>/stop` | 无 | 原有 200 `{ok:true,id}` |
+
+正在运行的旁聊收到补充时，消息交给它自己的 AsyncIterable 输入流。旁聊运行与主聊天彼此独立，不中断主聊天，不改变主聊天的 `busy`，也不向主聊天输入流发消息。云端仍限制同一时间只运行一个独立活动，以控制内存；尚未取得运行资源时收到的消息会按提交顺序保留。头像依旧综合所有活动。
+
+### 列表和详情的新增字段
+
+复用 `GET /api/activities?limit=30&before=<毫秒时间>` 的原有分页。旁聊条目在 `running`、`recent` 中都有 **`chatType:"side"`**；`/api/state.activities`、WS `hello.activities` 和该旁聊的 `activity` 事件也带此字段。其他活动可不带该字段。App 筛选 `chatType === "side"` 即得到旁聊列表，按原有 next 游标继续分页。
+
+```json
+{"running":[],"recent":[{"id":"side-activity-id","label":"研究想法","title":"研究想法","chatType":"side","status":"done","ok":true,"ts":1792029600000,"outputs":[]}],"next":null}
+```
+
+`status:"done"` 只表示当前这轮完成，仍可续聊。`items` 保留原有步骤明细；新增的 `messages` 是该旁聊按写入顺序排列的全部聊天气泡，供聊天视图使用。两者用途不同，不要把 steps 和 messages 合并成重复气泡：
+
+```json
+{
+  "id":"side-activity-id","title":"研究想法","status":"done","chatType":"side",
+  "items":[{"kind":"prompt","from":"user","text":"单独帮我研究一下这个想法","time":"2026-10-15T02:00:00.000Z"}],
+  "messages":[
+    {"role":"user","id":"side-user-message-id","text":"单独帮我研究一下这个想法","ts":1792029600000,"source":"app","activityId":"side-activity-id","chatType":"side"},
+    {"role":"assistant","id":"side-bubble-id","text":"我们从哪方面开始？","ts":1792029601000,"activityId":"side-activity-id","chatType":"side","options":[{"id":"0","label":"调研","reply":"先调研一下"}],"optionsUsed":false,"cards":[{"type":"link","url":"https://example.test/idea","title":"参考资料"}]}
+  ]
+}
+```
+
+messages 中的 `options,cards,media,fallback,error,attachments` 与主聊天消息格式相同，只有适用时出现；有选项的历史气泡带 `optionsUsed`。用户消息 source 为 `app`，点选项产生的消息为 `option`。工具调用和中间步骤只进 items。模型直接输出的普通正文同样保存在 messages，带 `fallback:true`。异常提示也留在这个旁聊，带 `error:true`。
+
+### 旁聊消息事件与选项
+
+现有 App WS 连接新增 **`activity_message`** 事件，用户消息和 assistant 气泡都通过它发送。按 `activityId` 路由到对应旁聊，再按消息 `id` 合并；未打开该旁聊时可更新其列表。这个事件不进入主聊天。旁聊不发送主聊天的 `user/say/delta/turn_end` 事件，也不触发主聊天的 reply 系统通知。活动步骤和轮结束仍使用现有的 `activity_step`、`activity` 事件。
+
+```json
+{"t":"activity_message","role":"assistant","id":"side-bubble-id","text":"我们从哪方面开始？","ts":1792029601000,"activityId":"side-activity-id","chatType":"side","options":[{"id":"0","label":"调研","reply":"先调研一下"}]}
+```
+
+`say` 的工具名和参数不变，模型不用填写会话 id。云端自动将旁聊及其工具内部的 say 指向该旁聊；普通后台活动的 say 仍发往主聊天。browser 卡片仍指向共享的当前浏览器会话，浏览器协议见 [browser.md](browser.md)。
+
+点击旁聊里的选项时，给原有 `POST /api/options/choose` **额外带 `activityId`**：
+
+```json
+{"activityId":"side-activity-id","messageId":"side-bubble-id","optionId":"0"}
+```
+
+成功 200 `{ok:true,id:"side-user-reply-id",messageId:"side-bubble-id",optionId:"0",activityId:"side-activity-id",chatType:"side"}`，其中 id 仍是选项产生的用户消息 id，额外的 activityId 标记旁聊归属。回复写入该旁聊并从原输入流或原会话继续，整组选项永久失效，重启后仍失效。重复点击 409，找不到气泡/选项 404；activityId 指向非旁聊活动时 400。省略 activityId 仍按原协议选择主聊天里的选项，不会搜索旁聊或把旁聊回复发进主聊天。
+
+WS `choose_option` 同样只新增可选的 activityId；消费事件也新增会话标记：
+
+```json
+{"t":"choose_option","activityId":"side-activity-id","messageId":"side-bubble-id","optionId":"0"}
+{"t":"options_used","activityId":"side-activity-id","chatType":"side","messageId":"side-bubble-id","optionId":"0"}
+```
+
+WS hello.history 和 `/api/history` 继续只返回主聊天。旁聊不影响 `chatEmpty/firstChat` 或首次聊天触发。旁聊记录保存在 `system/side-chats/<活动id>/chat.jsonl`，选项消费保存在同目录 `options.json`，会话和活动索引仍使用原有持久化机制；App 不直接访问这些文件。
+
+## 0.8 补充：活动标题与首次聊天
+
+新建活动按触发消息首行生成展示标题，不把内部方括号触发词作为标题。列表的 title/label、活动详情 title 和 activity 事件 title 使用同一个展示名称：
+
+| 触发 | 展示标题 |
+| --- | --- |
+| `[第一次聊天]` | 第一次聊天 |
+| `[动态]` | 看看有没有新动态 |
+| `[目标跟进] X` | 跟进目标：X |
+| `[点子]` | 想一批点子 |
+| `[夜间整理]` | 夜间整理 |
+| `[补读] X` | 补读 X |
+
+设备信息、上次运行时间和下一行的完整提示词不进入展示标题。普通用户聊天沿用消息摘要；显式指定的旁聊标题保持原样。已有活动的旧标题在读取、重启或续聊时保留，不做历史迁移。
+
+首次聊天的 `[第一次聊天] 设备：android|mac` 仍原样交给模型，并作为 source 为 onboarding 的内部记录保留，供首次触发去重、会话恢复和活动追踪使用。云端不为它发送 WS user 事件，`GET /api/history` 和 WS hello.history 也不返回这条内部用户记录。App 无需为它创建用户气泡；豆豆随后发出的 say 和普通正文按原协议显示。首次聊天接口、返回字段、设备校验和并发去重规则不变；接受首次触发后 chatEmpty 为 false，即使豆豆还没有说出第一句。

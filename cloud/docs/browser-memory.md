@@ -1,52 +1,116 @@
 # 浏览器部署与内存隔离
 
-现有 `deploy/personal-agent.service` 的 `MemoryMax=900M` 覆盖整个服务 cgroup；直接 spawn Chrome/Xvfb，或只把它们放进这个服务下的子 cgroup，都无法绕过祖先上限。独立的用户 unit 由另一棵用户服务树派生，可以保留本体 900M，并给浏览器单独限额。有效上限仍取决于所有祖先设置，不能据此保证不会发生整机内存压力。[systemd 资源控制说明](https://raw.githubusercontent.com/systemd/systemd/main/man/systemd.resource-control.xml)
+目标机是 Alibaba Cloud Linux 3 / RHEL 8，systemd 239，cgroup v1（hybrid），1.8G RAM、1G swap。本体是系统服务 `personal-agent.service`，`User=agent`。浏览器也使用常驻的系统服务，不依赖用户 manager。
 
-## 已准备的方式
+## 进程与预算
 
 ```text
-system.slice/personal-agent.service                 900 MiB
-  Node + 主 SDK + 串行后台 SDK + HTTP/WS
-  systemctl --user 只负责请求启动，不在这里派生 Chrome
-
-user.slice/.../user@UID.service/
-  personal.slice/personal-agent.slice/personal-agent-browser.slice
-    ├─ personal-agent-browser.service              实时 Chrome + Xvfb + 小型 Node host
-    └─ personal-agent-thumbnail@UUID.service        临时构件截图 + 压缩
-  slice 合计：MemoryHigh=320M / MemoryMax=450M / MemorySwapMax=0
+system.slice/
+  ├─ personal-agent.service                 900 MiB
+  │    Node + Agent SDK + HTTP/WS
+  └─ personal-agent-browser.service         800 MiB，允许 swap
+       常驻 Node host
+       └─ 按需 Xvfb + Chrome（含临时缩略图上下文）
 ```
 
-这两棵树不是父子。`systemd-run --user --scope` 也可以创建独立用户 scope，但需要自行维护进程归属、停止、端点与退出检测。本实现使用固定浏览器 unit 与截图模板，更容易核对 cgroup 和清理，不向服务用户授予启动任意系统 unit 的 root 权限。
+两项服务是兄弟 cgroup。Chrome、Xvfb 和缩略图压缩都由浏览器 host 派生，计入浏览器的 800M；本体不再派生另一套截图 Chrome。host 开机启动，只有浏览器工具、App 打开/接管或资源库截图才启动 Chrome。无操作 10 分钟后清理 Chrome/Xvfb，Node host 继续监听。观看画面、查状态不会延长空闲时间。
 
-- 主服务增加 `AGENT_BROWSER_SERVICE=personal-agent-browser.service`，900M 上限保留。
-- CloudBrowser 使用 SystemdBrowserProcess，首次工具操作才 start 用户 unit。读取私有 `system/browser/service.json`，核对 MainPID 后连接 loopback CDP；不采用陈旧端点。每两秒检查 unit；退出/崩溃会通知控制器，下次工具调用重开。配置此模式时，用户服务不可用会明确失败，不退回主服务派生 Chrome。
-- 独立 `browser/host.mjs` 管理原 BrowserProcess，不读主服务的 EnvironmentFile；Chrome、Xvfb 仍保留原先的 profile、默认沙箱和空闲关闭。需要自定义可执行文件时用用户 unit drop-in 设置 AGENT_BROWSER_EXECUTABLE。
-- 资源库缩略图也经独立模板 unit 执行，保留原 HTTP/MCP 返回格式与截图限制，不再漏算进主服务的直接 Chrome 子进程。请求和 JPEG 经过私有临时目录交换，停止 unit 后删除。
-- 浏览器与缩略图归同一个 slice，避免各自占满 450M 而使总预算翻倍。两者竞争内存时可能使其中一个浏览器任务失败，App 会收到现有错误格式；本体不在这个内存域内。
-- unit 使用 KillMode=control-group、OOMPolicy=kill、Restart=no；超限时清理该 unit 全部成员，不自动反复重启。OOMPolicy 的 kill 会将该 unit 设为内存 OOM 整组终止。[systemd 服务说明](https://raw.githubusercontent.com/systemd/systemd/main/man/systemd.service.xml)
+lead 在目标机实测的进程 PSS：知乎一页约 575 MiB，再开 B 站标签页约 740 MiB，Xvfb 约 13 MiB。这些是 lead 提供的容量依据，本轮没有连接服务器复测。生产控制器保留一个用户标签页；截图另建临时隔离上下文，完成即关闭，复用同一个 Chrome。PSS 与 cgroup 计费不同，800M 还要包括 host、页缓存及截图峰值，应按下面的 cgroup 数字验收。
 
-900+450=1350 MiB 是上限预算，不是实测用量；余量留给 OS、代理、用户 manager、页缓存等。browser worker 的 macOS 本地页报告 Chrome 进程 RSS 求和约 770–900 MiB，包含共享页重复统计，也不含 Linux Xvfb，不能据此推算 Linux 独占物理内存。**450M 是保守试运行值，复杂网页可能超限，当前没有证据保证目标机容量足够。** 先用真实业务页面测 PSS/峰值，再决定是否降低工作负载或增加主机内存；不要只提高所有上限。
+两个 unit 同时写 `MemoryLimit=` 与 `MemoryMax=`，本体均为 900M、浏览器均为 800M。systemd 239 已支持 `MemoryMax`；其 legacy 路径会把该值写到 `memory.limit_in_bytes`，并兼容旧 `MemoryLimit`。两项设成相同值，避免版本差异造成歧义。[239 资源控制文档](https://raw.githubusercontent.com/systemd/systemd/v239/man/systemd.resource-control.xml)、[239 cgroup 实现](https://raw.githubusercontent.com/systemd/systemd/v239/src/core/cgroup.c)
 
-## Lead 部署步骤
+不设置 `MemorySwapMax` 或 `memory.memsw` 限额，允许使用现有 swap；有效 swap 能力仍取决于内核和祖先 cgroup。239 的服务文档没有 `OOMPolicy`，unit 已移除该字段，使用该版本支持的 `Type=simple`。`KillMode=control-group` 用于停止/重启时清理整组，`Restart=on-failure` 用于 host 自身异常退出后重启；它们不承诺内核只杀 Chrome 子进程时整组立刻退出。[239 服务文档](https://raw.githubusercontent.com/systemd/systemd/v239/man/systemd.service.xml)
 
-未在服务器执行以下命令。需要 systemd 243+、cgroup v2 的 memory controller、agent 普通用户、Chrome/Xvfb 和可用的 Chrome 沙箱。现有旧发行版可能不满足，应先核对；安装脚本遇到不满足会停止，不修改内核启动参数或自动关闭沙箱。
+Chrome 退出或崩溃时 host 保持在线并清理 Xvfb；下次使用重开。本体通过私有的 `system/browser/service.json` 取得 loopback 地址、host PID 和随机鉴权值，核对私有文件权限与响应 PID 后连接。`system/browser` 与 profile 目录为 0700，状态文件为 0600；不要打印或复制其中的鉴权值。host 重启后重新发布端点，本体下次请求会重新读取。隔离模式不可用时明确报错，不回退到本体启动 Chrome。
+
+本体仅 `Wants/After` 浏览器服务，没有 `Requires/BindsTo/PartOf`，浏览器停止不会停止本体。全局 OOM 或祖先 cgroup 更小的限额仍可能影响两者。900+800=1700 MiB 是上限之和，接近整机 RAM，不代表可同时占满；swap 会增加余量，也可能增加页面延迟。
+
+## 部署
+
+以下命令供 lead 在目标机运行，本轮没有执行。仓库安装位置为 `/opt/personal-agent`，数据根为 `/srv/agent`。
 
 ```sh
-# 仓库根目录；浏览器安装与 user unit 安装互相独立
+cd /opt/personal-agent
 sudo bash cloud/deploy/browser-setup.sh
-bash cloud/deploy/browser-service-install.sh
+sudo bash cloud/deploy/install.sh
 ```
 
-第二个脚本只安装用户 unit/slice、开启 agent linger、启动用户 manager 并 daemon-reload；不启动 Chrome、不重启本体。`deploy/install.sh` 已加入这一步，随后才照原流程更新本体 unit。linger 使用户未登录时仍有用户 manager，这是系统服务通过用户 bus 按需启动浏览器的前提。[loginctl 说明](https://raw.githubusercontent.com/systemd/systemd/main/man/loginctl.xml)
+`browser-setup.sh` 安装 Chrome、Xvfb、字体与运行库。`install.sh` 要求 root，可重复执行；创建缺失的 agent 用户，安装本体及浏览器系统 unit，执行 daemon-reload，启用本体，并 `enable --now personal-agent-browser.service`。只启动轻量 Node host，不启动 Chrome，不自动启动或重启本体。
 
-手动部署需另外安装更新后的 personal-agent.service 并按既有流程 reload/restart；不要把用户浏览器 unit 当成系统 unit 安装。修改 Chrome 路径、profile 根或沙箱选项时，在用户 unit 中配置，不能依赖主服务 EnvironmentFile 自动传入；自定义 AGENT_ROOT 时本体和两个用户 unit 必须一致。
+已有本体与依赖时，只更新浏览器 unit 可运行：
 
-目标机验收：
+```sh
+sudo bash cloud/deploy/browser-service-install.sh
+```
 
-1. 核对 cgroup v2 与 systemd 版本，agent 的用户 bus 在无登录会话时可用；必要时检查 user@UID.service 是否委托 memory controller。
-2. 确认本体 ControlGroup 在 system.slice，浏览器和截图在用户树的 personal-agent-browser.slice；实际读取 memory.max 为 450×1024×1024。若 memory controller 未生效，不把 unit 文件已保存当作隔离完成。
-3. 同时运行主聊天、一个后台任务和已登录网页；测各进程 `/proc/PID/smaps_rollup` 的 PSS、两个 cgroup 的 memory.current、memory.events 和有则读取的 memory.peak。包括 Xvfb、host、renderer、截图，不只看 Chrome 主进程。
-4. 测登录页、实时画面、接管、返回、缩略图和浏览器空闲清理。确认无 CDP/X11 公网监听、没有关闭默认沙箱，profile 权限仍为 0700。
-5. 在独立测试实例触发浏览器 unit 停止/超限，核对本体 PID 和会话保持、App 错误可见、下一次浏览器工具能重开。全局 OOM、父级更小的限制和宿主机压力仍可能影响本体，不能宣称完全不会被内存问题牵连。
+该脚本同样要求 root，agent 用户须已存在；可重复执行，不调用用户 manager。对已运行的 host，`enable --now` 不会重新载入 Node 代码。更新后由 lead 选择时机手动重启 host 和本体：
 
-macOS 本地开发不设置 AGENT_BROWSER_SERVICE，继续由控制器懒启动系统 Chrome。仓库测试以假 systemctl 验证调用、PID/端点与失败清理；真 Chrome 演示验证 HTTP/WS/SDK 接线。Linux systemd、cgroup 内存与 OOM 故障隔离仍须 lead 目标机实测。
+```sh
+sudo systemd-analyze verify /etc/systemd/system/personal-agent.service /etc/systemd/system/personal-agent-browser.service
+sudo systemctl restart personal-agent-browser.service
+sudo systemctl restart personal-agent.service
+```
+
+重启浏览器 host 会关闭当前浏览器；profile 保留。两个 unit 的 `User/Group`、`AGENT_ROOT` 必须一致。自定义 Chrome 路径时通过浏览器系统服务的 drop-in 设置 `AGENT_BROWSER_EXECUTABLE`；host 不加载本体的 EnvironmentFile。默认保留 Chrome 沙箱，目标机须验证用户命名空间沙箱与 `NoNewPrivileges=true` 配合正常。
+
+## cgroup v1 验收命令
+
+先验证实际服务状态与配置；不要以安装脚本退出成功代替运行验收：
+
+```sh
+systemctl --version
+findmnt /sys/fs/cgroup
+systemctl is-enabled personal-agent.service personal-agent-browser.service
+systemctl is-active personal-agent.service personal-agent-browser.service
+systemctl show personal-agent.service personal-agent-browser.service -p MainPID -p ControlGroup -p MemoryAccounting -p MemoryLimit -p MemoryMax -p Restart -p Result
+swapon --show
+free -m
+```
+
+找到 memory controller 的挂载点后读取 legacy 文件，不用 cgroup v2 的 `memory.current`：
+
+```sh
+task_memory_mount="$(findmnt -rn -t cgroup -o TARGET,OPTIONS | awk '$2 ~ /(^|,)memory(,|$)/ {print $1; exit}')"
+test -n "$task_memory_mount"
+for task_unit in personal-agent.service personal-agent-browser.service; do
+  task_group="$(systemctl show "$task_unit" -p ControlGroup --value)"
+  task_memory_dir="${task_memory_mount}${task_group}"
+  echo "$task_unit"
+  for task_counter in memory.limit_in_bytes memory.usage_in_bytes memory.max_usage_in_bytes memory.failcnt; do
+    echo "$task_counter"
+    cat "${task_memory_dir}/${task_counter}"
+  done
+  if test -r "${task_memory_dir}/memory.memsw.usage_in_bytes"; then
+    echo 'memory.memsw.usage_in_bytes (RAM + swap)'
+    cat "${task_memory_dir}/memory.memsw.usage_in_bytes"
+    echo 'memory.memsw.limit_in_bytes'
+    cat "${task_memory_dir}/memory.memsw.limit_in_bytes"
+  fi
+done
+```
+
+预期 limit 分别为 **943718400**、**838860800** 字节。`memory.usage_in_bytes` 是当前用量，`memory.max_usage_in_bytes` 是该 cgroup 生命周期内峰值；重建 unit/cgroup 后峰值会重置。`memory.failcnt` 记录触及限额的次数，不能单凭它认定发生 OOM。需要细看时再读同目录的 `memory.stat`、`memory.oom_control` 和 `journalctl -u personal-agent-browser.service`。`memory.memsw.*` 需要内核启用 swap accounting，缺失时不等于服务禁用了 swap。
+
+确认进程归属与 PSS（有权限时以 sudo 读取）：
+
+```sh
+task_browser_group="$(systemctl show personal-agent-browser.service -p ControlGroup --value)"
+task_browser_dir="${task_memory_mount}${task_browser_group}"
+cat "${task_browser_dir}/cgroup.procs"
+for task_pid in $(cat "${task_browser_dir}/cgroup.procs"); do
+  cat "/proc/${task_pid}/cgroup"
+  awk '/^Pss:/ {print FILENAME, $2 " kB"}' "/proc/${task_pid}/smaps_rollup"
+done
+```
+
+首次启动时浏览器 cgroup 只有小型 Node host，不应有 Chrome/Xvfb。打开网页并截图后，host、Chrome、renderer、Xvfb 应全部归浏览器 cgroup，本体/SDK 在另一组。若存在子 cgroup，要连同其中进程一起核对。用真实页面、主聊天和后台任务同时运行，记录上述当前用量、峰值、swap 与 PSS；不要用各进程 RSS 相加代替独占物理内存。
+
+通过 App 验证实时画面、接管、交还和资源库缩略图；确认截图不改变用户页。停止操作并等待超过 10 分钟，Chrome/Xvfb 消失，但浏览器服务保持 active。仅查状态或观看实时画面不能阻止回收。页面死循环导致截图超时时会关闭共享 Chrome，下一次浏览器工具重开；Node host 与本体保持运行，当前网页操作可能中断。
+
+在可中断的测试窗口，可记录本体 MainPID，手动停止浏览器服务，确认本体 PID 和聊天会话不变，浏览器操作报错；再启动浏览器服务并调用工具，确认恢复。此步骤会中断浏览器，安装脚本不会自动做。没有在目标机执行限额/OOM 压测，不能据此宣称全局 OOM 不影响本体。
+
+## 本机验证边界
+
+macOS 不设置 `AGENT_BROWSER_SERVICE`，控制器继续直接懒启动系统 Chrome。测试使用假 host 验证私有通信、崩溃检测、空闲回收和缩略图并发；假 systemctl 验证 root 安装脚本可重复执行且不重启本体。另用真实 Chrome 的独立 host 子进程验证共享截图与关闭后 host 存活，真实 SDK 演示验证 macOS 直接懒启动、接管/交还继续与动态无需 Chrome 时不启动。
+
+Linux systemd 239 的实际 unit 加载、cgroup v1 计费、Xvfb、沙箱和内存压力仍由 lead 按上述命令验收。本轮未连接服务器。

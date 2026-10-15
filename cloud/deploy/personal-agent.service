@@ -1,7 +1,7 @@
 [Unit]
 Description=Personal Agent cloud body
-After=network-online.target mihomo.service
-Wants=network-online.target
+After=network-online.target mihomo.service personal-agent-browser.service
+Wants=network-online.target personal-agent-browser.service
 
 [Service]
 Type=simple
@@ -16,6 +16,8 @@ RestartSec=5
 # The agent may write anywhere it owns (/srv/agent, /home/agent, /tmp); the rest of the OS is read-only to it.
 ProtectSystem=full
 NoNewPrivileges=true
+MemoryAccounting=true
+MemoryLimit=900M
 MemoryMax=900M
 
 [Install]

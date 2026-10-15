@@ -1,6 +1,6 @@
 # v08-cloud 第二轮 result
 
-三项后续已在仓库完成：动态说明按运行上下文授权、浏览器接入 SDK 与 App、systemd 独立内存域和启动方式。版本仍为 0.8.0；没有 commit/push/tag、部署、SSH、真实账号操作或密钥文件读取。当前对接协议见 [v08-cloud.md](v08-cloud.md)，部署评估见 [browser-memory.md](browser-memory.md)。
+这是第二轮接线时的历史验证记录。动态说明按运行上下文授权、浏览器接入 SDK 与 App 已完成；内存部署部分已按目标机信息修订，当前方案见 [browser-memory.md](browser-memory.md)，本次验证见 [系统服务 result](v08-browser-system-service-result.md)。版本仍为 0.8.0；没有 commit/push/tag、部署、SSH、真实账号操作或密钥文件读取。当前对接协议见 [v08-cloud.md](v08-cloud.md)。
 
 ## 1. 动态说明权限
 
@@ -21,24 +21,11 @@
 - 浏览器工具的头像文字为「在浏览网页」；接管期间 waiting 优先，交还后继续 working。
 - `{type:"browser"}` 仍不需要 sessionId 或额外字段，始终打开当前共享浏览器会话。历史卡片不会恢复历史页面。
 
-**协议没有破坏性改动**：没有改已有 HTTP/WS 路径、字段、卡片格式或返回结构；浏览器路由现在实际挂载。v08-cloud.md 补全了现有浏览器协议链接、唤醒行为、waiting 含义和动态说明新权限。browser.md 未修改，其「Lead 接线」示例中的旧排队说明不适用于当前 Harness；当前实现使用输入流。
+**协议没有破坏性改动**：没有改已有 HTTP/WS 路径、字段、卡片格式或返回结构；浏览器路由现在实际挂载。v08-cloud.md 补全了现有浏览器协议链接、唤醒行为、waiting 含义和动态说明新权限。后续已同步修正 browser.md 的「Lead 接线」示例，当前实现使用输入流。
 
 ## 3. 内存与部署建议
 
-采用独立的 **agent 用户 unit**，不把 Chrome 放进仍属于本体 900M 祖先域的子 cgroup：
-
-| 资源 | 配置 |
-| --- | --- |
-| system manager 的 personal-agent.service | 保留 MemoryMax=900M，Node、SDK、HTTP/WS |
-| user manager 的 personal-agent-browser.slice | 合计 MemoryHigh=320M、MemoryMax=450M、MemorySwapMax=0 |
-| personal-agent-browser.service | 实时 Chrome/Xvfb/小型 Node host，属于上述 slice |
-| personal-agent-thumbnail@UUID.service | 现有构件截图 Chrome 与压缩，属于同一 slice |
-
-把缩略图也搬出主服务，避免只隔离实时浏览器却漏掉另一条 Chrome 派生路径。按需启动、MainPID/端点核对、崩溃检测、独立 unit 停止与下次重开均已实现；配置隔离模式时失败会报错，不悄悄退回本体启动 Chrome。OOMPolicy=kill、KillMode=control-group、Restart=no 负责清理单个浏览器 unit，避免反复重启。
-
-主 unit 增加 AGENT_BROWSER_SERVICE。安装脚本安装用户 unit/slice，启用 agent linger、准备用户 manager 和 daemon-reload，但不启动 Chrome；既有 install.sh 已调用该步骤。需要 systemd 243+ 和 cgroup v2 memory controller，脚本会检查，不自动修改内核启动参数。浏览器包安装仍由 browser worker 的 browser-setup.sh 负责，本轮未修改该脚本。
-
-**这不是容量实测结论。** 900+450=1350 MiB 为上限预算，OS/代理等另计。browser worker 本机 Chrome RSS 求和约 770–900 MiB，含共享页重复统计，不能推算 Linux PSS。450M 是保守试运行值，复杂页面或同时截图可能使浏览器任务失败；需按 browser-memory.md 在目标机测 PSS、cgroup 峰值与 OOM。全局 OOM 或更小的祖先限制仍可能影响本体，不能保证永不连累。没有连接服务器、安装 unit、改变 linger 或执行 OOM 压测；本机 macOS 无 Linux cgroup 验收。
+此部分已由目标机 systemd 239 / cgroup v1 的系统服务方案替代。常驻 `personal-agent-browser.service` 为 `User=agent`，800M、允许 swap；Chrome/Xvfb 按需启动，10 分钟空闲关闭。资源库截图复用 host 中的 Chrome，本体单独保留 900M。两个 unit 同时写 MemoryLimit 与 MemoryMax；安装脚本要求 root，不重启本体。完整部署和 cgroup v1 验收命令见 [browser-memory.md](browser-memory.md)，新的实际测试结果见 [系统服务 result](v08-browser-system-service-result.md)。
 
 ## 验证
 
@@ -80,8 +67,8 @@ feed with browser tools and no browser calls: no Chrome restart
 - 修改核心：`src/agent.mjs`、`data-guard.mjs`、`avatar.mjs`、`server.mjs`、`main.mjs`、`page-screenshot.mjs`。
 - **修改 browser worker 原模块**：`src/browser/mcp.mjs` 增加执行开始的归属回调、动态说明与不接管策略；`src/browser/browser.mjs` 增加可选 systemd manager、工具实际开始时的 onStart 和接管竞态复查。没有修改其 process.mjs、input.mjs、routes.mjs、demo.mjs、browser.test.mjs 或 browser.md。
 - 新增 browser 模块：`src/browser/systemd-process.mjs`、`src/browser/host.mjs`。
-- 新增截图隔离：`src/screenshot-service.mjs`、`src/screenshot-host.mjs`。
-- 修改部署：`deploy/personal-agent.service`、`deploy/install.sh`；新增 `deploy/personal-agent-browser.service`、`personal-agent-browser.slice`、`personal-agent-thumbnail@.service`、`browser-service-install.sh`。
+- 截图隔离入口：`src/screenshot-service.mjs`；后续已改为调用常驻 host，独立截图进程已删除。
+- 部署入口：`deploy/personal-agent.service`、`deploy/install.sh`、`deploy/personal-agent-browser.service`、`browser-service-install.sh`；后续均已改为系统服务方案。
 - 新增验证：`scripts/verify-v08-browser.mjs`、`test/browser-integration.test.mjs`、`browser-systemd.test.mjs`、`sdk-browser.test.mjs`；修改 `test/v08-content.test.mjs`、`environment.mjs`。
 - 文档：更新 `docs/v08-cloud.md` 与上一轮 result 的后续入口；新增 `docs/browser-memory.md` 与本 result。
 - 没有修改 spec、Android、Mac、design、handoff 工具，也没有重置其他 worker 的变更。

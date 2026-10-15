@@ -45,6 +45,7 @@ export class CloudBrowser extends EventEmitter {
 
   touch() {
     this.lastActivityAt = Date.now();
+    this.manager.touch?.();
     clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       const finish = () => this.queue(async () => {
@@ -74,9 +75,23 @@ export class CloudBrowser extends EventEmitter {
     try {
       const context = browser.contexts()[0];
       if (!context) throw new Error("Chrome 默认用户上下文不可用");
-      this.page = context.pages()[0] || await context.newPage();
-      for (const extra of context.pages()) if (extra !== this.page) await extra.close();
-      context.on("page", (extra) => { if (extra !== this.page) void extra.close().catch(() => {}); });
+      const browserSession = this.manager.sharedThumbnails ? await browser.newBrowserCDPSession() : null;
+      const userPage = async (page) => {
+        if (!this.manager.sharedThumbnails) return true;
+        const session = await context.newCDPSession(page);
+        try {
+          const { targetInfo } = await session.send("Target.getTargetInfo");
+          const { browserContextIds } = await browserSession.send("Target.getBrowserContexts");
+          return !browserContextIds.includes(targetInfo.browserContextId);
+        } finally { await session.detach().catch(() => {}); }
+      };
+      const pages = [];
+      for (const page of context.pages()) if (await userPage(page)) pages.push(page);
+      this.page = pages[0] || await context.newPage();
+      const closeExtra = async (extra) => { if (extra !== this.page && await userPage(extra)) await extra.close(); };
+      for (const extra of pages) await closeExtra(extra);
+      // Another CDP client may report the host's isolated thumbnail target as a default-context page.
+      context.on("page", (extra) => { void closeExtra(extra).catch(() => {}); });
       // Keep links and scripted popups in the sole tab, including on subsequent navigations.
       await context.addInitScript(() => {
         window.open = (url) => { if (url) location.assign(url); return null; };

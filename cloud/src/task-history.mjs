@@ -92,7 +92,7 @@ export class TaskHistory {
     return [...this.records.values()].filter((r)=>r.status!=="running")
       .sort((a,b)=>(b.endedAt||b.startedAt)-(a.endedAt||a.startedAt))
       .map((r)=>({id:r.id,label:r.title,title:r.title,status:r.status,ok:r.status==="done",ts:r.endedAt||r.startedAt,
-        outputs:r.outputs||[],...(r.path&&{path:r.path})}));
+        outputs:r.outputs||[],...(r.path&&{path:r.path}),...(r.chatType&&{chatType:r.chatType})}));
   }
   transcript(record) {
     if (!record.sessionId) return [];

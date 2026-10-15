@@ -129,8 +129,8 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       });
       if (p === "/api/first-chat" && req.method === "POST") return json(res, 200, await harness.firstChat((await readBody(req)).device));
       if (p === "/api/options/choose" && req.method === "POST") {
-        const { messageId, optionId } = await readBody(req);
-        return json(res, 200, await harness.chooseOption(messageId, optionId));
+        const { messageId, optionId, activityId } = await readBody(req);
+        return json(res, 200, await harness.chooseOption(messageId, optionId, activityId));
       }
       if (p === "/api/feed" && req.method === "GET") return json(res, 200, content.feed({ before: url.searchParams.get("before") ?? undefined, days: Number(url.searchParams.get("days") ?? 7) }));
       if (p === "/api/feed/item" && req.method === "GET") return json(res, 200, content.post(url.searchParams.get("path")));
@@ -179,6 +179,11 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         if (scheduleRoute[2] && req.method === "POST") return json(res, 202, await schedules.run(id));
         if (!scheduleRoute[2] && req.method === "PUT") return json(res, 200, schedules.setEnabled(id, (await readBody(req)).enabled));
         return json(res, 405, { error: "不支持这个定时操作" });
+      }
+      if (p === "/api/side-chats" && req.method === "POST") {
+        const body = JSON.parse((await readRaw(req, 64 * 1024)).toString("utf8"));
+        const id = await harness.createSideChat(body.text ?? "", body.attachments ?? [], body.title);
+        return json(res, 201, { ok: true, id, chatType: "side" });
       }
       if (p === "/api/activities" && req.method === "GET") {
         const limit = Number(url.searchParams.get("limit") ?? 30), cursor = url.searchParams.get("before"), before = cursor === null ? undefined : Number(cursor);
@@ -408,7 +413,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         }catch(e){if(ws.readyState===1)ws.send(JSON.stringify({t:"error",error:e.message}));}
       }
       if (msg.t === "interrupt") harness.interrupt();
-      if (msg.t === "choose_option") harness.chooseOption(msg.messageId, msg.optionId).catch((e) => {
+      if (msg.t === "choose_option") Promise.resolve().then(() => harness.chooseOption(msg.messageId, msg.optionId, msg.activityId)).catch((e) => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ t: "error", error: e.message, status: e.status || 400 }));
       });
       if (msg.t === "stop_activity") harness.stopTask(msg.id).then(() => {
