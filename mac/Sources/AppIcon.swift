@@ -32,6 +32,7 @@ struct AppIconStyle: Equatable {
         case "weread": return Self(symbol:"book.fill",hex:0x348ADE)
         case "wind": return Self(symbol:"chart.line.uptrend.xyaxis",hex:0xCE3A40)
         case "tencent-quotes": return Self(symbol:"chart.line.uptrend.xyaxis",hex:0x287BE0)
+        case "amap": return Self(symbol:"map.fill",hex:0x287BE0)
         case "github": return Self(symbol:"chevron.left.forwardslash.chevron.right",hex:0x24292F)
         case "tavily": return Self(symbol:"sparkle.magnifyingglass",hex:0x6478D4)
         case "aliyun-mail": return Self(symbol:"envelope.fill",hex:0xED8B32)

@@ -33,6 +33,7 @@ fun ConnectorLogo(name: String, size: Dp = 36.dp) {
         "weread" -> Color(0xFF3277E5) to "读"
         "wind" -> Color(0xFFD42B39) to "W"
         "tencent-quotes" -> Color(0xFF287BE0) to null
+        "amap" -> Color(0xFF287BE0) to null
         "github" -> Color(0xFF171717) to "G"
         "tavily" -> Color(0xFF6556D9) to "T"
         "aliyun-mail" -> Color(0xFFFF6A00) to "阿"

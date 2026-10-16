@@ -11,6 +11,7 @@ import weread from "./weread/index.mjs";
 import wind from "./wind/index.mjs";
 import github from "./github/index.mjs";
 import tencent_quotes from "./tencent-quotes/index.mjs";
+import amap from "./amap/index.mjs";
 
-export const connectors = [qq_mail, netease_163, netease_126, gmail, exmail, aliyun_mail, imap, tavily, weread, wind, github, tencent_quotes];
+export const connectors = [qq_mail, netease_163, netease_126, gmail, exmail, aliyun_mail, imap, tavily, weread, wind, github, tencent_quotes, amap];
 export default connectors;

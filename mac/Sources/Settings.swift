@@ -395,7 +395,8 @@ struct ConnectorsPage: View {
             connectorGroup("邮箱", items: off.filter { ["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap"].contains($0.name) })
             connectorGroup("调研与阅读", items: off.filter { ["tavily", "weread"].contains($0.name) })
             connectorGroup("工作与金融", items: off.filter { ["github", "wind", "tencent-quotes"].contains($0.name) })
-            let known = Set(["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap", "tavily", "weread", "github", "wind", "tencent-quotes"])
+            connectorGroup("出行与位置", items: off.filter { $0.name == "amap" })
+            let known = Set(["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap", "tavily", "weread", "github", "wind", "tencent-quotes", "amap"])
             connectorGroup("更多应用", items: off.filter { !known.contains($0.name) })
         }
     }

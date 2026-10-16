@@ -1,9 +1,0 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <!-- a bean: 豆豆 -->
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M54,30c13,0 22,9 22,21c0,8 -4,12 -9,15c-5,3 -6,7 -7,10c-2,6 -8,9 -14,8c-9,-1 -16,-9 -16,-20c0,-6 2,-11 6,-15c3,-3 3,-6 3,-9c0,-6 6,-10 15,-10z" />
-    <path android:fillColor="#FF6B5BD6"
-        android:pathData="M47,52a3,3 0 1,0 0.1,0zM61,52a3,3 0 1,0 0.1,0z" />
-</vector>

@@ -811,6 +811,12 @@ connectors:
       description: 免费查询沪深京股票、ETF 和指数的最新公开报价；无需 Key、默认关闭、保留报价时间、只读不交易
       multiAccount: false
       setup: []
+    - id: amap
+      name: 高德地图
+      description: 搜索地点与周边，查询距离、步行/驾车/公交/骑行路线和天气；使用 Web 服务 Key，云端调用
+      multiAccount: false
+      setup:
+        - 高德开放平台的 Web 服务 Key
     - id: github
       name: GitHub
       description: 查看仓库、issue、评论和通知（只读，不标记通知已读）

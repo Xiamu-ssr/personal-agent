@@ -1,0 +1,99 @@
+{
+  "source": "Actual paired macOS app; real user account, 2026-10-16",
+  "images": {
+    "mac-chat.png": {
+      "sha256": "e6ee216184e4ba400f5e44d4e0c731321fd7eaf93db93122a3ac6b8a3e39bc1c",
+      "size": [
+        2200,
+        1464
+      ],
+      "redactedRegionsBeforeCrop": [
+        [
+          22,
+          890,
+          412,
+          1078
+        ]
+      ],
+      "cropTop": 56
+    },
+    "mac-feed.png": {
+      "sha256": "732ceecf8493e9f4c9f27e650a00b54ab246709855089c53ca46dfdeb2c593b1",
+      "size": [
+        2200,
+        1464
+      ],
+      "redactedRegionsBeforeCrop": [
+        [
+          22,
+          890,
+          412,
+          1078
+        ]
+      ],
+      "cropTop": 56
+    },
+    "mac-feed-image.png": {
+      "sha256": "bd9cfa267c386c0e701cf37398f2b72b9faef4c49888d3e7879c518179a0c581",
+      "size": [
+        2200,
+        1464
+      ],
+      "redactedRegionsBeforeCrop": [
+        [
+          22,
+          890,
+          412,
+          1078
+        ]
+      ],
+      "cropTop": 56
+    },
+    "mac-library.png": {
+      "sha256": "7ff89f4c6f3dba51af0f4f74ca27bb2fc4c99efa95c7f04e2722e289f50695c9",
+      "size": [
+        2200,
+        1464
+      ],
+      "redactedRegionsBeforeCrop": [
+        [
+          22,
+          890,
+          412,
+          1078
+        ],
+        [
+          590,
+          1030,
+          1275,
+          1103
+        ]
+      ],
+      "cropTop": 56
+    },
+    "mac-document.png": {
+      "sha256": "b5404f7744133f79785570693a917c3a0c522ac819d41153743d403221947fea",
+      "size": [
+        2200,
+        1464
+      ],
+      "redactedRegionsBeforeCrop": [
+        [
+          22,
+          890,
+          412,
+          1078
+        ]
+      ],
+      "cropTop": 56
+    },
+    "hero.jpg": {
+      "sha256": "4002b50e827c876472f300dec5de1d9b87292b6bd4e63586d3895ebe6f59b83e",
+      "size": [
+        2400,
+        1880
+      ],
+      "composition": "Code-drawn background/frame + actual redacted mac-chat.png + real font glyphs"
+    }
+  }
+}

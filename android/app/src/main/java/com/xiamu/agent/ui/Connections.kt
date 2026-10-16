@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.RssFeed
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShowChart
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -92,6 +93,7 @@ internal fun connectorIcon(name: String): ImageVector = when (name) {
     "calendar" -> Icons.Outlined.CalendarMonth
     "github" -> Icons.Outlined.Code
     "tencent-quotes" -> Icons.Outlined.ShowChart
+    "amap" -> Icons.Outlined.Map
     "notion" -> Icons.Outlined.Description
     "rss" -> Icons.Outlined.RssFeed
     "feishu" -> Icons.Outlined.Hub

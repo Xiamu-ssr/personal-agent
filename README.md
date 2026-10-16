@@ -1,11 +1,11 @@
 <p align="center"><em>A personal AI companion on your own server.</em></p>
 
 <p align="center">
-  <img src="docs/images/v0.8/hero.jpg" alt="豆豆 Personal Agent：从一句话开始，陪你把事情做完。芽豆插画与代码排版文字。" width="960">
+  <img src="docs/images/v0.8.3/hero.jpg" alt="豆豆 Personal Agent：实际 Mac 聊天界面与 AR 眼镜讨论，私人会话名称已遮挡。" width="1100">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2"><img src="https://img.shields.io/badge/Release-v0.8.2-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v0.8.2"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3"><img src="https://img.shields.io/badge/Release-v0.8.3-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v0.8.3"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=101612" alt="Android · macOS · Cloud">
   <a href="https://github.com/anthropics/claude-agent-sdk-typescript"><img src="https://img.shields.io/badge/Built%20with-Claude%20Agent%20SDK-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with Claude Agent SDK"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=101612" alt="MIT License"></a>
@@ -21,23 +21,23 @@
   <tr>
     <td width="33%" align="center"><h3>3 端</h3>Android · macOS · 自有云</td>
     <td width="34%" align="center"><h3>5 个栏目</h3>聊天 · 动态 · 点子 · 目标 · 资源库</td>
-    <td width="33%" align="center"><h3>12 个连接器</h3>邮箱 · 搜索 · 阅读 · 行情 · GitHub</td>
+    <td width="33%" align="center"><h3>13 个连接器</h3>邮箱 · 搜索 · 阅读 · 行情 · 地图 · GitHub</td>
   </tr>
 </table>
 
 ## 开始使用
 
-**当前版本：[v0.8.2 · 动态配图与免费行情](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
+**当前版本：[v0.8.3 · 高德地图与统一图标](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
-| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.2/doudou-0.8.2.apk) | Android 9 或更新版本 |
-| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.2/doudou-0.8.2.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
+| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.3/doudou-0.8.3.apk) | Android 9 或更新版本 |
+| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.3/doudou-0.8.3.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
 | 云端 | [部署指南](docs/deployment.md) | Linux、Node.js ≥ 20.9、systemd、Nginx、HTTPS |
 
 先[部署云端](#部署)，生成一次性配对码，再在 App 填入自己的服务器地址。第一次聊天，豆豆会问怎么称呼你、自己叫什么，再推荐需要连接的应用和本机能力。
 
-**从 0.8.1 升级：更新云端和 App，原有配对继续使用。** 本版修复动态配图，新增默认关闭、无需 Key 的腾讯行情开关；Tavily 和 Wind 支持多账号额度切换，密钥在 App 中显示首尾以便区分。
+**从 0.8.1 / 0.8.2 升级：更新云端和 App，原有配对继续使用。** 本版新增高德地图连接器，Android 启动图标与 Mac 统一为芽豆；动态配图、免费腾讯行情、Tavily / Wind 多账号额度切换和密钥首尾显示沿用上版。
 
 **从 0.7 升级：云端与客户端都需要更新到 0.8。** 旧版 App 不再兼容；首次启动云端会迁移旧数据，升级前请备份。详见[升级说明](docs/deployment.md#从-07-升级到-08)。
 
@@ -45,47 +45,30 @@
 
 ### 想到什么，直接告诉它
 
-<table width="100%">
-  <tr>
-    <td width="32%" align="center"><a href="docs/images/v0.8/phone-chat.png"><img src="docs/images/v0.8/phone-chat.png" alt="Android 0.8 聊天：芽豆头像、独立气泡、选择卡片与按需连接应用；模拟器演示数据" width="200"></a></td>
-    <td width="68%" valign="middle">
-      <sub>01 / CONVERSATION</sub>
-      <h3>聊天就是入口。</h3>
-      <ul>
-        <li>发文字、图片、文件，按住说话，或留一条语音笔记。</li>
-        <li>它忙着做事时，你也能接着说；新消息进入当前这一轮。</li>
-        <li>回复以独立气泡和卡片出现，工具细节收进头像里的控制台。</li>
-        <li>遇到需要选择或确认的关键动作，先给你选项，再继续。</li>
-        <li>应用和设备能力按需连接，在对应设备上由你授权。</li>
-      </ul>
-    </td>
-  </tr>
-</table>
+发文字、图片、文件，按住说话，或留一条语音笔记。豆豆把回复分成气泡和卡片，图片直接出现在对话里；工具细节收在头像里的控制台，需要时再展开。忙着做事时也能接着说。
+
+下面是作者与豆豆的真实 AR 眼镜讨论，保留实际回答与配图，私人会话名称已遮挡。
+
+<p align="center"><a href="docs/images/v0.8.3/mac-chat.png"><img src="docs/images/v0.8.3/mac-chat.png" alt="真实 Mac 聊天：AR 眼镜讨论、独立回复气泡、图片和输入框；会话名称已脱敏" width="1100"></a></p>
 
 ### 你关心的事，持续有新消息
 
-<table width="100%">
-  <tr>
-    <td width="68%" valign="middle">
-      <sub>02 / FEED</sub>
-      <h3>动态，替代一整份晨晚报。</h3>
-      <ul>
-        <li>告诉它想看什么，它按你的口味查找新消息。</li>
-        <li>默认每天 7:00–23:00，每 30 分钟检查一次，每次发布 0–2 条。</li>
-        <li>写明来源、时间，附原文链接；有原文配图时一起展示。</li>
-        <li>赞、踩，或点「讨论」接着聊；更新间隔和时段都能调整。</li>
-        <li>动态使用 Haiku 5.5；实际搜索耗时和模型费用由你的端点决定。</li>
-      </ul>
-    </td>
-    <td width="32%" align="center"><a href="docs/images/v0.8/phone-feed.png"><img src="docs/images/v0.8/phone-feed.png" alt="Android 0.8 动态：来源、原文链接、图片、赞踩讨论和时间；模拟器演示数据" width="200"></a></td>
-  </tr>
-</table>
+告诉它想看什么，它按你的口味找新消息。默认每天 7:00–23:00，每 30 分钟检查一次，每次发布 0–2 条；时间、间隔和偏好都能调整。动态任务使用当前选择的模型，搜索耗时和费用由你配置的服务决定。
+
+来源、正文、表格、原文链接和配图放在同一条动态里。可以赞、踩；点「讨论」把这条动态放进聊天输入框，再补一句自己的问题后发送。
+
+<p align="center"><a href="docs/images/v0.8.3/mac-feed.png"><img src="docs/images/v0.8.3/mac-feed.png" alt="真实 Mac 动态首页：公开 AI 产品信息、来源与表格；会话名称已脱敏" width="1100"></a></p>
+
+<details>
+<summary><strong>展开查看真实动态的配图与讨论入口</strong></summary>
+
+<p align="center"><a href="docs/images/v0.8.3/mac-feed-image.png"><img src="docs/images/v0.8.3/mac-feed-image.png" alt="真实动态的原文配图、赞踩与讨论入口；会话名称已脱敏" width="1100"></a></p>
+
+</details>
 
 ### 单独聊件事，原来的工作接着做
 
-<p align="center"><a href="docs/images/v0.8/mac-side-chat.png"><img src="docs/images/v0.8/mac-side-chat.png" alt="Mac 0.8 独立旁聊：侧栏会话、自己的消息历史与选择卡片；本地验收演示数据" width="960"></a></p>
-
-从侧栏或抽屉新开一个旁聊，围绕另一件事继续问。主聊天和旁聊各自保存消息与选项状态，主聊天正在处理的工作不需要停下。芽豆的五种动画状态会告诉你：空闲、工作中、等你回复、完成、出错。
+从侧栏或抽屉新开旁聊，围绕另一件事继续问。主聊天和旁聊各自保存消息与选项状态，正在处理的工作不需要停下。头像显示空闲、工作中、等你回复、完成、出错；控制台里的活动可查看任务进度和过程，主聊天的每一句话不会都变成一项活动。
 
 ### 点子、目标和成果，各有去处
 
@@ -96,12 +79,11 @@
 | **资源库** | 反复打开做好的网页、文档、图片和影音；构件与媒体分别收好。 |
 
 <details>
-<summary><strong>展开查看点子、目标与资源库截图</strong></summary>
+<summary><strong>展开查看真实资源库与打开的研究文档</strong></summary>
 
 <p align="center">
-  <a href="docs/images/v0.8/phone-ideas.png"><img src="docs/images/v0.8/phone-ideas.png" alt="Android 0.8 点子，模拟器演示数据" width="200"></a>
-  <a href="docs/images/v0.8/phone-goals.png"><img src="docs/images/v0.8/phone-goals.png" alt="Android 0.8 目标，模拟器演示数据" width="200"></a>
-  <a href="docs/images/v0.8/phone-library.png"><img src="docs/images/v0.8/phone-library.png" alt="Android 0.8 资源库，模拟器演示数据" width="200"></a>
+  <a href="docs/images/v0.8.3/mac-library.png"><img src="docs/images/v0.8.3/mac-library.png" alt="真实 Mac 资源库：保存的网页与研究文档；私人标题和会话名称已遮挡" width="1100"></a>
+  <a href="docs/images/v0.8.3/mac-document.png"><img src="docs/images/v0.8.3/mac-document.png" alt="从真实资源库打开的 AR 眼镜研究文档，支持表格与正文；会话名称已脱敏" width="1100"></a>
 </p>
 
 </details>
@@ -110,24 +92,27 @@
 
 云主机上运行一个真正的 Chrome。豆豆可以打开网页、点击、输入；你能在 App 里看到画面，需要登录、验证码或付款时接管，完成后交还给它继续。登录状态保存在自己的云主机上。
 
-**11 个内置云端连接器**：QQ 邮箱、163 邮箱、126 邮箱、Gmail、腾讯企业邮、阿里企业邮、通用 IMAP、Tavily、微信读书、Wind AI、GitHub（只读）。邮箱支持同一服务连接多个账号。数量来自[当前注册表](cloud/connectors/index.mjs)，接入方式见[连接器规格](spec/connectors.md)。
+**13 个内置云端连接器**，需要哪个再连接，接入方式见[连接器规格](spec/connectors.md)：
+
+| 用途 | 连接器 | 配置方式 |
+| --- | --- | --- |
+| 邮件 | QQ、163、126、Gmail、腾讯企业邮、阿里企业邮、通用 IMAP | 只读，支持同服务多个邮箱 |
+| 搜索与阅读 | Tavily、微信读书 | 填入各自 API Key |
+| 金融信息 | Wind AI、腾讯行情 | Wind 填 Key；腾讯行情免费免 Key，可连接或取消 |
+| 地点与出行 | 高德地图 | 填高德 **Web 服务** Key，查地点、距离、路线和天气 |
+| 开发协作 | GitHub | 个人访问令牌，连接器只读 |
+
+Tavily、Wind 只在上游明确报告额度耗尽时切换备用账号；网络故障或普通限流不会触发换号。App 显示密钥首尾片段便于区分，模型不会收到完整 Key。高德查询消耗你自己 Key 的配额；不提供下单或打车。
+
+腾讯行情的代码、查询和短缓存都在豆豆内，与股票铃服务隔离，不读取或修改其他项目的配置、账号和数据。
 
 手机可提供已授权的日历、短信、位置、通知与健康数据；Mac 可提供命令行、文件、电脑操作和日历等能力。需要哪项再开启；设备离线时，相应本机能力不可用。
 
 ### 同一个豆豆，在更大的屏幕上
 
-<p align="center"><a href="docs/images/v0.8/mac-feed.png"><img src="docs/images/v0.8/mac-feed.png" alt="Mac 0.8 动态页：五栏目侧栏、悬浮芽豆头像与信息流；本地验收演示数据" width="960"></a></p>
+手机用悬浮底栏，Mac 用侧边栏，启动图标都使用同一只芽豆。黑白外观跟随系统切换，蓝色留给链接。记忆、活动、权限、定时和云端浏览器统一收在头像控制台里。
 
-手机用悬浮底栏，Mac 用侧边栏。黑白外观跟随系统切换，蓝色留给链接。记忆、活动、权限、定时和云端浏览器统一收在头像控制台里。
-
-<details>
-<summary><strong>查看深色外观</strong></summary>
-
-<p align="center"><a href="docs/images/v0.8/phone-feed-dark.png"><img src="docs/images/v0.8/phone-feed-dark.png" alt="Android 0.8 深色动态页；模拟器演示数据" width="240"></a></p>
-
-</details>
-
-<p align="center"><sub>本页 0.8 界面截图来自 Android 模拟器与 Mac 本地 App 的第二轮验收，均使用演示内容；不代表真实账号或手机真机数据。首图为芽豆插画，文字由代码排版，实际界面以单张截图为准。</sub></p>
+<p align="center"><sub>本页全部界面截图来自作者真实账号的 Mac App，私人区域已遮挡。首图由代码排版，将实际截图放入背景与相框；没有 AI 重绘界面。截图中的回答和动态是模型输出，不代表其中事实已逐项核验。<a href="docs/images/v0.8.3/README.md">素材来源与隐私处理</a></sub></p>
 
 ## 架构
 
@@ -212,7 +197,7 @@ sudo -u agent /usr/bin/node /opt/personal-agent/cloud/src/pair.mjs
 
 App 填写自己的地址，例如 `https://agent.example.com/agent`，以及配对码。配对码 24 小时有效、用后作废；另一台设备重新生成。配对后发一条消息，确认模型真正回复，再按需连接应用和本机能力。
 
-模型、权限模式在 App 设置里选择。当前默认模型为 Haiku 5.5，亦可选 Opus 5.5、GLM 5.3 Flash / FlashX；动态任务另固定使用 Haiku 5.5，因此端点也要支持它。模型 ID、环境变量、语音转写及维护命令见[完整部署指南](docs/deployment.md)。
+模型和权限模式在 App 设置里选择。内置 ZenMux 服务可选 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash / FlashX、MiMo-V2.6-Pro，也可添加自己的 Anthropic 兼容服务及模型 ID。聊天、动态和摘要沿用当前选择；切换正在工作的服务会等到合适的空闲边界。模型 ID、上下文配置和维护命令见[完整部署指南](docs/deployment.md)。
 
 ## Spec
 
@@ -232,7 +217,7 @@ node spec/build.mjs
 
 ## 验证与已知限制
 
-[v0.8.2 发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2)记录了：云端 **265 项**测试、Android **160 项**单元测试、Mac **66 项**逻辑断言，以及生产 Node 20 环境的 **51 项**针对性测试。线上 **10 张**既有动态图片通过下载和解码检查；Mac 实际验证了动态配图、腾讯行情开关及股票 / ETF / 指数查询。这些记录不等于所有设备、账号与网站的兼容性保证。
+[v0.8.3 发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)记录本版检查：云端 **272 项**测试、Android **160 项**单元测试、Android 签名包及 Mac 双架构构建。高德以隔离模拟服务测试真实 MCP 调用、Key 验证、坐标与模式参数、错误脱敏和断开后失效；尚未使用个人高德 Key 做真实查询。上一版已完成线上 **10 张**既有动态图片的下载解码，以及 Mac 腾讯行情开关、股票 / ETF / 指数查询验证。
 
 - 本版 Android 已构建签名安装包，尚未进行真机验收；健康数据和手机权限仍需要真机验证。
 - MiMo-V2.6-Pro 与内置模型约 272K 输入压缩线已配置；超长上下文仅做本地 SDK / CLI 验证，未作付费模型压力测试。
@@ -257,11 +242,11 @@ cd android
 ```bash
 # 首次构建创建自己的本地签名身份，可能弹出钥匙串授权
 bash mac/tools/make-signing-identity.sh
-VERSION=0.8.2 bash mac/build.sh
-# 产物：mac/build/doudou-0.8.2.dmg；Apple 芯片 + Intel 通用
+VERSION=0.8.3 bash mac/build.sh
+# 产物：mac/build/doudou-0.8.3.dmg；Apple 芯片 + Intel 通用
 ```
 
-Mac 安装包采用本地签名，未做 Apple 公证；首次安装的打开方式见[发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2)。
+Mac 安装包采用本地签名，未做 Apple 公证；首次安装的打开方式见[发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)。
 
 ## License 与致谢
 

@@ -154,6 +154,18 @@ export default {
 - 返回价格、昨收、涨跌额、涨跌幅、最高/最低、换手率、上游报价时间 `asOf` 和抓取时间 `fetchedAt`；部分代码缺失时单独列在 `missing`，不填零冒充有效报价。
 - 同批查询合并并缓存 5 秒；查询不消耗 Wind 积分，不提供交易能力。休市或上游延迟时应说明报价时间，不能把抓取时间当成行情更新时间。接口没有稳定性承诺；历史、基本面、研报等仍使用其他数据连接器。
 
+腾讯行情的代码与短缓存均在豆豆自己的连接器内，不调用股票铃进程，也不读取、导入或共享其配置和数据。
+
+### 高德地图
+
+- `amap`，默认未连接，使用一个高德「Web 服务」Key；在 App 的连接器表单里填写、验证后启用，删除账号即断开。Key 只保存在云端私有配置中，不进入查询工具或结果。
+- 注册入口：高德开放平台 → 我的应用 → 添加 Key → **Web 服务**；名称自定。IP 白名单可先留空；需要限制时填云端请求高德的实际出口 IP，不能直接假定为服务器公网 IP。
+- 直接调用高德官方 Web 服务 API，作为豆豆自带的 SDK MCP 工具发布；不依赖远程社区 MCP。
+- 工具：`geocode`（地址转坐标）、`reverse_geocode`、`search_places`、`search_nearby`、`route`（步行/驾车/公交/骑行）、`distance`（直线/驾车/步行）、`convert_coordinates`、`weather`。全部只查询，不下单、订票或打车。
+- 坐标为高德 **GCJ-02**，经度在前；手机 GPS/WGS84 结果先显式转换，不能静默混用。路线距离为米、耗时为秒；天气以 `reporttime` 为数据时间。返回最多三条路线和每条六十步，省略大段折线；截断时明确标记。
+- 添加账号时用公共地标做一次地址查询验证，不读取用户位置。查询消耗高德 Key 的额度，配额、服务权限及使用许可由高德账号决定。HTTP 200 中的额度、IP 白名单和平台类型错误也要显示中文原因，不自动换号或反复请求。
+- 官方文档：[创建 Web 服务 Key](https://lbs.amap.com/api/mcp-server/create-project-and-key)、[路径与距离](https://lbs.amap.com/api/webservice/guide/api/direction)、[坐标转换](https://lbs.amap.com/api/webservice/guide/api/convert)。
+
 ### 微信读书
 
 - 用微信读书 2026-05-17 发布的官方 Agent Gateway，个人 API Key 是 `wrk-` 开头，`Authorization: Bearer <key>`。

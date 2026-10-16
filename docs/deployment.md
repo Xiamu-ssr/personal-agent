@@ -10,12 +10,17 @@
 
 模型端点由 `ANTHROPIC_BASE_URL` 与 `ANTHROPIC_AUTH_TOKEN` 配置，须兼容 Anthropic Messages API，支持以下模型 ID，或在端点侧映射：
 
-- `anthropic/claude-haiku-5.5`：主聊天默认值，也是动态任务固定使用的模型。
+- `anthropic/claude-haiku-5.5`：首次启动的默认值。
 - `anthropic/claude-opus-5.5`
 - `z-ai/glm-5.3-flash`
 - `z-ai/glm-5.3-flashx`
+- `xiaomi/mimo-v2.6-pro`
 
-模型和权限模式在 App 设置中管理，定义见 [`app-settings.mjs`](../cloud/src/app-settings.mjs)。切换主聊天模型不会改变动态任务的 Haiku 要求。
+模型和权限模式在 App 设置中管理，定义见 [`app-settings.mjs`](../cloud/src/app-settings.mjs)。聊天、动态和摘要都使用当前选择的模型；内置服务的 ID 不必全部开通，使用前确认选定模型可用即可。
+
+App 也可添加自己的 Anthropic Messages 兼容服务：填入服务名称、Base URL、API Key 和模型 ID。Key 由云端私有配置保存，不随模型工具结果返回。自定义服务须支持 Agent SDK 所需的 Messages 与工具调用；通过连接测试不等于已验证所有长任务和工具。
+
+内置模型当前按约 272K 输入触发压缩，CLI 窗口设为 305K 以预留输出空间；自定义模型采用独立的保守上下文策略。具体值见 [`context-policy.mjs`](../cloud/src/context-policy.mjs)，不能将 UI 显示的窗口大小等同于触发压缩时的输入量。
 
 ## 安装云端
 
@@ -107,7 +112,7 @@ curl --fail https://agent.example.com/agent/health
 sudo -u agent /usr/bin/node /opt/personal-agent/cloud/src/pair.mjs
 ```
 
-从 [v0.8.0 发布页](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.0)下载 APK / DMG。第一次登录填写自己的地址 `https://agent.example.com/agent` 与配对码。
+从 [v0.8.3 发布页](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)下载 APK / DMG。第一次登录填写自己的地址 `https://agent.example.com/agent` 与配对码。
 
 配对码 24 小时有效，成功后立即作废；连续输错五次也会作废。另一台设备重新生成，已登录设备不受影响。
 
@@ -202,4 +207,4 @@ sudo journalctl -u personal-agent -n 50 --no-pager
 sudo journalctl -u personal-agent-browser -n 50 --no-pager
 ```
 
-检查推理、搜索、浏览器和设备的失败原因，公开日志前移除个人内容与凭据。验收与已知限制见 [README](../README.md#验证与已知限制)和 [v0.8.0 发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.0)。
+检查推理、搜索、浏览器和设备的失败原因，公开日志前移除个人内容与凭据。验收与已知限制见 [README](../README.md#验证与已知限制)和 [v0.8.3 发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)。
