@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { setImmediate as tick } from "node:timers/promises";
 import { Harness } from "../src/agent.mjs";
 import { ConnectorManager } from "../src/connectors.mjs";
@@ -56,6 +57,15 @@ test("file guards, model caps and isolated MCP transports remain independent", a
   assert.deepEqual(calls[0].flagSettings.at(-1), { effortLevel: "max", maxEffortLevel: "max" });
 });
 
+test("SDK subprocess receives the original upstream, proxy and PATH without a model gateway", async (t) => {
+  const { h, calls } = setup(t); await flush(h);
+  const env = { ANTHROPIC_BASE_URL: "https://fake-model.example.test/anthropic/", HTTPS_PROXY: "http://127.0.0.1:18901", PATH: "/fake-local-bin:/usr/bin:/bin" };
+  const child = calls[0].options.spawnClaudeCodeProcess({ command: process.execPath, args: ["-e", 'process.stdout.write(JSON.stringify({ANTHROPIC_BASE_URL:process.env.ANTHROPIC_BASE_URL,HTTPS_PROXY:process.env.HTTPS_PROXY,PATH:process.env.PATH}))'], cwd: config.root, env });
+  let output = ""; child.stdout.on("data", (chunk) => { output += chunk; });
+  assert.deepEqual(await once(child, "close"), [0, null]);
+  assert.deepEqual(JSON.parse(output), env);
+});
+
 test("a closed query is resumed before delivery and its old inbox is never reused", async (t) => {
   const { h, calls } = setup(t); await flush(h); calls[0].close(); await flush(h);
   await h.send("重连时收到"); await flush(h);
@@ -86,13 +96,14 @@ test("say emits separate bubbles, options produce waiting and only one click win
   await assert.rejects(restarted.chooseOption(second.id, "1"), (e) => e.status === 409); restarted.avatar.close();
 });
 
-test("plain model prose without say stays visible and tools live only in activity steps", async (t) => {
+test("plain model prose without say stays in process and tools make a working activity", async (t) => {
   const { h, calls, events } = setup(t); await flush(h); await h.send("查邮件"); const id = h.main.activityId;
-  calls[0].emit({ type: "assistant", message: { content: [{ type: "text", text: "正文也要显示" }, { type: "tool_use", id: "read-mail", name: "mcp__qq-mail__read", input: { account: "fake" } }] } });
+  calls[0].emit({ type: "assistant", message: { content: [{ type: "text", text: "先查一下" }, { type: "tool_use", id: "read-mail", name: "mcp__qq-mail__read", input: { account: "fake" } }] } });
   await flush(h); assert.equal(h.avatar.value.text, "在看你的邮件");
+  calls[0].emit({ type: "assistant", message: { content: [{ type: "text", text: "正文也要显示" }] } });
   calls[0].emit({ type: "result", subtype: "success" }); await flush(h);
-  assert.equal(h.speech.history().filter((m) => m.role === "assistant").length, 1);
-  assert.equal(h.speech.history().find((m) => m.role === "assistant").fallback, true);
+  assert.equal(h.speech.history().filter((m) => m.role === "assistant").length, 0);
+  assert.equal(events.some((e) => e.t === "delta"), false);
   assert.equal(events.some((e) => e.t === "tool"), false);
   assert.ok(h.taskHistory(id).items.some((i) => i.kind === "tool"));
   assert.equal(h.history.get(id).status, "done");
@@ -100,7 +111,7 @@ test("plain model prose without say stays visible and tools live only in activit
   assert.ok(restarted.taskHistory(id).items.some((i) => i.text === "正文也要显示")); restarted.avatar.close();
 });
 
-test("main say hides prose before and after speech, including streamed text and busy interjections", async (t) => {
+test("only main say emits bubbles while all streamed prose stays in process across interjections", async (t) => {
   const { h, calls, events } = setup(t); await flush(h); await h.send("检查浏览器");
   const q = calls[0], id = h.main.activityId;
   const prose = (text) => {
@@ -113,27 +124,27 @@ test("main say hides prose before and after speech, including streamed text and 
   const say = h.speech.tools(() => ({ activityId: id }))[0];
   await say.handler({ text: "找到了标题。" }, {});
   await h.send("顺便保留链接"); await flush(h);
-  assert.equal(h.main.activityId, id); assert.equal(h.main.said, true);
+  assert.equal(h.main.activityId, id);
   await say.handler({ text: "还要继续吗？", options: [{ label: "继续" }] }, {});
   prose("云端浏览器自检完成，已把标题发给用户");
   q.emit({ type: "result", subtype: "success", result: "这也是内部收尾说明" }); await flush(h);
   const bubbles = h.speech.history().filter((m) => m.role === "assistant");
   assert.deepEqual(bubbles.map((m) => m.text), ["找到了标题。", "还要继续吗？"]);
-  assert.ok(bubbles.every((m) => !("fallback" in m)));
-  assert.equal(events.some((e) => e.t === "delta"), false);
+  assert.equal(bubbles.some((m) => m.fallback), false);
+  assert.deepEqual(events.filter((e) => e.t === "delta"), []);
   assert.equal(events.findLast((e) => e.t === "turn_end").text, "");
   for (const text of ["先检查一下浏览器", "云端浏览器自检完成，已把标题发给用户"]) {
     assert.equal(h.taskHistory(id).items.filter((i) => i.text === text).length, 1);
     assert.ok(events.some((e) => e.t === "activity_step" && e.id === id && e.item.text === text));
   }
-  assert.equal(h.avatar.value.state, "waiting");
   await h.send("下一轮忘了说话工具");
   assert.notEqual(h.main.activityId, id);
   q.emit({ type: "result", subtype: "success", result: "结果字段也能兜底" }); await flush(h);
-  assert.equal(h.speech.history().at(-1).text, "结果字段也能兜底"); assert.equal(h.speech.history().at(-1).fallback, true);
+  assert.equal(h.speech.history().at(-1).text, "下一轮忘了说话工具");
+  assert.ok(h.taskHistory(h.main.activityId).items.some((i) => i.text === "结果字段也能兜底"));
 });
 
-test("main fallback keeps multiple prose bubbles in one turn and interjections do not reset it", async (t) => {
+test("main prose and result never make fallback bubbles and interjections do not reset the turn", async (t) => {
   const { h, calls, events } = setup(t); await flush(h); await h.send("不用工具也能回答");
   const q = calls[0], id = h.main.activityId;
   q.emit({ type: "assistant", message: { content: [{ type: "text", text: "第一段回复" }] } }); await flush(h);
@@ -142,9 +153,9 @@ test("main fallback keeps multiple prose bubbles in one turn and interjections d
   assert.equal(h.main.activityId, id); assert.equal(events.some((e) => e.t === "say"), false);
   q.emit({ type: "result", subtype: "success", result: "不要重复生成结果气泡" }); await flush(h);
   const bubbles = h.speech.history().filter((m) => m.role === "assistant");
-  assert.deepEqual(bubbles.map((m) => m.text), ["第一段回复", "第二段回复"]);
-  assert.ok(bubbles.every((m) => m.fallback && m.activityId === id)); assert.notEqual(bubbles[0].id, bubbles[1].id);
-  assert.equal(h.main.said, false);
+  assert.deepEqual(bubbles, []);
+  assert.ok(h.taskHistory(id).items.some((i) => i.text === "第一段回复"));
+  assert.ok(h.taskHistory(id).items.some((i) => i.text === "第二段回复"));
   assert.deepEqual(events.filter((e) => e.t === "delta").map((e) => e.id), bubbles.map((m) => m.id));
   for (const bubble of bubbles) assert.equal(h.taskHistory(id).items.filter((i) => i.text === bubble.text).length, 1);
 });
@@ -182,7 +193,7 @@ test("first chat is single-flight, validates the device and refuses to repeat af
   const results = await Promise.all([h.firstChat("android"), h.firstChat("android")]); await flush(h);
   assert.equal(results[0].id, results[1].id); assert.equal(calls[0].received.length, 1);
   assert.equal(calls[0].received[0].message.content, "[第一次聊天] 设备：android");
-  assert.equal(h.history.get(results[0].id).title, "第一次聊天");
+  assert.equal(h.history.get(results[0].id).title, "处理中");
   assert.deepEqual(h.speech.history(), []);
   assert.equal(events.some((e) => e.t === "user"), false);
   assert.deepEqual(await h.firstChat("mac"), { started: false });

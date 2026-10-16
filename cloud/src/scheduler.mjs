@@ -6,9 +6,9 @@ import { readJson } from "./store.mjs";
 import { writePrivateJson } from "./private-json.mjs";
 import { Content } from "./content.mjs";
 import { cronMatches, nextCron, timeParts } from "./cron.mjs";
+import { triggerTitle } from "./activity-title.mjs";
 export { cronMatches } from "./cron.mjs";
 
-export const FEED_MODEL = "anthropic/claude-haiku-5.5";
 const minutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
 export function feedDue(settings, timezone, now) {
   if (!settings.enabled) return false;
@@ -105,8 +105,8 @@ export class Schedules {
         else if (job.kind === "cleanup") message = `已清理 ${cleanWorkspace(this.log)} 个过期草稿目录`;
         else if (!this.harness.compactMain()) { message = "主聊天正在工作，本次整理跳过"; ok = false; }
         const status = ok ? "done" : "stopped";
-        this.harness.history?.put(id, { status, endedAt: Date.now(), latestResult: message });
-        this.harness.bus?.emit({ t: "activity", phase: "done", id, title: label, status, ts: Date.now() });
+        this.harness.history?.put(id, { status, endedAt: Date.now(), latestResult: message, summary: message });
+        this.harness.bus?.emit({ t: "activity", phase: "done", id, title: label, summary: message, status, ts: Date.now() });
         return { ok };
       }).catch((e) => {
         succeeded = false;
@@ -118,7 +118,7 @@ export class Schedules {
       const success = readJson(this.successFile, {});
       const prompt = ["feed", "goal", "ideas"].includes(job.kind) ? schedulePrompt(job.kind, { lastSuccess: success[job.id], goal: job.goal, prompts: this.prompts }) : job.prompt;
       if (typeof prompt !== "string" || !prompt.trim()) throw new Error("定时安排缺少提示词");
-      done = this.harness.runIsolated(label, prompt, { id, ...(job.kind === "feed" && { model: FEED_MODEL }) });
+      done = job.kind === "goal" ? this.harness.runMain(prompt, { id, label: triggerTitle(prompt) }) : this.harness.runIsolated(label, prompt, { id });
     }
     this.active.set(job.id, { id, done });
     const finished = done.then((result) => {
@@ -130,7 +130,7 @@ export class Schedules {
     }).finally(() => this.active.delete(job.id));
     this.active.get(job.id).done = finished;
     finished.catch((e) => this.log("scheduled activity failed:", this.harness.connectors?.redact(e.message) || e.message));
-    return { mode: "isolated", id };
+    return { mode: job.kind === "goal" ? "main" : "isolated", id };
   }
   tick() {
     this.content.discoverFeed();

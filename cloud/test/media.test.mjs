@@ -15,7 +15,7 @@ import { startServer } from "../src/server.mjs";
 import { config } from "../src/config.mjs";
 import { tailJsonl } from "../src/store.mjs";
 import { fakeAnthropic } from "./fake-anthropic.mjs";
-import { nativeHarness, hasInput, resultFor, textReply } from "./native-fixture.mjs";
+import { nativeHarness, hasInput, resultFor, textReply, toolReply } from "./native-fixture.mjs";
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(testRoot, "media-"));
@@ -181,7 +181,7 @@ test("files serve directory indexes and reject outside-data paths and symlink es
   }
 });
 
-test("real SDK reply sends media in turn_end and chat/hello, leaves deltas unchanged and preserves early prose bubbles when a later tool round fails", { timeout: 45_000 }, async (t) => {
+test("real SDK say keeps media in chat/hello while turn_end and prose never deliver it", { timeout: 45_000 }, async (t) => {
   const rel = "data/library/media/native-media.png", text = `MEDIA_REPLY：![图片](${rel})`;
   put(config.root, rel, "image fixture");
   let contextFailed = false;
@@ -194,17 +194,18 @@ test("real SDK reply sends media in turn_end and chat/hello, leaves deltas uncha
       return { error: "Prompt is too long" };
     }
     if (hasInput(body, "MEDIA_ERROR")) return { error: "fictional media fixture failure" };
-    if (hasInput(body, "MEDIA_EMPTY")) return textReply("没有附件的回复");
-    return textReply(text);
+    if (hasInput(body, "MEDIA_EMPTY")) return resultFor(body, "media-empty-say") ? textReply("没有附件的回复") : toolReply("media-empty-say", "mcp__doudou__say", { text: "没有附件的回复" });
+    return resultFor(body, "media-say") ? textReply(text) : toolReply("media-say", "mcp__doudou__say", { text });
   });
   const runtime = nativeHarness(t, api), { harness, events, until } = runtime;
   const base = await serve(t, runtime);
   await harness.send("MEDIA_SUCCESS");
-  await until(() => events.some((e) => e.t === "turn_end" && e.text === text) && !harness.busy);
-  const expected = replyMedia(config.root, text), event = events.find((e) => e.t === "turn_end" && e.text === text);
+  await until(() => events.some((e) => e.t === "say" && e.text === text) && !harness.busy);
+  const expected = replyMedia(config.root, text), event = events.find((e) => e.t === "say" && e.text === text);
   assert.deepEqual(event.media, expected); assert.equal(event.error, undefined);
   assert.deepEqual(tailJsonl(config.chatLog, 100).find((r) => r.role === "assistant" && r.text === text).media, expected);
-  assert.ok(events.some((e) => e.t === "delta")); assert.ok(events.filter((e) => e.t === "delta").every((e) => !("media" in e)));
+  assert.equal(events.some((e) => e.t === "delta"), false);
+  assert.ok(events.filter((e) => e.t === "turn_end").every((e) => !("media" in e)));
   const ws = new WebSocket(base.replace("http:", "ws:") + "/ws", { headers: auth });
   t.after(() => ws.terminate());
   const received = [], helloPromise = new Promise((resolve) => ws.once("message", (raw) => resolve(JSON.parse(raw))));
@@ -219,7 +220,7 @@ test("real SDK reply sends media in turn_end and chat/hello, leaves deltas uncha
     assert.equal(Boolean(end.error), error, prompt + ": " + JSON.stringify(end)); assert.equal("media" in end, false);
     assert.equal("media" in tailJsonl(config.chatLog, 100).findLast((r) => r.role === "assistant"), false);
   }
-  assert.equal(tailJsonl(config.chatLog, 100).filter((r) => r.role === "assistant" && r.text === text && r.media?.length).length, 2);
+  assert.equal(tailJsonl(config.chatLog, 100).filter((r) => r.role === "assistant" && r.text === text && r.media?.length).length, 1);
   assert.equal(tailJsonl(config.chatLog, 100).some((r) => r.partial), false);
   await until(() => received.filter((e) => e.t === "turn_end").length === 3);
   assert.ok(received.filter((e) => e.t === "turn_end").every((e) => !("media" in e)));

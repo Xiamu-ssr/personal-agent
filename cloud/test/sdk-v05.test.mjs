@@ -42,14 +42,14 @@ function fixture(t,api,release=()=>{}) {
   return {h,wire,events,optionsUsed,spawned,until,turn};
 }
 
-test("真实 SDK 切换后四模型下一轮的 wire model 改变，原会话和内置系统提示词保留",{timeout:60_000},async(t)=>{
+test("真实 SDK 四模型原地切换，原会话和静态自定义系统提示词保留",{timeout:60_000},async(t)=>{
   putAppSettings(config.root,{...DEFAULT_SETTINGS,permissionMode:"bypassPermissions"});
   const api=await fakeAnthropic();
   const f=fixture(t,api);
   assert.equal((await f.turn("V05_FIRST_CONTEXT" )).subtype,"success");
   const session=f.h.main.sessionId;
   for(const row of MODELS.slice(1)) {
-    putAppSettings(config.root,{model:row.id});f.h.settingsChanged();await f.h.inputChain;
+    putAppSettings(config.root,{model:{ provider: "zenmux", id: row.id }});f.h.settingsChanged();await f.h.inputChain;
     const result=await f.turn("V05_SWITCH "+row.id);
     assert.equal(result.subtype,"success");
     assert.equal(api.requests.at(-1).model,row.id);
@@ -58,23 +58,23 @@ test("真实 SDK 切换后四模型下一轮的 wire model 改变，原会话和
     assert.equal(result.modelUsage[row.id].contextWindow,200000);
     assert.equal(api.requests.at(-1).output_config.effort,"max");
   }
-  assert.equal(f.optionsUsed.length,MODELS.length,"model changes refresh classifier env by resuming the same conversation");
-  assert.equal(f.optionsUsed[0].systemPrompt.type,"preset");
-  assert.equal(f.optionsUsed[0].systemPrompt.preset,"claude_code");
-  assert.ok(f.optionsUsed[0].systemPrompt.append.trim());
-  assert.ok(JSON.stringify(api.requests[0].system).length>f.optionsUsed[0].systemPrompt.append.length,"the CLI builtin prompt remains present");
-  assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_AUTO_MODE_MODEL,MODELS.at(-1).id);
-  assert.equal(f.optionsUsed.at(-1).env.CLAUDE_CODE_SUBAGENT_MODEL,MODELS.at(-1).id);
-  assert.equal(new Set(f.optionsUsed.map((o)=>o.systemPrompt.append)).size,1);
-  assert.deepEqual(f.spawned.map((s)=>s.autoModel),MODELS.map((m)=>m.id));
+  assert.equal(f.optionsUsed.length,1,"model changes use streaming control without restarting the query");
+  assert.equal(typeof f.optionsUsed[0].systemPrompt,"string");
+  assert.ok(api.requests[0].system.some((b)=>b.text===f.optionsUsed[0].systemPrompt));
+  assert.equal(f.h.main.settings.model,MODELS.at(-1).id);
   assert.ok(f.spawned.every((s)=>s.subagent===s.autoModel&&s.backgroundClassifier===s.autoModel&&s.window==="200000"));
 });
 
 test("四模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用内置压缩并恢复 max",{timeout:120_000},async(t)=>{
   for(const row of MODELS) await t.test(row.id,{timeout:40_000},async(t)=>{
-    putAppSettings(config.root,{model:row.id,permissionMode:"bypassPermissions"});
+    putAppSettings(config.root,{model:{ provider: "zenmux", id: row.id },permissionMode:"bypassPermissions"});
     let normal=0;
-    const api=await fakeAnthropic((body)=>compactRequest(body)?{}:{usage:{input_tokens:1000,cache_creation_input_tokens:2000,cache_read_input_tokens:++normal===1?162000:164001}});
+    const api=await fakeAnthropic((body)=>{
+      if(compactRequest(body))return {};
+      const turn=hasInput(body,"V05_WINDOW_THIRD")?3:hasInput(body,"V05_WINDOW_SECOND")?2:1,id="window_say_"+turn;
+      if(!resultFor(body,id))return {...toolReply(id,"mcp__doudou__say",{text:"OK"}),usage:{input_tokens:0,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:0}};
+      return {...textReply("OK"),usage:{input_tokens:1000,cache_creation_input_tokens:2000,cache_read_input_tokens:++normal===1?162000:164001}};
+    });
     const f=fixture(t,api);
     const first=await f.turn("V05_WINDOW_FIRST");
     assert.equal(first.subtype,"success");assert.equal(first.modelUsage[row.id].contextWindow,200000);
@@ -119,7 +119,7 @@ test("真实 SendMessage 恢复已完成 fork：同一任务 id、原始上下�
   const before=f.h.taskHistory(id);
   assert.equal(before.status,"done");assert.ok(before.items.some((i)=>i.kind==="prompt"&&i.text.includes("V05_TASK_MEMORY_42")));
   assert.ok(before.items.some((i)=>i.kind==="result"&&i.text.includes("V05_ORIGINAL_RESULT")));
-  putAppSettings(config.root,{model:MODELS[2].id});f.h.settingsChanged();await f.h.inputChain;
+  putAppSettings(config.root,{model:{ provider: "zenmux", id: MODELS[2].id }});f.h.settingsChanged();await f.h.inputChain;
   assert.equal(await f.h.sendTask(id,"V05_FOLLOW_DONE"),id);
   await f.until(()=>continued&&f.wire.filter((m)=>m.subtype==="task_notification"&&m.task_id===id&&m.status==="completed").length===2&&!f.h.busy);
   const after=f.h.taskHistory(id);
@@ -145,8 +145,8 @@ test("真实 SDK 权限切换在下一轮生效，保留主会话且不发 App �
   assert.equal(f.events.some((e)=>e.t==="permission"),false);
 });
 
-test("隔离任务用选中的模型和 preset+append，续聊 resume 原会话而且原结果仍在上下文",{timeout:45_000},async(t)=>{
-  putAppSettings(config.root,{model:MODELS[1].id,permissionMode:"bypassPermissions"});
+test("隔离任务用选中的模型和静态自定义提示词，续聊 resume 原会话而且原结果仍在上下文",{timeout:45_000},async(t)=>{
+  putAppSettings(config.root,{model:{ provider: "zenmux", id: MODELS[1].id },permissionMode:"bypassPermissions"});
   let continued=false;
   const api=await fakeAnthropic((body)=>{
     if(hasInput(body,"V05_ISOLATED_FOLLOW")) {
@@ -160,33 +160,40 @@ test("隔离任务用选中的模型和 preset+append，续聊 resume 原会话�
   const task=f.h.recentJobs().find((r)=>r.label==="本地夜间整理"), originalSession=f.h.history.get(task.id).sessionId;
   assert.equal(api.requests.at(-1).model,MODELS[1].id);
   assert.equal(f.h.taskHistory(task.id).status,"done");
-  putAppSettings(config.root,{model:MODELS[2].id});
+  putAppSettings(config.root,{model:{ provider: "zenmux", id: MODELS[2].id }});
   await f.h.sendTask(task.id,"V05_ISOLATED_FOLLOW");await f.h.jobChain;
   assert.equal(continued,true);assert.equal(f.h.history.get(task.id).sessionId,originalSession);
   assert.equal(f.h.taskHistory(task.id).items.findLast((i)=>i.kind==="result").text,"V05_ISOLATED_CONTINUED");
-  assert.ok(f.optionsUsed.every((o)=>o.systemPrompt.preset==="claude_code"));
+  assert.ok(f.optionsUsed.every((o)=>typeof o.systemPrompt==="string"));
 });
 
-test("切模型时运行中的 fork 以原 id 恢复，新模型请求仍包含任务上下文",{timeout:60_000},async(t)=>{
+test("切模型时运行中的 fork 保留启动模型，新 fork 使用当前模型",{timeout:60_000},async(t)=>{
   putAppSettings(config.root,{...DEFAULT_SETTINGS,permissionMode:"bypassPermissions"});
-  let release,id,blocked=false,restored=false;
+  let release,id,blocked=false,continued=false,nextModel,newModel;
   const gate=new Promise((r)=>{release=r;});
+  const file=path.join(config.root,"v05-switch-fixture.txt");fs.writeFileSync(file,"local fixture");
   const api=await fakeAnthropic(async(body)=>{
     if(isFork(body)) {
-      if(body.model===MODELS[0].id) {blocked=true;await gate;return textReply("OLD_MODEL_DONE");}
-      assert.equal(body.model,MODELS[1].id);assert.ok(hasInput(body,"V05_SWITCH_RUNNING_MEMORY"));restored=true;
+      if(hasInput(body,"V05_SWITCH_NEW_FORK_MEMORY")) {newModel=body.model;return textReply("NEW_FORK_DONE");}
+      if(!resultFor(body,"v05_switch_read")) {blocked=true;await gate;return toolReply("v05_switch_read","Read",{file_path:file});}
+      nextModel=body.model;continued=hasInput(body,"V05_SWITCH_RUNNING_MEMORY");
       return textReply("NEW_MODEL_DONE");
     }
-    if(hasInput(body,"继续原任务，从已经完成的步骤接着做。")&&!resultFor(body,"v05_switch_send")) return toolReply("v05_switch_send","SendMessage",{to:id,message:"继续原任务，从已经完成的步骤接着做。"});
+    if(hasInput(body,"V05_SWITCH_NEW_FORK_START")&&!resultFor(body,"v05_switch_new_spawn")) return toolReply("v05_switch_new_spawn","Agent",{subagent_type:"fork",run_in_background:true,description:"新模型的任务",prompt:"V05_SWITCH_NEW_FORK_MEMORY"});
     if(!resultFor(body,"v05_switch_spawn")&&!hasInput(body,"task-notification")) return toolReply("v05_switch_spawn","Agent",{subagent_type:"fork",run_in_background:true,description:"换模型的任务",prompt:"V05_SWITCH_RUNNING_MEMORY"});
     return textReply("已安排。");
   });
   const f=fixture(t,api,release);await f.turn("V05_SWITCH_RUNNING_START");
   await f.until(()=>blocked&&f.h.backgroundTasks().length===1&&!f.h.busy);id=f.h.backgroundTasks()[0].id;
   const session=f.h.main.sessionId;
-  putAppSettings(config.root,{model:MODELS[1].id});f.h.settingsChanged();await f.h.inputChain;
-  await f.until(()=>restored&&f.wire.some((m)=>m.subtype==="task_notification"&&m.task_id===id&&m.status==="completed")&&!f.h.busy);
-  assert.equal(f.h.main.sessionId,session);assert.equal(f.h.taskHistory(id).status,"done");release();
+  putAppSettings(config.root,{model:{ provider: "zenmux", id: MODELS[1].id }});await f.h.settingsChanged();release();
+  await f.until(()=>continued&&f.wire.some((m)=>m.subtype==="task_notification"&&m.task_id===id&&m.status==="completed")&&!f.h.busy);
+  assert.equal(nextModel,MODELS[0].id);assert.equal(f.optionsUsed.length,1);
+  assert.equal(f.h.main.sessionId,session);assert.equal(f.h.taskHistory(id).status,"done");
+  await f.turn("V05_SWITCH_NEW_FORK_START");
+  await f.until(()=>newModel&&f.wire.filter((m)=>m.subtype==="task_notification"&&m.status==="completed").length===2&&!f.h.busy);
+  assert.equal(newModel,MODELS[1].id);assert.equal(f.optionsUsed.length,1);
+  assert.equal(f.h.main.sessionId,session);
 });
 
 test("运行中的 fork 接收续聊，在后续请求中保留原 prompt 和用户新消息",{timeout:45_000},async(t)=>{

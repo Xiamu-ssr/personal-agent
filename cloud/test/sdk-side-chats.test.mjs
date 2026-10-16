@@ -24,11 +24,11 @@ test("native side chats exclude main and sibling context, accept live input and 
       if (seen.sideA) {
         assert.equal(seen.main, false); assert.equal(seen.sideB, false);
         if (hasInput(body, "SIDE_AFTER_RESTART")) return resultFor(body, "side_restart_say") ? textReply(" ") : toolReply("side_restart_say", "mcp__doudou__say", { text: "重启后沿着旁聊继续。" });
-        if (hasInput(body, "SIDE_OPTION_REPLY")) return textReply("选项回复仍在旁聊。");
+        if (hasInput(body, "SIDE_OPTION_REPLY")) return resultFor(body, "side_option_say") ? textReply("选项回复仍在旁聊。") : toolReply("side_option_say", "mcp__doudou__say", { text: "选项回复仍在旁聊。" });
         if (!resultFor(body, "side_first_say")) return toolReply("side_first_say", "mcp__doudou__say", { text: "只在旁聊里说这句。", options: [{ label: "继续", reply: "SIDE_OPTION_REPLY" }], cards: [{ type: "link", url: "https://example.test/side", title: "旁聊资料" }] });
         if (!resultFor(body, "side_read")) return toolReply("side_read", "Read", { file_path: file });
         assert.equal(seen.interjection, true);
-        return textReply("工具执行时的旁聊补充已收到。");
+        return resultFor(body, "side_live_say") ? textReply("工具执行时的旁聊补充已收到。") : toolReply("side_live_say", "mcp__doudou__say", { text: "工具执行时的旁聊补充已收到。" });
       }
       if (seen.sideB) { assert.equal(seen.main, false); return textReply("第二个旁聊也是独立的。"); }
       assert.equal(seen.main, true); assert.equal(seen.sideA, false); assert.equal(seen.sideB, false);
@@ -58,11 +58,11 @@ test("native side chats exclude main and sibling context, accept live input and 
   const sideSession = h.history.get(id).sessionId; assert.notEqual(sideSession, mainSession);
   const bubble = h.taskHistory(id).messages.find((m) => m.options?.length);
   assert.equal(bubble.cards[0].title, "旁聊资料");
-  assert.equal(h.taskHistory(id).messages.some((m) => m.text === "工具执行时的旁聊补充已收到。"), false);
+  assert.equal(h.taskHistory(id).messages.some((m) => m.text === "工具执行时的旁聊补充已收到。"), true);
   assert.ok(h.taskHistory(id).items.some((i) => i.text === "工具执行时的旁聊补充已收到。"));
   await h.chooseOption(bubble.id, "0", id); await h.jobChain;
   assert.equal(queries.at(-1).resume, sideSession); assert.equal(h.taskHistory(id).messages.find((m) => m.id === bubble.id).optionsUsed, true);
-  assert.equal(h.taskHistory(id).messages.at(-1).text, "选项回复仍在旁聊。"); assert.equal(h.taskHistory(id).messages.at(-1).fallback, true);
+  assert.equal(h.taskHistory(id).messages.at(-1).text, "选项回复仍在旁聊。"); assert.equal(h.taskHistory(id).messages.at(-1).fallback, undefined);
   const sibling = await h.createSideChat("SIDE_B_ONLY_CONTEXT"); await h.jobChain;
   assert.notEqual(h.history.get(sibling).sessionId, sideSession); assert.equal(queries.at(-1).resume, null);
   assert.deepEqual(h.speech.history(), mainHistory);

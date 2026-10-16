@@ -75,7 +75,7 @@ try {
   }); await once(viewer, "open");
   assert.equal(launches, 0); log("MCP + App HTTP/WS connected; Chrome launches=0 (lazy)");
   const useAndReturn = async (channel) => {
-    await until(() => browser.owner === "user" && events.some((e) => e.t === "say" && e.cards?.some((c) => c.type === "browser")));
+    await until(() => browser.owner === "user" && events.some((e) => ["say", "activity_message"].includes(e.t) && e.cards?.some((c) => c.type === "browser")));
     if (channel === "main") await until(() => !harness.busy);
     else await until(() => [...harness.isolated.values()].some((i) => i.job.waitingBrowser));
     assert.equal(harness.avatar.value.state, "waiting");
@@ -85,7 +85,7 @@ try {
     log(`${channel}: real Chrome opened local page -> request_takeover -> avatar=waiting; authenticated live frame=1280x800`);
     assert.equal((await request("/api/browser/input", "POST", { type: "click", frameId: frame.frameId, width: 1280, height: 800, x: 100, y: 120 })).status, 200);
     assert.equal((await request("/api/browser/return", "POST", {})).status, 200);
-    await until(() => events.some((e) => e.t === "say" && e.text.startsWith(channel + "：")));
+    await until(() => events.some((e) => ["say", "activity_message"].includes(e.t) && e.text.startsWith(channel + "：")));
     log(`${channel}: App click -> return=200 -> original query received [浏览器交还] -> snapshot sees USER_CONFIRMED -> say result`);
   };
   assert.equal((await request("/api/send", "POST", { text: "BROWSER_MAIN_DEMO：请打开测试页，让我确认，交还后继续。" })).status, 200);
@@ -94,9 +94,10 @@ try {
   assert.equal(harness.main.q, mainQuery);
   const chatUsers = harness.speech.history(100).filter((item) => item.role === "user").length;
   assert.equal(chatUsers, 1);
-  const background = harness.runIsolated("后台浏览器验证", "BROWSER_BACKGROUND_DEMO：请读测试页，等我确认后继续。");
+  const sideId = await harness.createSideChat("BROWSER_BACKGROUND_DEMO：请读测试页，等我确认后继续。", [], "旁聊浏览器验证");
+  const background = harness.sideRuns.get(sideId);
   await useAndReturn("background"); assert.equal((await background).ok, true);
-  assert.equal(harness.busy, false); log("background return stayed in isolated SDK stream; main busy=false; no fabricated user chat bubbles");
+  assert.equal(harness.busy, false); log("side-chat return stayed in isolated SDK stream; main busy=false; no fabricated user chat bubbles");
   assert.equal(returnedEvents, 2); assert.equal(launches, 1);
   await request("/api/browser/close", "POST", {});
   assert.equal((await harness.runIsolated("动态轻量验证", "[动态]\nBROWSER_FEED_DEMO")).ok, true);

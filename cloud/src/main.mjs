@@ -8,6 +8,7 @@ import { startScheduler } from "./scheduler.mjs";
 import { startServer } from "./server.mjs";
 import { HealthSync } from "./health.mjs";
 import { migrateV08 } from "./migrate-v08.mjs";
+import { migrateV081 } from "./migrate-v081.mjs";
 import { Content } from "./content.mjs";
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -20,6 +21,7 @@ if (!config.token) {
 const listeners = new Set();
 const bus = { on: (fn) => listeners.add(fn), emit: (ev) => listeners.forEach((fn) => fn(ev)) };
 
+migrateV081({ root: config.root });
 migrateV08({ root: config.root, seedDir: path.join(CODE, "seed") });
 const hub = new DeviceHub();
 const connectors = new ConnectorManager();

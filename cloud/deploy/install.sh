@@ -3,6 +3,9 @@
 set -euo pipefail
 [[ "$(id -u)" -eq 0 ]] || { echo "请用 sudo bash cloud/deploy/install.sh 运行" >&2; exit 1; }
 cd /opt/personal-agent/cloud
+dnf install -y poppler-utils python3.11 python3.11-pip
+/usr/bin/python3.11 -m pip install pypdf pdfplumber python-docx openpyxl
+chmod 755 deploy/bin/pip deploy/bin/pip3
 npm ci --omit=dev 2>/dev/null || npm install --omit=dev
 while IFS= read -r -d '' task_source; do node --check "${task_source}"; done < <(find src -name '*.mjs' -print0)
 

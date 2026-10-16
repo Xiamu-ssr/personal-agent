@@ -15,6 +15,10 @@ const maskCredentials=(s)=>s.replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+/gi,"Bearer 
   .replace(/\bsk-[A-Za-z0-9_-]{8,}/g,"••••")
   .replace(/((?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)|apiKey|password|secret)\s*[=:]\s*["']?)[^\s,"';}]+/gi,"$1••••");
 const readRows=(file)=>fs.readFileSync(file,"utf8").split("\n").flatMap((line)=>{try{return [JSON.parse(line)];}catch{return [];}});
+export function listedActivity(record) {
+  if (record?.feed) return !!record.feedPublished;
+  return record?.kind !== "chat" || record.trigger === "goal" || !!record.steps?.some((s) => s.kind === "tool" && s.tool !== "mcp__doudou__say");
+}
 export function paginateJobs(records,{before,limit=30}={}) {
   const sorted=records.filter((r)=>before===undefined||r.ts<before).sort((a,b)=>b.ts-a.ts||a.id.localeCompare(b.id));
   let end=Math.min(limit,sorted.length);
@@ -60,6 +64,8 @@ export class TaskHistory {
     taskId(id);
     const record={id,title:"后台任务",startedAt:Date.now(),...this.records.get(id),...patch};
     record.title=maskCredentials(this.redact(record.title));
+    record.summary=maskCredentials(this.redact(record.summary || ""));
+    for (const key of ["instruction", "latestResult"]) if (typeof record[key] === "string") record[key] = this.safe(record[key]);
     this.records.set(id,record); this.save(); return record;
   }
   get(id) {
@@ -89,9 +95,9 @@ export class TaskHistory {
     if (m.subtype==="task_updated" && m.patch?.status) save(m,{status:statusOf(m.patch.status)});
   }
   recent() {
-    return [...this.records.values()].filter((r)=>r.status!=="running")
+    return [...this.records.values()].filter((r)=>r.status!=="running"&&listedActivity(r))
       .sort((a,b)=>(b.endedAt||b.startedAt)-(a.endedAt||a.startedAt))
-      .map((r)=>({id:r.id,label:r.title,title:r.title,status:r.status,ok:r.status==="done",ts:r.endedAt||r.startedAt,
+      .map((r)=>({id:r.id,label:r.title,title:r.title,summary:r.summary||"",status:r.status,ok:r.status==="done",ts:r.endedAt||r.startedAt,
         outputs:r.outputs||[],...(r.path&&{path:r.path}),...(r.chatType&&{chatType:r.chatType})}));
   }
   transcript(record) {
@@ -115,7 +121,7 @@ export class TaskHistory {
   history(id) {
     const record=this.get(id), sources=[...(record.transcripts||[]),{kind:record.kind,sessionId:record.sessionId,continuation:record.continuation}],items=[], seen=new Set(), calls=new Map();
     if (record.steps?.length) {
-      const steps = record.steps.map((item) => ({ ...item }));
+      const steps = record.steps.map((item) => ({ ...item, text: this.safe(item.text) }));
       for (const prompt of record.prompts || []) {
         const existing = steps.find((i) => i.kind === "prompt" && i.from === "user" && i.text === prompt.text && (!prompt.attachments?.length || i.attachments));
         if (existing) Object.assign(existing, { ...(prompt.attachments?.length && { attachments: prompt.attachments }) });
@@ -124,7 +130,8 @@ export class TaskHistory {
       steps.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
       const last = steps.findLast((i) => i.kind === "text");
       if (last && record.status !== "running") last.kind = "result";
-      if (record.latestResult && !steps.some((i) => i.text === record.latestResult)) steps.push({ kind: record.status === "running" ? "text" : "result", text: record.latestResult, time: new Date(record.endedAt || record.startedAt).toISOString() });
+      const latest = record.latestResult && this.safe(record.latestResult);
+      if (latest && !steps.some((i) => i.text === latest)) steps.push({ kind: record.status === "running" ? "text" : "result", text: latest, time: new Date(record.endedAt || record.startedAt).toISOString() });
       if (record.status === "done") for (const item of steps) if (item.kind === "result") {
         const media = replyMedia(this.root, item.text);
         if (media.length) item.media = media;

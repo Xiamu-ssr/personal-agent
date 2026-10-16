@@ -30,15 +30,15 @@ function setup(t) {
   h.startMain(); t.after(() => h.close()); return { h, calls, events };
 }
 
-test("main trigger activities use friendly titles in events, live lists, completed lists and details", async (t) => {
+test("ordinary main input uses a neutral temporary title without exposing internal triggers", async (t) => {
   const { h, calls, events } = setup(t);
   for (const [prompt, title] of cases) {
     const id = await h.send(prompt); await flush(h);
-    assert.equal(h.runningJobs().find((r) => r.id === id).title, title);
-    assert.equal(events.find((e) => e.t === "activity" && e.id === id && e.phase === "started").title, title);
+    assert.equal(h.runningJobs().some((r) => r.id === id), false);
+    assert.equal(events.some((e) => e.t === "activity" && e.id === id), false);
     assert.equal(calls[0].received.at(-1).message.content, prompt);
     calls[0].emit({ type: "result", subtype: "success" }); await flush(h);
-    assert.equal(h.taskHistory(id).title, title); assert.equal(h.recentJobs().find((r) => r.id === id).title, title);
+    assert.equal(h.taskHistory(id).title, "处理中"); assert.equal(h.recentJobs().some((r) => r.id === id), false);
     assert.equal(h.history.get(id).instruction, prompt);
   }
 });
@@ -47,9 +47,9 @@ test("isolated trigger activities use friendly titles before launch and at compl
   const { h, calls, events } = setup(t);
   for (const [index, [prompt, title]] of cases.entries()) {
     const id = `trigger-title-${index}`, p = h.runIsolated("安排的原始名称", prompt, { id });
-    assert.equal(h.runningJobs().find((r) => r.id === id).label, title);
+    assert.equal(h.runningJobs().find((r) => r.id === id)?.label, prompt.startsWith("[动态]") ? undefined : title);
     await p;
-    assert.equal(h.taskHistory(id).title, title); assert.equal(h.recentJobs().find((r) => r.id === id).label, title);
+    assert.equal(h.taskHistory(id).title, title); assert.equal(h.recentJobs().find((r) => r.id === id)?.label, prompt.startsWith("[动态]") ? undefined : title);
     assert.equal(calls.at(-1).received[0].message.content, prompt);
     assert.ok(events.filter((e) => e.t === "activity" && e.id === id).every((e) => e.title === title));
   }
@@ -59,7 +59,7 @@ test("ordinary chat summaries, unknown brackets and explicit side chat titles re
   const { h, calls } = setup(t);
   for (const text of ["帮我规划一下周末\n我们想去公园", "我想讨论 [动态] 这个功能", "[自定义] 这是用户自己的文字", "[动态]这个不是系统触发格式", "一段普通的聊天内容。".repeat(8)]) {
     const id = await h.send(text); await flush(h);
-    assert.equal(h.taskHistory(id).title, "聊天 · " + text.replace(/\s+/g, " ").slice(0, 36));
+    assert.equal(h.taskHistory(id).title, "处理中");
     assert.equal(h.speech.history().at(-1).text, text);
     calls[0].emit({ type: "result", subtype: "success" }); await flush(h);
   }

@@ -54,11 +54,11 @@ test("side chat creation validates input and starts an independent activity whil
   assert.equal(calls[1].received[0].message.content, "SIDE_CONTEXT_SENTINEL");
   assert.equal(calls[0].received.length, 1); assert.equal(h.busy, true);
   const running = (await request("/api/activities")).data.running;
-  assert.equal(running.find((a) => a.id === id).chatType, "side"); assert.equal("chatType" in running.find((a) => a.id === mainId), false);
+  assert.equal(running.find((a) => a.id === id).chatType, "side"); assert.equal(running.some((a) => a.id === mainId), false);
   answer(calls[1]); await h.jobChain;
   const history = (await request(`/api/activities/${id}/history`)).data;
   assert.equal(history.title, "单独讨论"); assert.equal(history.chatType, "side");
-  assert.deepEqual(history.messages.map((m) => m.text), ["SIDE_CONTEXT_SENTINEL", "旁聊正文"]);
+  assert.deepEqual(history.messages.map((m) => m.text), ["SIDE_CONTEXT_SENTINEL"]);
   assert.equal(history.items[0].from, "user"); assert.ok(history.items.some((i) => i.kind === "result"));
   assert.deepEqual(h.speech.history().map((m) => m.text), ["MAIN_CONTEXT_SENTINEL"]);
   assert.equal(events.some((e) => e.t === "say" && e.text === "旁聊正文"), false);
@@ -89,7 +89,7 @@ test("side say cards and one-shot options stay in their own HTTP/WS history, inc
   const bubble = history.messages.find((m) => m.id === messageId);
   assert.equal(history.messages.find((m) => m.id === accepted.id).role, "user");
   assert.equal(bubble.optionsUsed, true); assert.equal(bubble.cards[0].title, "资料");
-  assert.equal(history.messages.some((m) => m.text === "普通正文也留在旁聊"), false);
+  assert.equal(history.messages.some((m) => m.fallback), false);
   assert.equal(history.items.filter((i) => i.text === "普通正文也留在旁聊").length, 1);
   assert.equal(events.some((e) => e.t === "activity_message" && e.text === "普通正文也留在旁聊"), false);
   assert.ok(history.messages.filter((m) => m.role === "user").slice(1).every((m) => m.source === "option"));
@@ -108,7 +108,7 @@ test("side chat history, attachments and option consumption persist across a clo
   const { id } = (await request("/api/side-chats", "POST", { attachments: [attachment] })).data;
   await until(() => calls[1]?.received.length === 1);
   const bubble = h.speech.emit({ text: "已看过笔记", options: [{ label: "继续" }] }, { activityId: id, chatType: "side" });
-  await h.chooseOption(bubble.id, "0", id); answer(calls[1], "RETAIN_SIDE_CONTEXT"); await h.jobChain; await h.close();
+  await h.chooseOption(bubble.id, "0", id); h.speech.emit({ text: "RETAIN_SIDE_CONTEXT" }, { activityId: id, chatType: "side" }); answer(calls[1], "RETAIN_SIDE_CONTEXT"); await h.jobChain; await h.close();
   const resumedCalls = [], resumed = new Harness({ hub, bus, log() {}, queryFactory: queryFixture(resumedCalls) });
   t.after(() => resumed.close());
   const history = resumed.taskHistory(id);
@@ -117,14 +117,14 @@ test("side chat history, attachments and option consumption persist across a clo
   await assert.rejects(resumed.chooseOption(bubble.id, "0", id), (e) => e.status === 409);
   await resumed.sendTask(id, "重新接着聊"); await until(() => resumedCalls[0]?.received.length === 1);
   const input = JSON.stringify(resumedCalls[0].received[0]);
-  assert.match(input, /已看过笔记/); assert.match(input, /notes\.txt/); assert.doesNotMatch(input, /system\/chat\.jsonl/);
+  assert.match(input, /RETAIN_SIDE_CONTEXT/); assert.match(input, /notes\.txt/); assert.doesNotMatch(input, /system\/chat\.jsonl/);
   assert.ok(history.items.some((i) => i.text === "RETAIN_SIDE_CONTEXT"));
-  assert.equal(history.messages.some((m) => m.text === "RETAIN_SIDE_CONTEXT"), false);
-  answer(resumedCalls[0], "重启后继续"); await resumed.jobChain;
+  assert.equal(history.messages.some((m) => m.text === "RETAIN_SIDE_CONTEXT"), true);
+  resumed.speech.emit({ text: "重启后继续" }, { activityId: id, chatType: "side" }); answer(resumedCalls[0], "重启后继续"); await resumed.jobChain;
   assert.equal(resumed.taskHistory(id).messages.at(-1).text, "重启后继续"); assert.deepEqual(resumed.speech.history(), []);
 });
 
-test("side say hides all prose in its run, keeps interjections in that turn and allows fallback next run", async (t) => {
+test("side say is the sole bubble source across interjections and subsequent runs", async (t) => {
   const { h, calls, events } = await fixture(t);
   const id = await h.createSideChat("旁聊自检"); await until(() => calls[1]?.received.length === 1);
   const q = calls[1];
@@ -143,8 +143,8 @@ test("side say hides all prose in its run, keeps interjections in that turn and 
   await h.sendTask(id, "这一轮没有 say"); await until(() => calls[2]?.received.length === 1);
   calls[2].emit({ type: "assistant", message: { content: [{ type: "text", text: "旁聊兜底第一句" }, { type: "text", text: "旁聊兜底第二句" }] } });
   calls[2].emit({ type: "result", subtype: "success" }); await h.jobChain;
-  const fallbacks = h.taskHistory(id).messages.filter((m) => m.fallback);
-  assert.deepEqual(fallbacks.map((m) => m.text), ["旁聊兜底第一句", "旁聊兜底第二句"]);
+  const fallbacks = h.taskHistory(id).messages.filter((m) => m.fallback).slice(-1);
+  assert.deepEqual(fallbacks, []);
   assert.ok(fallbacks.every((m) => m.chatType === "side" && m.activityId === id)); assert.deepEqual(h.speech.history(), []);
 });
 
@@ -153,15 +153,16 @@ test("main and side say decisions stay independent while their turns overlap", a
   await h.send("主聊天这轮没有 say");
   const id = await h.createSideChat("旁聊这轮用 say"); await until(() => calls[1]?.received.length === 1);
   h.speech.emit({ text: "旁聊正式说话" }, { activityId: id, chatType: "side" });
-  answer(calls[0], "主聊天照常兜底"); answer(calls[1], "只留活动的旁聊旁白"); await h.jobChain;
-  assert.equal(h.speech.history().at(-1).text, "主聊天照常兜底"); assert.equal(h.speech.history().at(-1).fallback, true);
-  assert.equal(h.taskHistory(id).messages.some((m) => m.text === "只留活动的旁聊旁白"), false);
+  answer(calls[0], "主聊天照常兜底"); answer(calls[1], "旁聊正式说话"); await h.jobChain;
+  assert.deepEqual(h.speech.history().filter((m) => m.role === "assistant"), []);
+  assert.equal(h.taskHistory(id).messages.filter((m) => m.role === "assistant").length, 1);
   await h.send("主聊天这轮用 say");
   h.speech.emit({ text: "主聊天正式说话" }, { activityId: h.main.activityId });
   const next = await h.createSideChat("旁聊这轮没有 say"); await until(() => calls[2]?.received.length === 1);
-  answer(calls[0], "只留活动的主聊天旁白"); answer(calls[2], "旁聊照常兜底"); await h.jobChain;
-  assert.equal(h.taskHistory(next).messages.at(-1).text, "旁聊照常兜底"); assert.equal(h.taskHistory(next).messages.at(-1).fallback, true);
-  assert.equal(h.speech.history().some((m) => m.text === "只留活动的主聊天旁白"), false);
+  answer(calls[0], "主聊天正式说话"); answer(calls[2], "旁聊照常兜底"); await h.jobChain;
+  assert.equal(h.taskHistory(next).messages.some((m) => m.role === "assistant"), false);
+  assert.ok(h.taskHistory(next).items.some((i) => i.text === "旁聊照常兜底"));
+  assert.equal(h.speech.history().filter((m) => m.text === "主聊天正式说话").length, 1);
 });
 
 test("side input before its isolated query starts is delivered once and retains submission order", async (t) => {
@@ -187,7 +188,7 @@ test("side input after result waits for its own result and idle without closing 
   q.emit({ type: "system", subtype: "session_state_changed", state: "idle" });
   await until(() => h.isolated.get(id)?.job.sdkState === "idle"); assert.equal(q.closed, false);
   assert.equal(q.received.at(-1).message.content, "RESULT_IDLE_BOUNDARY_MESSAGE");
-  q.emit({ type: "system", subtype: "session_state_changed", state: "running" }); answer(q, "新交代已处理");
+  q.emit({ type: "system", subtype: "session_state_changed", state: "running" }); h.speech.emit({ text: "新交代已处理" }, { activityId: id, chatType: "side" }); answer(q, "新交代已处理");
   q.emit({ type: "system", subtype: "session_state_changed", state: "idle" }); await h.jobChain;
   assert.equal(calls.length, 2); assert.equal(h.taskHistory(id).messages.at(-1).text, "新交代已处理");
 });

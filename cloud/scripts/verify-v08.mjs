@@ -10,7 +10,7 @@ const output = path.resolve(index < 0 ? "/tmp/v08-cloud-demo" : process.argv[ind
 fs.mkdirSync(output, { recursive: true });
 const root = fs.mkdtempSync(path.join(output, "root-"));
 for (const name of ["demo.log", "events.jsonl"]) fs.writeFileSync(path.join(output, name), "");
-Object.assign(process.env, { AGENT_ROOT: root, AGENT_TOKEN: "fake-local-v08-demo-token", AGENT_HOST: "127.0.0.1", AGENT_PORT: "0" });
+Object.assign(process.env, { AGENT_ROOT: root, AGENT_TOKEN: "fake-local-v08-demo-token", AGENT_HOST: "127.0.0.1", AGENT_PORT: "0", AGENT_ACTIVITY_SUMMARIES: "0" });
 const [{ query }, { default: WebSocket }, { Harness }, { DeviceHub }, { Content }, { startServer }, { Schedules }, { migrateV08 }, { CODE }, { fakeAnthropic }, fixtures] = await Promise.all([
   import("@anthropic-ai/claude-agent-sdk"), import("ws"), import("../src/agent.mjs"), import("../src/devices.mjs"), import("../src/content.mjs"), import("../src/server.mjs"), import("../src/scheduler.mjs"), import("../src/migrate-v08.mjs"), import("../src/config.mjs"), import("../test/fake-anthropic.mjs"), import("../test/native-fixture.mjs"),
 ]);
@@ -26,11 +26,11 @@ const api = await fakeAnthropic((body) => {
   const feed = hasInput(body, "[动态]");
   requests.push({ request: requests.length + 1, model: body.model, feed, interjection: JSON.stringify(body.messages).includes("DEMO_INTERJECTION"), resultsBeforeRequest: results });
   if (feed) {
-    assert.equal(body.model, "anthropic/claude-haiku-5.5");
+    assert.equal(body.model, "anthropic/claude-opus-5.5");
     if (!resultFor(body, "feed_write")) return toolReply("feed_write", "Write", { file_path: path.join(root, post), content: "---\ntitle: 本地假模型验证完成\nsource: 回环测试\nurl: https://example.test/local\npublished: 2026-10-15 10:00\nicon: 📰\n---\n这是一条本地测试动态。\n" });
     return textReply(" ");
   }
-  if (hasInput(body, "DEMO_OPTION_REPLY")) return textReply("收到，继续处理。这句普通正文也显示为气泡。");
+  if (hasInput(body, "DEMO_OPTION_REPLY")) return resultFor(body, "option_say") ? textReply("收到，继续处理。") : toolReply("option_say", "mcp__doudou__say", { text: "收到，继续处理。" });
   if (!resultFor(body, "say_first")) return toolReply("say_first", "mcp__doudou__say", { text: "我先看一下，稍后再跟你说。", cards: [{ type: "link", url: "https://example.test/local", title: "本地示例" }] });
   if (!resultFor(body, "read_pause")) return toolReply("read_pause", "Read", { file_path: path.join(root, "workspace/demo/context.txt") });
   assert.equal(JSON.stringify(body.messages).includes("DEMO_INTERJECTION"), true);
@@ -70,16 +70,16 @@ try {
   assert.equal((await request("/api/options/choose", "POST", choice)).status, 200); const duplicate = await request("/api/options/choose", "POST", choice); assert.equal(duplicate.status, 409);
   await until(() => results === 2 && !h.busy); log("option click=200; repeat click=409; reply=DEMO_OPTION_REPLY");
   const history = (await request("/api/history")).body.items; assert.equal(history.filter((m) => m.role === "assistant").length, 3); assert.equal(history.find((m) => m.id === speech[1].id).optionsUsed, true);
-  log("ordinary assistant prose preserved as bubble #3");
-  const activities = (await request("/api/activities")).body; assert.equal(activities.recent.length, 2);
+  log("say creates bubble #3; ordinary prose remains in process");
+  const activities = (await request("/api/activities")).body; assert.equal(activities.recent.length, 1);
   const detail = (await request(`/api/activities/${speech[0].activityId}/history`)).body; assert.ok(detail.items.some((i) => i.kind === "tool" && i.tool === "Read")); assert.ok(detail.items.some((i) => i.kind === "prompt" && i.text.includes("DEMO_INTERJECTION")));
-  log(`activities: ${activities.recent.length} chat rounds; first activity steps=${detail.items.length}; interjection and Read recorded`);
-  assert.equal((await request("/api/settings", "PUT", { model: "anthropic/claude-opus-5.5" })).status, 200); await h.inputChain;
+  log(`activities: ${activities.recent.length} main rounds listed; first process steps=${detail.items.length}; interjection and Read recorded`);
+  assert.equal((await request("/api/settings", "PUT", { model: { provider: "zenmux", id: "anthropic/claude-opus-5.5" } })).status, 200); await h.inputChain;
   assert.equal((await request("/api/feed/refresh", "POST")).status, 202); await h.jobChain; await until(() => events.some((e) => e.t === "feed_new"));
-  assert.equal((await request("/api/feed?days=1")).body.items[0].path, post); assert.ok(requests.filter((r) => r.feed).every((r) => r.model === "anthropic/claude-haiku-5.5"));
-  log("chat model=Opus 5.5; feed wire model=Haiku 5.5; new post event received; main busy=false");
+  assert.equal((await request("/api/feed?days=1")).body.items[0].path, post); assert.ok(requests.filter((r) => r.feed).every((r) => r.model === "anthropic/claude-opus-5.5"));
+  log("chat model=Opus 5.5; feed wire model=Opus 5.5; new post event received; main busy=false");
   assert.equal(appEvents.some((e) => e.t === "tool" || e.t === "queue_update"), false);
-  const summary = { ok: true, sdk: "0.3.295", chatBubbles: 3, chatActivities: 2, firstActivitySteps: detail.items.length, interjectionBeforeResult: true, optionStatuses: [200, 409], feedModel: "anthropic/claude-haiku-5.5", feedNew: true, requests, log: lines };
+  const summary = { ok: true, sdk: "0.3.295", chatBubbles: 3, chatActivities: 1, firstActivitySteps: detail.items.length, interjectionBeforeResult: true, optionStatuses: [200, 409], feedModel: "anthropic/claude-opus-5.5", feedNew: true, requests, log: lines };
   fs.writeFileSync(path.join(output, "requests.json"), JSON.stringify(requests, null, 2) + "\n"); fs.writeFileSync(path.join(output, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
   console.log(JSON.stringify(summary));
 } finally {

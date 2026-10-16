@@ -42,7 +42,7 @@ async function fixture(t) {
 test("v08 HTTP/WS: first chat, multiple bubbles, one-shot options, immediate input, activity history/continuation and notifications", async (t) => {
   const { h, calls, events, notifications, request, app } = await fixture(t);
   assert.equal((await request("/api/activities", "GET", undefined, false)).status, 401);
-  assert.equal((await request("/api/state")).data.version, "0.8.0");
+  assert.equal((await request("/api/state")).data.version, "0.8.1");
   const a = await app(); assert.equal("queued" in a.hello, false); assert.equal("tasks" in a.hello, false);
   assert.equal((await request("/api/first-chat", "POST", { device: "web" })).status, 400);
   assert.equal((await request("/api/first-chat", "POST", { device: "mac" })).data.started, true);
@@ -54,7 +54,7 @@ test("v08 HTTP/WS: first chat, multiple bubbles, one-shot options, immediate inp
   assert.equal(a.events.some((e) => e.t === "user" && e.source === "onboarding"), false);
   assert.equal((await request("/api/state")).data.chatEmpty, false);
   const id = h.main.activityId;
-  assert.equal((await request("/api/activities")).data.running.find((r) => r.id === id).title, "第一次聊天");
+  assert.equal((await request("/api/activities")).data.running.some((r) => r.id === id), false);
   h.speech.emit({ text: "先说第一句" }, { activityId: id });
   assert.deepEqual((await request("/api/history?n=1")).data.items.map((m) => m.text), ["先说第一句"]);
   const choice = h.speech.emit({ text: "再选一个", options: [{ label: "继续" }, { label: "暂停", reply: "先暂停这件事" }] }, { activityId: id });
@@ -64,7 +64,7 @@ test("v08 HTTP/WS: first chat, multiple bubbles, one-shot options, immediate inp
   await until(() => calls[0].received.length === 3); assert.deepEqual(calls[0].received.slice(1).map((m) => m.message.content), ["忙时补充", "先暂停这件事"]);
   assert.equal((await request("/api/history")).data.items.find((m) => m.id === choice.id).optionsUsed, true);
   h.main.q.emit({ type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "data/follow-ups.md" } }] } }); h.main.q.emit({ type: "result", subtype: "success" }); await until(() => !h.busy);
-  assert.ok((await request("/api/activities")).data.recent.some((r) => r.id === id));
+  assert.equal((await request("/api/activities")).data.recent.some((r) => r.id === id), true);
   const history = (await request(`/api/activities/${id}/history`)).data; assert.ok(history.items.some((i) => i.kind === "tool")); assert.ok(history.items.some((i) => i.text === "忙时补充"));
   assert.equal((await request(`/api/activities/${id}/send`, "POST", { text: "接着聊" })).status, 200); await h.jobChain;
   assert.ok((await request(`/api/activities/${id}/history`)).data.items.some((i) => i.text === "接着聊"));

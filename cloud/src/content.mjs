@@ -32,6 +32,16 @@ export function frontmatter(raw) {
   }
   return { meta, body: raw.slice(match[0].length).trim() };
 }
+export function readGoal(root, name, { done = false, timezone = "Asia/Shanghai", now = new Date() } = {}) {
+  if (typeof name !== "string" || !name || /[\\/\x00-\x1f]/.test(name) || name === "." || name === "..") throw problem("目标名不正确");
+  const rel = `data/goals/${done ? "done/" : ""}${name}.md`;
+  let raw;
+  try { raw = fs.readFileSync(localFile(root, rel, "data/goals"), "utf8"); } catch { throw problem("没有这个目标", 404); }
+  const { meta, body } = frontmatter(raw), progress = Number(meta.progress);
+  if (!meta.title || !["健康", "人际", "金融", "事业", "兴趣", "效率", "其他"].includes(meta.domain) || !["追踪中", "暂停", "完成", "放弃"].includes(meta.status) || !Number.isFinite(progress) || progress < 0 || progress > 100 || meta.due && !/^\d{4}-\d{2}-\d{2}$/.test(meta.due)) throw problem("目标 frontmatter 不完整或字段不正确");
+  cronFields(meta.cadence);
+  return { name, path: rel, ...meta, progress, body, nextCheckin: !done && meta.status === "追踪中" ? nextCron(meta.cadence, timezone, now) : null };
+}
 export function parseIdeas(raw) {
   const revision = digest(raw), groups = [];
   let group, item;
@@ -95,8 +105,10 @@ export class Content {
     const types = { like: "赞", dislike: "踩", discuss: "讨论" };
     if (!types[action] || typeof text !== "string" || text.length > 8000) throw problem("反馈必须是 like、dislike 或 discuss");
     const post = this.post(rel), record = { path: rel, title: post.title, action: types[action], text: text.trim(), ts: this.clock().getTime() };
+    const quote = { kind: "feed", path: rel, title: post.title, emoji: post.icon, source: post.source };
+    const promptText = `[讨论动态]\n${post.title}\n来源：${post.source}\n${post.url}\n帖子路径：${rel}\n${post.body}\n\n${text.trim() || "聊聊这条动态。"}`;
+    const id = action === "discuss" ? await send(text.trim(), "feed", [], { quote, promptText }) : undefined;
     appendJsonl(path.join(this.root, "data/feed/反馈.jsonl"), record);
-    const id = action === "discuss" ? await send(`[讨论动态]\n${post.title}\n来源：${post.source}\n${post.url}\n${post.body}\n\n${text.trim() || "聊聊这条动态。"}`, "feed") : undefined;
     return { ok: true, ...(id && { id }) };
   }
   feedSettings() {
@@ -130,14 +142,7 @@ export class Content {
     throw problem("没有这个点子，请刷新", 404);
   }
   goal(name, done = false) {
-    if (typeof name !== "string" || !name || /[\\/\x00-\x1f]/.test(name) || name === "." || name === "..") throw problem("目标名不正确");
-    const rel = `data/goals/${done ? "done/" : ""}${name}.md`;
-    let raw;
-    try { raw = this.read(rel); } catch { throw problem("没有这个目标", 404); }
-    const { meta, body } = frontmatter(raw), progress = Number(meta.progress);
-    if (!meta.title || !["健康", "人际", "金融", "事业", "兴趣", "效率", "其他"].includes(meta.domain) || !["追踪中", "暂停", "完成", "放弃"].includes(meta.status) || !Number.isFinite(progress) || progress < 0 || progress > 100 || meta.due && !/^\d{4}-\d{2}-\d{2}$/.test(meta.due)) throw problem("目标 frontmatter 不完整或字段不正确");
-    cronFields(meta.cadence);
-    return { name, path: rel, ...meta, progress, body, nextCheckin: !done && meta.status === "追踪中" ? nextCron(meta.cadence, this.timezone, this.clock()) : null };
+    return readGoal(this.root, name, { done, timezone: this.timezone, now: this.clock() });
   }
   goals({ done = false } = {}) {
     const items = [], errors = [];

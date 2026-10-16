@@ -7,6 +7,8 @@ import { writePrivateJson } from "./private-json.mjs";
 import { localFile } from "./local-paths.mjs";
 import { replyMedia } from "./media.mjs";
 import { taskId } from "./task-history.mjs";
+import { readGoal } from "./content.mjs";
+import { VERSION } from "./config.mjs";
 
 const name = z.string().trim().min(1).max(200);
 export const cardSchema = z.discriminatedUnion("type", [
@@ -48,13 +50,18 @@ export class Speech {
     const last = this.history(1)[0];
     return last?.role === "assistant" && !!last.options?.length && !last.optionsUsed;
   }
-  emit(args, { id = crypto.randomUUID(), activityId = this.activityId, chatType, fallback = false, error = false } = {}) {
-    if (chatType === "side" && !this.activityId) return this.side(activityId).emit(args, { id, fallback, error });
+  emit(args, { id = crypto.randomUUID(), activityId = this.activityId, chatType, error = false, silent = false } = {}) {
+    if (silent) throw new Error("后台运行不能对用户说话");
+    if (chatType === "side" && !this.activityId) return this.side(activityId).emit(args, { id, error });
     const value = z.object(saySchema).parse(args);
     if (!value.text.trim() && !value.options?.length && !value.cards?.length) throw new Error("说话内容不能为空");
     for (const card of value.cards || []) if (card.path) localFile(this.root, card.path, "data");
+    for (const card of value.cards || []) if (card.type === "goal") {
+      try { readGoal(this.root, card.name); }
+      catch { throw new Error(`data/goals/${card.name}.md 还没写好（或格式不对），先按系统提示词里的目标格式写好再发卡片。`); }
+    }
     const entry = { role: "assistant", id, text: this.redact(value.text), ts: Date.now(),
-      ...(activityId && { activityId }), ...(this.activityId && { chatType: "side" }), ...(fallback && { fallback: true }), ...(error && { error: true }) };
+      ...(activityId && { activityId }), ...(this.activityId && { chatType: "side" }), ...(error && { error: true }) };
     if (value.options?.length) entry.options = value.options.map((o, i) => ({ id: String(i), label: this.redact(o.label), reply: this.redact(o.reply ?? o.label) }));
     if (value.cards?.length) entry.cards = value.cards.map((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, typeof v === "string" ? this.redact(v) : v])));
     const media = replyMedia(this.root, entry.text);
@@ -77,10 +84,10 @@ export class Speech {
     return { ok: true, id, messageId, optionId, ...(this.activityId && { activityId: this.activityId, chatType: "side" }) };
   }
   tools(context = () => ({})) {
-    return [tool("say", "对用户说话。每次调用发一条聊天气泡，可带一次性选项和卡片。旁聊的说话发到当前旁聊；其他后台运行发到主聊天。", saySchema, async (args, extra) => {
+    return [tool("say", "对用户说话的唯一出口，每次发一条短句气泡，可分多次说。主聊天在主聊天说，旁聊只在当前旁聊说；后台运行不能对用户说话。卡片用途：connector：连接应用；goal：展示一个已经写好的目标（data/goals/<name>.md），卡片本身不会创建目标；link：网页预览；image/video/audio/file：展示 data/ 下已交付的影音或文件；browser：打开当前云端浏览器实时画面与接管；device：打开本机能力授权。options 是一次性回复按钮。", saySchema, async (args, extra) => {
       try { return { content: [{ type: "text", text: JSON.stringify({ id: this.emit(args, context(extra)).id }) }] }; }
       catch (e) { return { isError: true, content: [{ type: "text", text: e.message }] }; }
     })];
   }
-  mcpServer(context) { return createSdkMcpServer({ name: "doudou", version: "0.8.0", tools: this.tools(context) }); }
+  mcpServer(context) { return createSdkMcpServer({ name: "doudou", version: VERSION, tools: this.tools(context) }); }
 }

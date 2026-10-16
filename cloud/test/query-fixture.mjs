@@ -5,6 +5,8 @@ export function queryFixture(calls, { onInput = () => {} } = {}) {
     const q = {
       options, received: [], stopped: [], closed: false, flagSettings: [],
       async applyFlagSettings(settings) { q.flagSettings.push(settings); },
+      async setModel(model) { q.model = model; },
+      async setPermissionMode(mode) { q.permissionMode = mode; },
       emit(message) { const waiter = waiters.shift(); waiter ? waiter({ value: message, done: false }) : messages.push(message); },
       close() {
         closed = true; q.closed = true;

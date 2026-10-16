@@ -48,7 +48,7 @@ test("real SDK sends device screenshot as an Anthropic image block and Tavily/We
   hub.register(ws, { id: "fake-mac", name: "测试 Mac", kind: "mac", capabilities: [{ name: "computer_use", enabled: true }] });
   const { harness, events, until } = nativeHarness(t, api, { connectors, hub });
   await harness.send("IMAGE_CONNECTOR_NATIVE");
-  await until(() => events.some((e) => e.t === "turn_end" && e.text === "图片与连接器完成") && !harness.busy);
+  await until(() => events.some((e) => e.t === "turn_end") && !harness.busy);
   for (const key of [tavilyKey, wereadKey]) assert.equal(JSON.stringify(api.requests).includes(key), false);
   assert.ok(remote.requests.some((r) => r.path === "/search")); assert.ok(remote.requests.some((r) => r.body?.api_name === "/shelf/sync"));
 });

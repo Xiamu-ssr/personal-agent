@@ -19,7 +19,7 @@ export async function fakeAnthropic(respond = () => ({})) {
       return;
     }
     requests.push(data);
-    const reply = await respond(data, requests.length - 1);
+    const reply = await respond(data, requests.length - 1, { headers: req.headers, url: req.url });
     if (reply.error) {
       res.writeHead(reply.status || 400, { "content-type": "application/json" });
       res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: reply.error } }));

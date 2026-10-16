@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.mjs";
 import { inside, resolvedPath } from "./local-paths.mjs";
+import { bashWriteTargets } from "./bash-writes.mjs";
 
 export const MANAGED_SKILL_MARKER=".connector-managed.json";
 const deny=(reason)=>({hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:reason}});
@@ -17,20 +18,14 @@ export function checkDataAccess(input,{root=config.root,feed=false}={}) {
     ...(feed?[{dir:path.join(root,"data/feed/动态说明.md"),reason:"[动态] 后台运行只能读取动态说明，不能修改或删除用户的偏好。请在主聊天中按用户要求更新。"}]:[]),
     ...managedSkillDirs(root).map((dir)=>({dir,reason:"这是连接器安装并维护的官方技能，不能修改或删除。需要更新或安装请使用连接器工具。"}))];
   if(name==="Bash") {
-    const command=String(args.command||"");
-    // Hooks are a conservative shell guard, not an OS sandbox. Read-only commands remain available.
-    const readOnly=/^(?:\s*(?:cat|head|tail|less|ls|stat|du|wc|rg|grep|find|sed|awk)\b[^;&|>]*)(?:\s*\|\s*(?:head|tail|wc|grep|rg)\b[^;&|>]*)*\s*$/.test(command)&&
-      !/\b(?:sed\s+[^\n]*-i|find\s+[^\n]*-(?:delete|exec)|awk\s+[^\n]*(?:system\s*\(|print[^\n]*>))/.test(command);
-    const readsData=/\b(?:readFileSync|readFile|read_text|read_bytes|json\.load|read_csv|read_json)\b/.test(command);
-    const mutatesData=/\b(?:writeFileSync|writeFile|appendFile|write_text|write_bytes|unlink|rmdir|rename|remove|mkdir|truncate|chmod|chown|rm|mv|cp|rsync|tee|touch|eval|exec|subprocess|child_process)\b|open\([^\n]*,\s*["'](?:w|a|x)|[^<]>\s*[^=]/.test(command);
-    if((readOnly||readsData&&!mutatesData)&&!/[`$]/.test(command))return {};
-    const tokens=(command.match(/[^\s'"`;|<>&]+/g)||[]).filter((token)=>token.includes("/")||fs.existsSync(path.resolve(root,token)));
+    const writes=bashWriteTargets(String(args.command||""),root);
     for(const {dir,reason} of dirs) {
-      const rel=path.relative(root,dir);
-      if(command.includes(rel)||command.includes(dir))return deny(reason);
-      for(const token of tokens) {const file=resolvedPath(path.resolve(root,token));if(inside(file,resolvedPath(dir))||inside(resolvedPath(dir),file))return deny(reason);}
+      for(const target of writes) {
+        const prefix=target.match(/[*?[]/)?.index;
+        const file=resolvedPath(prefix===undefined?target:path.dirname(target.slice(0,prefix)+"_"));
+        if(inside(file,resolvedPath(dir))||inside(resolvedPath(dir),file))return deny(reason);
+      }
     }
-    if(/\b(?:rm|mv|cp|rsync|tar|unzip|chmod|chown|find)\b/.test(command)&&/(?:^|\s)(?:\.?\/?data\/?|\.claude\/?|\.)(?:\s|$)/.test(command))return deny(dirs[0].reason);
     return {};
   }
   const targets=[args.file_path,args.notebook_path,...(Array.isArray(args.edits)?args.edits.map((e)=>e.file_path):[])].filter((p)=>typeof p==="string");

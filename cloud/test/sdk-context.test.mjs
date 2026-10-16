@@ -11,6 +11,7 @@ import { DeviceHub } from "../src/devices.mjs";
 import { config } from "../src/config.mjs";
 import { readJson, writeJson } from "../src/store.mjs";
 import { fakeAnthropic, compactRequest } from "./fake-anthropic.mjs";
+import { toolReply, textReply, resultFor } from "./native-fixture.mjs";
 
 class Input {
   constructor() { this.items = []; this.waiters = []; }
@@ -154,8 +155,11 @@ test("CLI prompt-too-long compaction retry trims old history and can self-rescue
 
 test("actual resumed SDK session escapes failed compaction, keeps data, hides English, and isolated jobs complete", { timeout: 45_000 }, async (t) => {
   let failCompact = false;
-  const api = await fakeAnthropic((body) => compactRequest(body) && failCompact ? { stop_reason: "max_tokens" } :
-    { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 164001 } });
+  const api = await fakeAnthropic((body) => {
+    if (compactRequest(body)) return failCompact ? { error: "prompt is too long: 200001 tokens > 200000 maximum" } : {};
+    if (!resultFor(body, "recovery_say")) return toolReply("recovery_say", "mcp__doudou__say", { text: "OK" });
+    return { ...textReply("OK"), usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 164001 } };
+  });
   const calls = [], events = [], harnesses = [];
   const dir = path.join(config.sessions, "real-recovery-fixture");
   writeJson(config.stateFile, { unrelated: "keep" });
@@ -174,15 +178,11 @@ test("actual resumed SDK session escapes failed compaction, keeps data, hides En
       } });
     harnesses.push(h); h.startMain(); return h;
   };
-  const close = async (h) => {
-    clearTimeout(h.restartTimer);
-    h.main.intentionalClose = true;
-    h.main.inbox.close(); h.main.q.close(); await h.main.finished;
-  };
+  const close = (h) => h.close();
   t.after(async () => { for (const h of harnesses) await close(h); await api.close(); });
   const until = async (predicate) => {
     const deadline = Date.now() + 10_000;
-    while (!predicate()) { if (Date.now() > deadline) throw new Error("local SDK fixture did not settle"); await delay(20); }
+    while (!predicate()) { if (Date.now() > deadline) throw new Error("local SDK fixture did not settle: " + JSON.stringify({ queries: calls.length, turns: events.filter((e) => e.t === "turn_end"), requests: api.requests.map((r) => ({ compact: compactRequest(r), roles: r.messages.map((m) => m.role), last: JSON.stringify(r.messages.at(-1)?.content).slice(0, 120) })) })); await delay(20); }
   };
   const warm = start();
   await warm.send("Remember my pending task in data/recovery-todos.md.");

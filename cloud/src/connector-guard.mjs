@@ -5,6 +5,7 @@ import { config } from "./config.mjs";
 export const CONNECTOR_GUARD_TOOLS = "Read|Write|Edit|MultiEdit|NotebookEdit|Glob|Grep|Bash";
 const REASON = "连接器配置只能用 connectors 工具改（包括读取）；请用 connectors.list 查看账号状态。";
 const BROAD = "搜索范围包含 system/connectors（连接器配置不能直接读）；请把 path 限定到 data/、workspace/ 等具体目录再搜。";
+const PROVIDER_REASON = "模型服务配置含 API Key，不能直接读取或修改；请在 App 设置中管理模型服务。";
 const inside = (file, dir) => file === dir || file.startsWith(dir + path.sep);
 
 // Resolve existing parent symlinks too, including a new file beneath a symlinked directory.
@@ -23,6 +24,8 @@ export function checkConnectorAccess(input, { root = config.root, connectors = p
   const args = input.tool_input || {};
   let blocked = false;
   let broad = false;
+  const providerFile = path.join(root, "system/providers.json");
+  if (name === "Bash" && /providers\.json/i.test(String(args.command || ""))) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: PROVIDER_REASON } };
   if (name === "Bash") {
     // Deliberately best effort: this is not a shell interpreter or an OS sandbox.
     blocked = /system[\\/]connectors\b|accounts\.json/i.test(String(args.command || ""));
@@ -38,6 +41,7 @@ export function checkConnectorAccess(input, { root = config.root, connectors = p
     for (const p of paths) {
       const abs = path.resolve(root, p);
       const real = resolved(abs);
+      if (real === resolved(providerFile) || (name === "Grep" || name === "Glob") && inside(resolved(providerFile), real)) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: PROVIDER_REASON } };
       if (inside(abs, protectedDir) || inside(real, realDir)) blocked = true;
     }
     if (name === "Grep") {

@@ -43,7 +43,7 @@ test("feedback persists likes/dislikes/discussion and discussion starts main cha
   const send = async (...args) => { sent.push(args); return "message-id"; };
   for (const action of ["like", "dislike", "discuss"]) await content.feedback({ path: rel, action, text: "这意味着什么" }, send);
   const rows = tailJsonl(path.join(root, "data/feed/反馈.jsonl"), 10); assert.deepEqual(rows.map((r) => r.action), ["赞", "踩", "讨论"]);
-  assert.equal(rows[0].title, "新消息"); assert.equal(sent.length, 1); assert.match(sent[0][0], /\[讨论动态\].*\n新消息/); assert.match(sent[0][0], /两句事实/); assert.equal(sent[0][1], "feed");
+  assert.equal(rows[0].title, "新消息"); assert.equal(sent.length, 1); assert.equal(sent[0][0], "这意味着什么"); assert.match(sent[0][3].promptText, /\[讨论动态\].*\n新消息/); assert.match(sent[0][3].promptText, /两句事实/); assert.equal(sent[0][3].quote.path, rel); assert.equal(sent[0][1], "feed");
   await assert.rejects(content.feedback({ path: rel, action: "bad" }, send));
 });
 
@@ -111,10 +111,14 @@ test("health and uploads stay read-only; feed instructions are writable except i
 
 test("say's real in-process MCP validates cards and default replies and emits one persisted bubble per call", async (t) => {
   const { root, events } = setup(); put(root, "data/library/media/2026-10-15/image.png", "image");
+  put(root, "data/goals/运动.md", goalText());
   const speech = new Speech({ root, bus: { emit: (e) => events.push(e) } }), server = speech.mcpServer(() => ({ activityId: "local-activity" }));
   const client = new Client({ name: "say-test", version: "0.8.0" }), [a, b] = InMemoryTransport.createLinkedPair();
   await server.instance.connect(b); await client.connect(a); t.after(() => client.close());
-  assert.deepEqual((await client.listTools()).tools.map((t) => t.name), ["say"]);
+  const listing = (await client.listTools()).tools;
+  assert.deepEqual(listing.map((t) => t.name), ["say"]);
+  assert.match(listing[0].description, /goal：展示一个已经写好的目标（data\/goals\/<name>\.md），卡片本身不会创建目标/);
+  assert.match(listing[0].description, /后台运行不能对用户说话/);
   const cards = [{ type: "connector", id: "qq-mail" }, { type: "goal", name: "运动" }, { type: "link", url: "https://example.test/news", title: "网页" }, { type: "image", path: "data/library/media/2026-10-15/image.png" }, { type: "browser" }, { type: "device", capability: "health" }];
   const result = await client.callTool({ name: "say", arguments: { text: "第一句", options: [{ label: "继续" }], cards } }); assert.notEqual(result.isError, true);
   await client.callTool({ name: "say", arguments: { text: "第二句" } });

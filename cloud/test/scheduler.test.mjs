@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setImmediate as tick } from "node:timers/promises";
-import { Schedules, feedDue, FEED_MODEL, schedulePrompt, cronMatches } from "../src/scheduler.mjs";
+import { Schedules, feedDue, schedulePrompt, cronMatches } from "../src/scheduler.mjs";
 import { nextCron } from "../src/cron.mjs";
 import { Content } from "../src/content.mjs";
 import { config, CODE } from "../src/config.mjs";
@@ -44,12 +44,12 @@ test("schedule prompts read current spec files, replace only placeholders and re
   assert.equal(schedulePrompt("feed", { prompts: tmp }), "[动态]\n真正提示词");
 });
 
-test("feed is single-flight, fixes the model, skips overlap, and uses the last successful completion even after a failed run", async () => {
+test("feed is single-flight, leaves model selection to the harness, skips overlap, and uses the last successful completion even after a failed run", async () => {
   writeJson(path.join(config.system, "schedule-success.json"), {});
   const calls = [], pending = [], harness = { connectors: { redact: (s) => s }, runIsolated: (...args) => { calls.push(args); const g = gate(); pending.push(g); return g.promise; } };
   let now = local("08:00"); const content = new Content({ root: config.root }); const service = new Schedules({ harness, content, clock: () => now });
   const job = { id: "feed", name: "动态", kind: "feed" };
-  const first = await service.run(job); assert.equal(first.mode, "isolated"); assert.equal(calls[0][2].model, FEED_MODEL); assert.equal(calls[0][1].split("\n")[0], "[动态]");
+  const first = await service.run(job); assert.equal(first.mode, "isolated"); assert.equal("model" in calls[0][2], false); assert.equal(calls[0][1].split("\n")[0], "[动态]");
   assert.deepEqual(await service.run(job), { mode: "skipped", reason: "running" }); assert.equal(calls.length, 1);
   now = local("08:05"); const completion = service.active.get("feed").done; pending[0].resolve({ ok: true }); await completion;
   await service.run(job); assert.equal(calls[1][1].split("\n")[0], "[动态] 上次：2026-10-15 08:05");
@@ -57,15 +57,15 @@ test("feed is single-flight, fixes the model, skips overlap, and uses the last s
   await service.run(job); assert.match(calls[2][1], /^\[动态\] 上次：2026-10-15 08:05/); pending[2].resolve({ ok: true }); await service.active.get("feed").done;
 });
 
-test("tick schedules feed and Monday ideas, scans goal creation/change/deletion, and never uses the main chat", async () => {
+test("tick scans goals into main runs while feed and Monday ideas remain isolated", async () => {
   fs.rmSync(path.join(config.data, "goals"), { recursive: true, force: true });
   fs.rmSync(path.join(config.system, "schedule-overrides.json"), { force: true });
-  const calls = [], harness = { runIsolated: async (...args) => { calls.push(args); return { ok: true }; }, send() { throw new Error("background schedule must not use main chat"); } };
+  const calls = [], harness = { runIsolated: async (...args) => { calls.push(args); return { ok: true }; }, runMain: async (...args) => { calls.push(["主会话", ...args]); return { ok: true }; } };
   const content = new Content({ root: config.root }); content.putFeedSettings(settings);
   writeJson(config.scheduleFile, [{ id: "feed", name: "动态", kind: "feed" }, { id: "ideas", kind: "ideas", cron: "0 8 * * 1" }]);
   let now = new Date("2026-10-19T00:00:00Z"); const service = new Schedules({ harness, content, clock: () => now });
   putGoal("每分钟目标"); service.tick(); await tick();
-  assert.equal(calls.length, 3); assert.ok(calls.some((c) => c[1].startsWith("[目标跟进] 每分钟目标"))); assert.ok(calls.some((c) => c[1].startsWith("[点子]")));
+  assert.equal(calls.length, 3); assert.ok(calls.some((c) => c[0] === "主会话" && c[1].startsWith("[目标跟进] 每分钟目标"))); assert.ok(calls.some((c) => c[1].startsWith("[点子]")));
   service.tick(); await tick(); assert.equal(calls.length, 3);
   putGoal("每分钟目标", "0 9 * * *"); putGoal("新目标"); now = new Date("2026-10-19T00:01:00Z"); service.tick(); await tick(); assert.equal(calls.length, 4); assert.ok(calls.at(-1)[1].startsWith("[目标跟进] 新目标"));
   fs.unlinkSync(path.join(config.data, "goals/新目标.md")); now = new Date("2026-10-19T00:02:00Z"); service.tick(); await tick(); assert.equal(calls.length, 4);

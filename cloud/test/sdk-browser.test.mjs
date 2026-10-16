@@ -7,7 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-test("real Chrome + fake model: main and isolated takeover/return continue their original SDK streams", { timeout: 60_000 }, async () => {
+test("real Chrome + fake model: main and side-chat takeover/return continue their original SDK streams", { timeout: 60_000 }, async () => {
   const output = fs.mkdtempSync(path.join(testRoot, "sdk-browser-demo-"));
   const { stdout } = await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../scripts/verify-v08-browser.mjs", import.meta.url)), "--output", output], { timeout: 55_000 });
   const result = JSON.parse(stdout.trim());
