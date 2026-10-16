@@ -252,7 +252,7 @@ fun CapabilityRow(cap: Capability) {
             { c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", c.packageName, null))) }
         } else null,
         trailing = {
-            GoldSwitch(on) { want ->
+            GoldSwitch(on,CapabilityEnabled) { want ->
                 if (!want) return@GoldSwitch set(false)
                 val missing = cap.permissions.filter { ContextCompat.checkSelfPermission(c, it) != PackageManager.PERMISSION_GRANTED }
                 if (missing.isEmpty()) { set(true); requestHealth() } else launcher.launch(missing.toTypedArray())
@@ -309,7 +309,7 @@ fun PairCode() {
 fun SettingsScreen() {
     val c = ctx()
     val (state, _) = load("state") { Api.getJson("/api/state") }
-    val (runtime, runtimeError) = load("settings") { Api.settings() }
+    val (runtime, runtimeError) = load("settings",revision=Chat.settingsVersion.intValue) { Api.settings() }
     var notify by remember { mutableStateOf(Prefs.notifyMessages && NotificationManagerCompat.from(c).areNotificationsEnabled()) }
     var notifyDenied by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -341,9 +341,9 @@ fun SettingsScreen() {
         item { SectionTitle("能力与连接") }
         item {
             CardList {
-                ListRow("连接应用", "本机、云端和其他设备的能力", Icons.Outlined.Hub, Pal.Ink) { Nav.open(Route.Connectors()) }
+                ListRow("连接应用", "本机、云端和其他设备的能力", leading={ConnectorLogo("apps")}) { Nav.open(Route.Connectors()) }
                 Hairline()
-                ListRow("设备", "设备与本机能力", Icons.Outlined.Devices, Pal.Ink) { Nav.open(Route.Devices) }
+                ListRow("设备", "设备与本机能力", leading={SystemCapabilityIcon("device")}) { Nav.open(Route.Devices) }
                 Hairline()
                 ListRow("技能", "豆豆整理好的常用做法", Icons.Outlined.Extension, Pal.Ink) { Nav.open(Route.Skills) }
             }
@@ -351,11 +351,11 @@ fun SettingsScreen() {
         item { SectionTitle("通知") }
         item {
             CardList {
-                ListRow("接收消息通知", if (notifyDenied) "系统通知权限被拒绝 · 点这里去系统设置打开" else "App 不在前台时，豆豆说话会发通知", Icons.Outlined.NotificationsNone,
-                    Pal.Gold, subColor = if (notifyDenied) Pal.Danger else Pal.Muted, subLines = 2,
+                ListRow("接收消息通知", if (notifyDenied) "系统通知权限被拒绝 · 点这里去系统设置打开" else "App 不在前台时，豆豆说话会发通知",
+                    leading={SystemCapabilityIcon("notify")}, subColor = if (notifyDenied) Pal.Danger else Pal.Muted, subLines = 2,
                     onClick = if (notifyDenied) { { c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", c.packageName, null))) } } else null,
                     trailing = {
-                    GoldSwitch(notify) { want ->
+                    GoldSwitch(notify,CapabilityEnabled) { want ->
                         val needPerm = android.os.Build.VERSION.SDK_INT >= 33 &&
                             ContextCompat.checkSelfPermission(c, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                         if (want && needPerm) notifyPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)

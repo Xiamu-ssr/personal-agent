@@ -42,9 +42,9 @@ class V08ProtocolTest {
     @Test fun turnEndNeverCreatesOrDuplicatesABubbleAndDoesNotDeclareIdle() {
         val c=Conversation(); c.status(true); c.say(bubble()); c.endTurn(); c.endTurn(); assertEquals(1,c.items.size); assertTrue(c.busy)
     }
-    @Test fun busyInterjectionEchoImmediatelyReplacesSendingBubble() {
-        val c=Conversation(); c.status(true); c.sent("补充",emptyList(),1); c.user(ChatItem.User("补充",ts=2,id="u")); c.user(ChatItem.User("补充",ts=2,id="u"))
-        assertEquals(1,c.items.size); assertFalse((c.items[0] as ChatItem.User).pending); assertTrue(c.busy)
+    @Test fun busyInterjectionHttpReceiptAndEchoUseOneServerId() {
+        val c=Conversation(); c.status(true); c.user(ChatItem.User("补充",ts=2,id="u")); c.user(ChatItem.User("补充",ts=2,id="u"))
+        assertEquals(1,c.items.size); assertTrue(c.busy)
     }
     @Test fun choosingDisablesWholeGroupUntilServerReply() { val c=Conversation(); c.say(bubble()); assertTrue(c.choose("say-1","0")); assertFalse(c.choose("say-1","1")); assertFalse((c.items[0] as ChatItem.Assistant).optionsUsed) }
     @Test fun consumedOptionsRemainDisabledAfterDuplicateSayAndReconnect() {
@@ -54,7 +54,7 @@ class V08ProtocolTest {
     @Test fun failedChoiceCanRetryButConsumedChoiceCannot() { val c=Conversation(); c.say(bubble()); c.choose("say-1","0"); c.choiceFailed("say-1"); assertTrue(c.choose("say-1","1")); c.optionsUsed("say-1"); c.choiceFailed("say-1"); assertFalse(c.choose("say-1","0")) }
     @Test fun historyRefreshCannotResurrectConsumedOptions() { val c=Conversation(); c.say(bubble()); c.optionsUsed("say-1"); c.replaceHistory(listOf(bubble())); assertTrue((c.items[0] as ChatItem.Assistant).optionsUsed) }
     @Test fun invalidOptionIdDoesNotLockGroup() { val c=Conversation(); c.say(bubble()); assertFalse(c.choose("say-1","no")); assertTrue(c.choose("say-1","0")) }
-    @Test fun deltaIsReplacedByFinalSayAndLateDeltaIgnored() { val c=Conversation(); c.delta("say-1","部分"); assertEquals("部分",c.streaming); c.say(bubble()); assertEquals("",c.streaming); c.delta("say-1","迟到"); assertEquals("",c.streaming) }
+    @Test fun sayKeepsProcessIdThroughHistoryMerge() { val c=Conversation(); c.say(bubble().copy(activityId="round")); c.replaceHistory(listOf(bubble())); assertEquals("round",(c.items.single() as ChatItem.Assistant).activityId) }
     @Test fun backgroundAvatarIsIndependentOfMainBusy() { val c=Conversation(); c.avatar(AvatarStatus("working","在看邮件")); c.status(false); assertEquals("working",c.avatar.state); assertEquals("在看邮件",c.avatar.text) }
     @Test fun fiveAvatarStatesAndFallbackParse() { AvatarStatus.states.forEach { assertEquals(it,AvatarStatus.from(JSONObject().put("state",it)).state) }; assertEquals("idle",AvatarStatus.from(JSONObject().put("state","unknown")).state) }
     @Test fun feedPagingAppendsWholeDaysAndDeduplicatesPaths() {

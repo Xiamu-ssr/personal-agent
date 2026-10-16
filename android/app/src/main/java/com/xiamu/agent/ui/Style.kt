@@ -5,6 +5,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -328,16 +330,16 @@ fun SegTabs(labels: List<String>, selected: Int, modifier: Modifier = Modifier, 
 }
 
 @Composable
-fun GoldSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+fun GoldSwitch(checked: Boolean, activeColor: Color = Pal.Ink, onChange: (Boolean) -> Unit) {
     val x = animateDpAsState(if (checked) 20.dp else 2.dp, label = "knob")
     val shape = RoundedCornerShape(14.dp)
     Box(
-        Modifier.size(46.dp, 28.dp).then(if (checked) Modifier.clip(shape).background(Pal.Ink) else Modifier.clip(shape).background(Pal.Line))
-            .tap { onChange(!checked) },
+        Modifier.size(46.dp, 28.dp).clip(shape).background(if(checked) activeColor else Pal.Line)
+            .toggleable(value=checked,role=Role.Switch,onValueChange=onChange),
     ) {
         Box(
             Modifier.offset { androidx.compose.ui.unit.IntOffset(x.value.roundToPx(), 2.dp.roundToPx()) }.size(24.dp).shadow(2.dp, CircleShape)
-                .background(Brush.linearGradient(listOf(Pal.Card, Pal.Card)), CircleShape),
+                .background(if(checked && activeColor!=Pal.Ink) Color.White else Pal.Background, CircleShape),
         )
     }
 }

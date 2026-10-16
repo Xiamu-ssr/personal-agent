@@ -3,44 +3,39 @@ package com.xiamu.agent
 import org.json.JSONObject
 
 sealed class ChatItem {
-    data class User(val text: String,val attachments: List<Attachment> = emptyList(),val pending: Boolean = false,val ts: Long = 0,val id: String = "") : ChatItem()
-    data class Assistant(val text: String,val ts: Long = 0,val media: List<ReplyMedia> = emptyList(),val id: String = "",val options: List<SayOption> = emptyList(),val cards: List<SayCard> = emptyList(),val optionsUsed: Boolean = false,val choosing: Boolean = false) : ChatItem() {
+    data class User(val text: String,val attachments: List<Attachment> = emptyList(),val ts: Long = 0,val id: String = "",val quote: FeedQuote? = null) : ChatItem()
+    data class Assistant(val text: String,val ts: Long = 0,val media: List<ReplyMedia> = emptyList(),val id: String = "",val options: List<SayOption> = emptyList(),val cards: List<SayCard> = emptyList(),val optionsUsed: Boolean = false,val choosing: Boolean = false,val activityId: String? = null) : ChatItem() {
         val displayMedia: List<ReplyMedia> get() = (cards.filterIsInstance<SayCard.Media>().map { it.file } + media).distinctBy { it.path }
     }
 }
 internal fun historyItem(h: JSONObject): ChatItem? = when(h.optString("role")) {
-    "user" -> if(h.optString("source")=="onboarding") null else ChatItem.User(h.optString("text"),h.optJSONArray("attachments").objects().map(Attachment::from),ts=h.optLong("ts"),id=h.optString("id"))
-    "assistant" -> ChatItem.Assistant(h.optString("text"),h.optLong("ts"),replyMedia(h),h.optString("id"),sayOptions(h),sayCards(h),h.optBoolean("optionsUsed"))
+    "user" -> if(h.optString("source")=="onboarding") null else ChatItem.User(h.optString("text"),h.optJSONArray("attachments").objects().map(Attachment::from),ts=h.optLong("ts"),id=h.optString("id"),quote=FeedQuote.from(h.optJSONObject("quote")))
+    "assistant" -> ChatItem.Assistant(h.optString("text"),h.optLong("ts"),replyMedia(h),h.optString("id"),sayOptions(h),sayCards(h),h.optBoolean("optionsUsed"),activityId=h.optString("activityId").takeIf { it.isNotBlank() })
     else -> null
 }
 data class BackgroundActivity(val id: String,val description: String,val startedAt: Long)
 
-/** Pure, id-based 0.8 chat reducer. turn_end only closes provisional text. */
+/** Id-based 0.8.1 chat reducer. turn_end never creates bubbles or declares SDK idle. */
 class Conversation(val items: MutableList<ChatItem> = mutableListOf()) {
     var busy=false; private set
     var avatar=AvatarStatus(); private set
     private val consumed=mutableSetOf<String>()
-    private val deltas=linkedMapOf<String,String>()
-    val streaming get() = deltas.values.joinToString("\n\n")
     fun hello(history: List<ChatItem>, busy: Boolean, avatar: AvatarStatus) {
-        this.busy=busy; this.avatar=avatar; deltas.clear(); consumed.clear()
-        history.filterIsInstance<ChatItem.Assistant>().filter { it.optionsUsed }.forEach { consumed.add(it.id) }
-        items.clear(); items.addAll(history)
+        this.busy=busy; this.avatar=avatar
+        replaceHistory(history)
     }
     fun replaceHistory(history: List<ChatItem>) {
-        val pending=items.filterIsInstance<ChatItem.User>().filter { it.pending }
         history.filterIsInstance<ChatItem.Assistant>().filter { it.optionsUsed }.forEach { consumed.add(it.id) }
-        items.clear(); items.addAll(history.map { if(it is ChatItem.Assistant && it.id in consumed) it.copy(optionsUsed=true) else it }); items.addAll(pending)
+        val merged=mergeChatMessages(history,items.toList()).map { if(it is ChatItem.Assistant && it.id in consumed) it.copy(optionsUsed=true,choosing=false) else it }
+        items.clear(); items.addAll(merged)
     }
-    fun sent(text: String,attachments: List<Attachment>,ts: Long) { items.add(ChatItem.User(text,attachments,true,ts)) }
+    fun clear() { items.clear(); consumed.clear(); busy=false; avatar=AvatarStatus() }
     fun user(m: ChatItem.User) {
         val existing=items.indexOfFirst { it is ChatItem.User && m.id.isNotBlank() && it.id==m.id }
         if(existing>=0) { items[existing]=m; return }
-        val pending=items.indexOfFirst { it is ChatItem.User && it.pending && it.text==m.text && it.attachments.map { a->a.path }==m.attachments.map { a->a.path } }
-        if(pending>=0) items[pending]=m else items.add(m)
+        items.add(m)
     }
     fun say(m: ChatItem.Assistant) {
-        deltas.remove(m.id)
         if(m.optionsUsed) consumed.add(m.id)
         val index=items.indexOfFirst { it is ChatItem.Assistant && m.id.isNotBlank() && it.id==m.id }
         val value=m.copy(optionsUsed=m.optionsUsed || m.id in consumed)
@@ -63,7 +58,6 @@ class Conversation(val items: MutableList<ChatItem> = mutableListOf()) {
     }
     fun status(value: Boolean) { busy=value }
     fun avatar(value: AvatarStatus) { avatar=value }
-    fun delta(id: String,text: String) { if(id.isNotBlank() && items.none { it is ChatItem.Assistant && it.id==id }) deltas[id]=deltas[id].orEmpty()+text }
-    fun endTurn() { deltas.clear() }
-    fun disconnected() { busy=false; deltas.clear(); avatar=AvatarStatus() }
+    fun endTurn() = Unit
+    fun disconnected() { busy=false; avatar=AvatarStatus() }
 }

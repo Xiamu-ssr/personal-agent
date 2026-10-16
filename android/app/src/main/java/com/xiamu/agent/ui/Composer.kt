@@ -78,9 +78,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +94,13 @@ import androidx.core.content.FileProvider
 import com.xiamu.agent.Api
 import com.xiamu.agent.Attachment
 import com.xiamu.agent.Chat
+import com.xiamu.agent.AttachmentDraft
+import com.xiamu.agent.FeedPost
+import com.xiamu.agent.FeedQuote
+import com.xiamu.agent.OutgoingMessage
+import com.xiamu.agent.SendAttempt
+import org.json.JSONObject
+import org.json.JSONArray
 import com.xiamu.agent.media.Recorder
 import com.xiamu.agent.media.compressImage
 import com.xiamu.agent.media.displayName
@@ -112,9 +122,12 @@ import java.util.Locale
 data class Picked(val id: Long, val name: String, val kind: String, val uri: Uri? = null, val file: File? = null)
 
 /** The draft is shared by every tab's input box. */
-open class MessageDraft(private val taskId: String? = null,private val sendMessage: (suspend (String,List<Attachment>) -> Boolean)? = null) {
+open class MessageDraft(private val taskId: String? = null,private val sendMessage: (suspend (String,List<Attachment>,String) -> Boolean)? = null) {
     val text = mutableStateOf("")
-    val picked = mutableStateListOf<Picked>()
+    private val selection = mutableStateOf(AttachmentDraft<Picked>())
+    val picked get() = selection.value.items
+    val quote = mutableStateOf<FeedQuote?>(null)
+    val focusVersion = mutableIntStateOf(0)
     val sending = mutableStateOf(false)
     val voiceMode = mutableStateOf(false)
     val note = mutableStateOf("")
@@ -124,6 +137,15 @@ open class MessageDraft(private val taskId: String? = null,private val sendMessa
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var transfer: Job? = null
     private val uploaded = mutableMapOf<Long, Attachment>()
+    private val attempt = SendAttempt()
+
+    fun add(p: Picked) { selection.value = selection.value.add(listOf(p)) }
+    fun discuss(post: FeedPost) {
+        quote.value = FeedQuote.from(post)
+        voiceMode.value = false
+        focusVersion.intValue++
+        Nav.home(0)
+    }
 
     private suspend fun upload(ctx: Context, p: Picked): Attachment {
         uploaded[p.id]?.let { return it }
@@ -137,34 +159,38 @@ open class MessageDraft(private val taskId: String? = null,private val sendMessa
         return Attachment(j.getString("path"), j.optString("name", name), p.kind).also { uploaded[p.id] = it }
     }
 
-    /** Upload what's picked, then send it with [text] over the socket. Switches to the chat tab. */
+    /** Wait for the cloud receipt; failed uploads and sends retain the same selection and UUID. */
     fun send(ctx: Context, text: String = this.text.value.trim(), extra: List<Picked> = emptyList(), includeDraft: Boolean = true, onDone: () -> Unit = {}): Boolean {
-        val files = (if (includeDraft) picked.toList() else emptyList()) + extra
-        if (sending.value || (text.isBlank() && files.isEmpty())) { onDone(); return false }
-        if (taskId == null && sendMessage == null && !Chat.connected.value) {
-            say("还没连上云端，稍等再发")
-            extra.forEach { if (it !in picked) picked.add(it) }
-            onDone()
-            return false
-        }
+        val discussion = if(includeDraft) quote.value else null
+        // Feed feedback accepts text. An existing attachment draft stays intact while discussing.
+        val files = (if (includeDraft && discussion==null) picked.toList() else emptyList()) + extra
+        if (sending.value || (text.isBlank() && files.isEmpty() && discussion==null)) { onDone(); return false }
+        val key=JSONObject().put("text",text).put("files",JSONArray(files.map { it.id })).put("quote",discussion?.path).toString()
+        val clientId=attempt.begin(key) ?: return false
         if (taskId == null && sendMessage == null) Nav.home(0)
         sending.value = true
         transfer = scope.launch {
             try {
                 val atts = files.map { upload(ctx, it) }
-                val accepted = if(sendMessage!=null) sendMessage.invoke(text,atts) else if (taskId == null) Chat.send(text, atts) else { Api.sendToActivity(taskId, text, atts); true }
+                val accepted = if(sendMessage!=null) sendMessage.invoke(text,atts,clientId) else if (taskId == null) Chat.send(OutgoingMessage(text,atts,clientId,discussion)) else { Api.sendToActivity(taskId, text, atts,clientId); true }
                 if (accepted) {
+                    attempt.accepted()
                     sentVersion.intValue++
                     if (includeDraft && text == this@MessageDraft.text.value.trim()) this@MessageDraft.text.value = ""
+                    if(discussion!=null && quote.value==discussion) quote.value=null
                     files.forEach(::remove)
                 } else {
-                    extra.forEach { if (it !in picked) picked.add(it) }
+                    attempt.failed()
+                    extra.forEach(::add)
                     say("连接断开了，附件已保留，请重试")
                 }
             } catch (e: CancellationException) {
+                attempt.failed()
                 throw e
             } catch (e: Exception) {
-                extra.forEach { if (it !in picked) picked.add(it) }
+                // The cloud caches definitive HTTP errors too. A new submission may retry them.
+                attempt.failed(retryable=e !is Api.ApiError || e.code==0)
+                extra.forEach(::add)
                 say("没发出去：${e.message}")
             } finally {
                 sending.value = false
@@ -175,7 +201,7 @@ open class MessageDraft(private val taskId: String? = null,private val sendMessa
     }
 
     fun remove(p: Picked) {
-        picked.remove(p)
+        selection.value = selection.value.remove(listOf(p))
         uploaded.remove(p.id)
         p.file?.delete()
     }
@@ -184,6 +210,8 @@ open class MessageDraft(private val taskId: String? = null,private val sendMessa
         transfer?.cancel()
         picked.toList().forEach(::remove)
         uploaded.clear()
+        attempt.reset()
+        quote.value=null
         sentVersion.intValue = 0
         text.value = ""; note.value = ""; voiceMode.value = false; sending.value = false
     }
@@ -283,38 +311,45 @@ fun Dock(modifier: Modifier = Modifier) {
 fun MessageComposer(draft: MessageDraft, hint: String) {
     val note = draft.note.value
     LaunchedEffect(note) { if (note.isNotBlank()) { delay(3500); draft.note.value = "" } }
-    AnimatedVisibility(note.isNotBlank()) {
-        Text(note, fontSize = Type.Secondary, color = Pal.Danger, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+    Column(Modifier.fillMaxWidth()) {
+        AnimatedVisibility(note.isNotBlank()) {
+            Text(note, fontSize = Type.Secondary, color = Pal.Danger, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+        }
+        draft.quote.value?.let { quote ->
+            FeedQuoteCard(quote,Modifier.fillMaxWidth().padding(bottom=8.dp),onCancel={if(!draft.sending.value) draft.quote.value=null})
+            if(draft.picked.isNotEmpty()) Text("附件保留在草稿中",style=Type.body(11),color=Pal.Muted,modifier=Modifier.padding(start=12.dp,bottom=6.dp))
+        }
+        if (draft.quote.value==null && draft.picked.isNotEmpty()) PickedRow(draft)
+        InputPill(draft, hint)
     }
-    if (draft.picked.isNotEmpty()) PickedRow(draft)
-    InputPill(draft, hint)
 }
 
 @Composable
 private fun PickedRow(draft: MessageDraft) {
     Row(
-        Modifier.fillMaxWidth().contentHorizontalScroll(rememberScrollState()).padding(bottom = 8.dp),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top=4.dp,bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         draft.picked.forEach { p ->
             Box {
                 Row(
-                    Modifier.height(54.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Background)
-                        .padding(end = 14.dp),
+                    Modifier.height(64.dp).then(if(p.kind=="image") Modifier.width(64.dp) else Modifier.widthIn(min=156.dp,max=204.dp))
+                        .clip(RoundedCornerShape(14.dp)).background(Pal.Card).border(.5.dp,Pal.Line,RoundedCornerShape(14.dp))
+                        .padding(end = if(p.kind=="image") 0.dp else 24.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (p.kind == "image" && p.uri != null) LocalThumb(p.uri)
-                    else Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
+                    if (p.kind == "image" && (p.uri != null || p.file != null)) LocalThumb(p.uri ?: Uri.fromFile(p.file))
+                    else Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) {
                         Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = Pal.Ink, modifier = Modifier.size(22.dp))
                     }
                     if (p.kind != "image") Text(p.name, fontSize = Type.Label, color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 130.dp))
                 }
                 if (!draft.sending.value) {
                     Box(
-                        Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp).size(20.dp).clip(CircleShape).background(Pal.Ink)
+                        Modifier.align(Alignment.TopEnd).size(26.dp).padding(3.dp).clip(CircleShape).background(Pal.Ink)
                             .tap { draft.remove(p) },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Outlined.Close, "移除", tint = Pal.Card, modifier = Modifier.size(13.dp)) }
+                    ) { Icon(Icons.Outlined.Close, "移除 ${p.name}", tint = Pal.Background, modifier = Modifier.size(13.dp)) }
                 }
             }
         }
@@ -335,7 +370,7 @@ private fun LocalThumb(uri: Uri) {
             }.getOrNull()
         }
     }
-    Box(Modifier.size(54.dp).background(Pal.Background)) {
+    Box(Modifier.size(64.dp).background(Pal.Background)) {
         bmp?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
     }
 }
@@ -343,20 +378,25 @@ private fun LocalThumb(uri: Uri) {
 @Composable
 private fun InputPill(draft: MessageDraft, hint: String) {
     val c = ctx()
+    val focus=remember { FocusRequester() }
+    val keyboard=LocalSoftwareKeyboardController.current
+    LaunchedEffect(draft.focusVersion.intValue) {
+        if(draft.focusVersion.intValue>0) { focus.requestFocus(); keyboard?.show() }
+    }
     var text by draft.text
     val sending = draft.sending.value
     var menu by remember { mutableStateOf(false) }
     var cameraPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun add(uri: Uri, kind: String) {
-        draft.picked.add(Picked(System.nanoTime(), displayName(c, uri), kind, uri = uri))
+        draft.add(Picked(System.nanoTime(), displayName(c, uri), kind, uri = uri))
     }
 
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { add(it, "file") } }
     val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(9)) { uris -> uris.forEach { add(it, "image") } }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = cameraPath?.let(::File)
-        if (ok && f != null) draft.picked.add(Picked(System.nanoTime(), f.name, "image", uri = Uri.fromFile(f), file = f))
+        if (ok && f != null) draft.add(Picked(System.nanoTime(), f.name, "image", uri = Uri.fromFile(f), file = f))
         else f?.delete()
         cameraPath = null
     }
@@ -382,11 +422,11 @@ private fun InputPill(draft: MessageDraft, hint: String) {
     }
 
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Card).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp,max=144.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Card).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            PillIcon(Icons.Outlined.Add, "添加", enabled = !sending) { menu = true }
+            PillIcon(Icons.Outlined.Add, "添加", enabled = !sending && draft.quote.value==null) { menu = true }
             DropdownMenu(
                 expanded = menu, onDismissRequest = { menu = false },
                 shape = RoundedCornerShape(18.dp), containerColor = Pal.Card, shadowElevation = 6.dp,
@@ -407,10 +447,10 @@ private fun InputPill(draft: MessageDraft, hint: String) {
             HoldToTalk(draft, Modifier.weight(1f).padding(vertical = 5.dp))
         } else {
             BasicTextField(
-                value = text, onValueChange = { text = it }, maxLines = 5,
+                value = text, onValueChange = { text = it }, maxLines = 4,
                 textStyle = TextStyle(fontSize = Type.Body, lineHeight = Type.BodyLine, color = Pal.Ink),
                 cursorBrush = SolidColor(Pal.Gold),
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 12.dp).testTag("composer"),
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 12.dp).focusRequester(focus).testTag("composer"),
                 decorationBox = { inner ->
                     Box {
                         if (text.isEmpty()) Text(hint, fontSize = Type.Body, color = Pal.Faint, maxLines = 1)
@@ -419,10 +459,10 @@ private fun InputPill(draft: MessageDraft, hint: String) {
                 },
             )
         }
-        val canSend = text.isNotBlank() || draft.picked.isNotEmpty()
+        val canSend = text.isNotBlank() || draft.picked.isNotEmpty() || draft.quote.value!=null
         when {
-            sending -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(Modifier.size(18.dp), color = Pal.Gold, strokeWidth = 2.dp)
+            sending -> Box(Modifier.padding(4.dp).size(36.dp).clip(CircleShape).background(Pal.Quiet), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(18.dp), color = Pal.Muted, strokeWidth = 2.dp)
             }
             canSend -> Box(
                 Modifier.padding(4.dp).size(36.dp).gold().tap { draft.send(c) },

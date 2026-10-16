@@ -4,6 +4,8 @@ import android.content.Context
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -103,10 +105,16 @@ suspend fun compressImage(ctx: Context, uri: Uri, maxEdge: Int = 1600): ByteArra
         if (scale < 1f) dec.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
         dec.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
     }
-    ByteArrayOutputStream().use { out ->
-        bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
-        bmp.recycle()
+    // JPEG has no alpha: composite transparent images explicitly instead of turning them black.
+    val jpeg=if(bmp.hasAlpha()) Bitmap.createBitmap(bmp.width,bmp.height,Bitmap.Config.ARGB_8888).also {
+        Canvas(it).apply { drawColor(Color.WHITE); drawBitmap(bmp,0f,0f,null) }
+    } else bmp
+    try { ByteArrayOutputStream().use { out ->
+        jpeg.compress(Bitmap.CompressFormat.JPEG, 85, out)
         out.toByteArray()
+    } } finally {
+        if(jpeg!==bmp) jpeg.recycle()
+        bmp.recycle()
     }
 }
 

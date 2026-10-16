@@ -19,13 +19,13 @@ import kotlinx.coroutines.delay
 @Composable
 fun SideChatScreen(route: Route.SideChat) {
     val session=remember(route.id) { route.id?.let(SideChats::session) }
-    val draft=remember(route.id) { MessageDraft(sendMessage={text,attachments ->
+    val draft=remember(route.id) { MessageDraft(sendMessage={text,attachments,clientId ->
         if(route.id==null) {
-            val id=Api.createSideChat(text,attachments)
+            val id=Api.createSideChat(text,attachments,clientId)
             Chat.activityVersion.intValue++
             Nav.createdSideChat(id)
         } else {
-            Api.sendToActivity(route.id,text,attachments)
+            Api.sendToActivity(route.id,text,attachments,clientId)
             session?.refresh()
         }
         true
@@ -43,7 +43,7 @@ fun SideChatScreen(route: Route.SideChat) {
     val bottom=with(LocalDensity.current) { dockHeight.toDp() }
     val ime=WindowInsets.isImeVisible
     Box(Modifier.fillMaxSize().background(Pal.Background).statusBarsPadding()) {
-        ChatScreen(list,bottom,scroll,items=session?.items ?: emptyList(),streaming="",error=session?.error?.value.orEmpty(),
+        ChatScreen(list,bottom,scroll,items=session?.items ?: emptyList(),error=session?.error?.value.orEmpty(),
             sentVersion=draft.sentVersion.intValue,
             emptyText=if(route.id==null) "想单独聊点什么？" else if(session?.loaded?.value==true) "从这里接着聊。" else "正在打开旁聊…",
             onChoose={message,option -> session?.choose(message,option)})

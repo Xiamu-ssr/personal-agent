@@ -33,7 +33,7 @@ class ReplyMediaTest {
     }
 
     @Test fun helloHistoryUsesTheSocketHistoryParser() {
-        val hello = JSONObject().put("history", JSONArray().put(history()).put(JSONObject().put("role", "user").put("text", "你好")))
+        val hello = JSONObject().put("history", JSONArray().put(history()).put(JSONObject().put("role", "user").put("text", "你好").put("id", "u").put("ts", 1791580800001L)))
         val chat = Conversation()
         chat.hello(hello.optJSONArray("history").objects().mapNotNull(::historyItem), false, AvatarStatus())
         val assistant = chat.items.first() as ChatItem.Assistant
@@ -42,23 +42,21 @@ class ReplyMediaTest {
         assertTrue(chat.items.last() is ChatItem.User)
     }
 
-    @Test fun historyRefreshKeepsMediaAndPendingUsers() {
+    @Test fun historyRefreshKeepsMediaAndConfirmedUsers() {
         val chat = Conversation()
-        chat.sent("稍后处理", emptyList(), 1)
+        chat.user(ChatItem.User("稍后处理", ts = 1791580800001L, id = "u"))
         chat.replaceHistory(listOf(historyItem(history())!!))
         assertEquals(4, (chat.items.first() as ChatItem.Assistant).media.size)
-        assertTrue((chat.items.last() as ChatItem.User).pending)
+        assertEquals("u", (chat.items.last() as ChatItem.User).id)
     }
 
-    @Test fun deltasStayTextOnlyUntilSay() {
+    @Test fun turnEndDoesNotSynthesizeMediaBeforeSay() {
         val chat = Conversation()
         chat.status(true)
-        chat.delta("media-say","草稿")
-        assertEquals("草稿", chat.streaming)
+        chat.endTurn()
         assertTrue(chat.items.isEmpty())
         chat.say(historyItem(event()) as ChatItem.Assistant)
         assertEquals(4, (chat.items.single() as ChatItem.Assistant).media.size)
-        assertEquals("", chat.streaming)
         assertTrue(chat.busy)
     }
 

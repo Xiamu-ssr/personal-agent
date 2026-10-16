@@ -1,4 +1,4 @@
-// Local-only 0.8 integration host. Uses the real cloud HTTP/WS/content/Harness and
+// Local-only 0.8.1 integration host. Uses the real cloud HTTP/WS/content/Harness and
 // cloud/test/query-fixture.mjs as a deterministic model. No secrets or external model.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,6 +45,7 @@ const listeners=new Set(); const events=[];
 const bus={on:fn=>listeners.add(fn),emit:e=>{events.push(e);fs.appendFileSync(path.join(output,'cloud-events.jsonl'),JSON.stringify(e)+'\n');for(const fn of listeners)fn(e)}};
 fs.writeFileSync(path.join(output,'cloud-events.jsonl'),'');
 fs.writeFileSync(path.join(output,'model-inputs.jsonl'),'');
+fs.writeFileSync(path.join(output,'message-requests.jsonl'),'');
 const calls=[];let h;let chain=Promise.resolve();
 const finish=q=>{q.emit({type:'result',subtype:'success'});q.emit({type:'system',subtype:'session_state_changed',state:'idle'})};
 const speak=(value)=>h.speech.emit(value,{activityId:h.main.activityId});
@@ -53,6 +54,11 @@ const factory=queryFixture(calls,{onInput(q,message){
     const own=[...h.isolated].find(([,context])=>context.q===q);
     const sideId=own && h.history.get(own[0]).chatType==='side' ? own[0] : null;
     fs.appendFileSync(path.join(output,'model-inputs.jsonl'),JSON.stringify({text,busy:h.busy,activityId:sideId || h.main.activityId,...(sideId && {chatType:'side'})})+'\n');
+    if(own && !sideId) {
+        q.emit({type:'assistant',message:{content:[{type:'tool_use',id:'demo-background-read',name:'Read',input:{file_path:path.join(root,'data/ideas/点子.md')}}]}});
+        later(()=>{q.emit({type:'assistant',message:{content:[{type:'text',text:'后台检查完成：演示资料已经整理好。'}]}});finish(q)},500);
+        return;
+    }
     if(sideId) {
         const context={activityId:sideId,chatType:'side'};
         q.emit({type:'system',subtype:'session_state_changed',state:'running'});
@@ -68,6 +74,12 @@ const factory=queryFixture(calls,{onInput(q,message){
         later(()=>speak({text:'你好，我是豆豆，住在你自己的云主机上。你不在的时候，我也能帮你把事情做好。'}),300);
         later(()=>speak({text:'先给我起个名字吧，也可以直接告诉我你喜欢的名字。',options:[{label:'豆豆'},{label:'小芽'},{label:'团子'}]}),700);
         later(()=>{speak({text:'连上手机和常用应用，我就能帮你做更多事。',cards:[{type:'device'},{type:'connector',id:'qq-mail'}]});finish(q);h.avatar.set('waiting')},1000);
+    } else if(text.includes('DEMO_RECONNECT') || text.includes('DEMO_BACKGROUND')) {
+        const reply=text.includes('DEMO_RECONNECT')?'断线期间补上的回复，只出现一次。':'回到前台补上的回复，只出现一次。';
+        later(()=>{speak({text:reply});finish(q)},500);
+    } else if(text.includes('DEMO_FINAL_SAY')) {
+        q.emit({type:'assistant',message:{content:[{type:'text',text:'这段模型正文只保存在过程记录里。'}]}});
+        speak({text:'这是最终答复，通过 say 完整发出。'});finish(q);
     } else if(text.includes('DEMO_MAIN_HOLD')) {
         speak({text:'主聊天正在整理资料，这句话只留在主聊天。'});
         later(()=>{speak({text:'主聊天的资料整理好了。'});finish(q)},45000);
@@ -83,16 +95,38 @@ const factory=queryFixture(calls,{onInput(q,message){
         later(()=>{speak({text:text==='豆豆'?'那就叫豆豆。接下来想做什么，随时告诉我。':'收到，我们从一个轻松的小步骤开始。',...(text==='豆豆'?{cards:[{type:'device'},{type:'connector',id:'qq-mail'}]}:{})});finish(q)},500);
     }
 }});
-const hub=new DeviceHub();h=new Harness({hub,bus,log(){},queryFactory:factory});
+let summaryDelay=350;
+const summarize=async record=>{await new Promise(resolve=>setTimeout(resolve,summaryDelay));return record.kind==='chat'
+    ? {title:'安排轻量运动',summary:'读取本周安排，并给出十分钟散步建议。'}
+    : {title:'检查演示资料',summary:'在后台读取点子文档，完成资料检查。'}};
+const hub=new DeviceHub();h=new Harness({hub,bus,log(){},queryFactory:factory,summarize});
 const content=new Content({root,bus});const schedules=new Schedules({harness:h,content});h.startMain();
 const server=startServer({harness:h,hub,bus,content,schedules,log(){}});await once(server,'listening');
+// Test-only transport faults surround the real server; they never change cloud code.
+let holdUntil=0,dropAcks=0,dropDelay=0,activitiesReads=0; const requests=[];
+const upgrades=server.listeners('upgrade');server.removeAllListeners('upgrade');
+server.on('upgrade',function(req,socket,head){
+    if(req.url?.startsWith('/ws') && Date.now()<holdUntil) {socket.destroy();return}
+    for(const handler of upgrades) handler.call(this,req,socket,head);
+});
+server.prependListener('request',(req,res)=>{
+    if(req.method==='GET' && /^\/api\/activities(?:\?|$)/.test(req.url||'')) activitiesReads++;
+    if(!/^\/api\/(?:send|side-chats|feed\/feedback|activities\/[^/]+\/send)(?:\?|$)/.test(req.url||'') || req.method!=='POST') return;
+    let raw='';req.on('data',part=>{raw+=part});
+    let entry;req.on('end',()=>{entry={path:req.url,body:JSON.parse(raw||'{}'),time:Date.now()};requests.push(entry);fs.appendFileSync(path.join(output,'message-requests.jsonl'),JSON.stringify(entry)+'\n')});
+    const end=res.end.bind(res);res.end=(...args)=>{if(dropAcks>0){dropAcks--;if(entry) entry.droppedReceipt=true;if(dropDelay) later(()=>res.destroy(),dropDelay);else res.destroy();return res}return end(...args)};
+});
 const page=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end('<!doctype html><meta name="viewport" content="width=device-width"><style>body{font:24px system-ui;background:#f5f5f2;color:#222;padding:60px}main{background:white;border-radius:30px;padding:36px;max-width:680px}input,button{font:24px system-ui;border:1px solid #ccc;border-radius:14px;padding:15px;margin:12px 0}button{background:#222;color:white}small{color:#888}section{height:400px}</style><main><small>DOUDOU · LOCAL DEMO</small><h1>给今天留一个小计划。</h1><p>这是本机演示页面，可以安全体验接管。</p><input placeholder="写下一件小事" id="note"><br><button onclick="document.querySelector(\'h2\').textContent=document.querySelector(\'input\').value||\'已保存\'">保存计划</button><h2></h2><button onclick="confirm(\'确认保存这个演示计划？\')">网页确认框</button><section></section><p>你已经看到页面底部。</p></main>')});await new Promise(r=>page.listen(18770,'127.0.0.1',r));
 const control=http.createServer(async(req,res)=>{try{let raw='';for await(const part of req) raw+=part;const body=JSON.parse(raw||'{}');
     if(body.action==='avatar') h.avatar.set(body.state,body.text);
     if(body.action==='feed-new') {const item=post(today,`${String(Date.now()).slice(-4)}-新动态`,'刚刚，一点新的灵感','✨','新内容到了。动态的红点只提示一次。','b');bus.emit({t:'feed_new',items:[item]})}
     if(body.action==='reset-chat') {write('system/chat.jsonl','');h.speech.used={};write('system/chat-options.json','{}');h.avatar.set('idle')}
     if(body.action==='send') await h.send(body.text);
-    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true,busy:h.busy,avatar:h.avatar.value,inputs:calls.flatMap(q=>q.received).length,history:h.speech.history()}));
+    if(body.action==='disconnect-reply') {holdUntil=Date.now()+6000;server.closeSockets();await h.send('DEMO_RECONNECT')}
+    if(body.action==='drop-ack') {dropAcks=body.count??2;dropDelay=body.delay??0}
+    if(body.action==='background-job') await h.runIsolated('后台资料检查','DEMO_BACKGROUND_JOB');
+    if(body.action==='summary-delay') summaryDelay=body.ms??350;
+    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true,busy:h.busy,avatar:h.avatar.value,inputs:calls.flatMap(q=>q.received).length,history:h.speech.history(),requests,activitiesReads}));
 }catch(e){res.writeHead(500);res.end(JSON.stringify({error:e.message}))}});await new Promise(r=>control.listen(18769,'127.0.0.1',r));
 fs.writeFileSync(path.join(output,'demo-host.json'),JSON.stringify({root,port:18768,control:18769,page:18770,pid:process.pid,model:'cloud/test/query-fixture.mjs',browser:'real CloudBrowser + local form'},null,2));
 console.log('Local demo ready on 10.0.2.2:18768. Pairing code: 123456.');

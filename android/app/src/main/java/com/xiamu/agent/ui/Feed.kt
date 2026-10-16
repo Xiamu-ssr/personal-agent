@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.*
 import com.xiamu.agent.*
@@ -37,9 +38,23 @@ fun FeedScreen(bottom: Dp) {
     }
     DisposableEffect(Unit) { Chat.enterFeed(); onDispose { Chat.leaveFeed() } }
     LaunchedEffect(Chat.feedVersion.intValue,Chat.filesVersion.intValue) { fetch() }
-    val nearEnd by remember { derivedStateOf { list.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.let { it>=list.layoutInfo.totalItemsCount-2 } ?: false } }
-    LaunchedEffect(list) { snapshotFlow { timeline.next?.takeIf { nearEnd && loaded && !loading && error.isBlank() } }.collect { if(it!=null) fetch(true) } }
+    val nearEnd by remember { derivedStateOf {
+        timeline.items.lastOrNull()?.path?.let { path -> list.layoutInfo.visibleItemsInfo.any { it.key==path } } ?: false
+    } }
+    LaunchedEffect(list) { snapshotFlow { timeline.next?.takeIf { nearEnd && loaded && !loading && error.isBlank() && Nav.feedTarget.value==null } }.collect { if(it!=null) fetch(true) } }
     val context=ctx()
+    val target=Nav.feedTarget.value
+    val header=with(LocalDensity.current) { FloatingHeaderSpace.roundToPx() }
+    LaunchedEffect(target,loaded,loading,timeline) {
+        if(target!=null && loaded && !loading) {
+            val index=timeline.items.indexOfFirst { it.path==target.path }
+            if(index>=0) {
+                val headings=timeline.items.take(index+1).map { it.date }.distinct().size
+                list.scrollToItem(2+(if(notice.isNotBlank()) 1 else 0)+headings+index,-header)
+                Nav.feedTarget.value=null
+            } else { Nav.feedTarget.value=null; Nav.open(Route.FeedDetail(target)) }
+        }
+    }
     LazyColumn(state=list,modifier=Modifier.fillMaxSize(),contentPadding=pagePadding(bottom)) {
         item { Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) { Text("动态",style=Type.title(23),color=Pal.Ink,modifier=Modifier.weight(1f)); QuietButton("刷新") { scope.launch { runCatching { Api.postJson("/api/feed/refresh") }.onSuccess { notice=if(it.optString("mode")=="skipped") "正在查看，稍后会有新动态" else "豆豆正在看最新消息" }.onFailure { notice=it.message ?: "刷新失败" } } } } }
         item { OutlinedTextField(request,{request=it},placeholder={Text("想看什么")},singleLine=true,shape=RoundedCornerShape(28.dp),modifier=Modifier.fillMaxWidth().padding(bottom=20.dp),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={if(request.isNotBlank()) { Draft.send(context,request,includeDraft=false); request="" }}),trailingIcon={IconButton(onClick={ if(request.isNotBlank()) { Draft.send(context,request,includeDraft=false); request="" } }) { Icon(Icons.Outlined.ArrowUpward,"发送想看的内容") }}) }
@@ -57,17 +72,18 @@ fun FeedScreen(bottom: Dp) {
 }
 
 @Composable
-private fun FeedPostView(post: FeedPost) {
+internal fun FeedPostView(post: FeedPost) {
     val scope=rememberCoroutineScope()
     val context=ctx()
     var reaction by remember(post.path) { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     fun feedback(action: String) {
+        if(action=="discuss") { Draft.discuss(post); return }
         if(sending) return
         sending=true
         scope.launch {
-            try { Api.feedback(post.path,action); if(action=="discuss") Nav.home(0) else reaction=action }
+            try { Api.feedback(post.path,action); reaction=action }
             catch(e: CancellationException) { throw e }
             catch(e: Exception) { error=e.message ?: "反馈失败" }
             finally { sending=false }
@@ -115,7 +131,7 @@ fun FeedSettingsSheet() {
                 Text("动态说明",style=Type.title(21),color=Pal.Ink)
                 Text("修改会用于下一次动态。",style=Type.body(13),color=Pal.Muted,modifier=Modifier.padding(vertical=8.dp))
                 OutlinedTextField(instructions,{instructions=it},modifier=Modifier.fillMaxWidth(),minLines=6,maxLines=12,shape=RoundedCornerShape(20.dp))
-                ListRow("自动更新",trailing={GoldSwitch(enabled,{enabled=it})})
+                ListRow("自动更新",trailing={GoldSwitch(enabled,onChange={enabled=it})})
                 SegTabs(listOf("15 分钟","30 分钟","60 分钟"),listOf(15,30,60).indexOf(interval)) { interval=listOf(15,30,60)[it] }
                 Row(Modifier.padding(vertical=12.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(start,{start=it},label={Text("开始时段")},singleLine=true,modifier=Modifier.weight(1f))

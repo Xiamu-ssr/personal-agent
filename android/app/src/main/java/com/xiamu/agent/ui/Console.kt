@@ -8,6 +8,9 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xiamu.agent.*
 import kotlinx.coroutines.*
@@ -54,20 +57,22 @@ private fun ActivitiesPanel() {
     var timeline by remember { mutableStateOf(ActivitiesTimeline()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    val updates=Chat.activityUpdates.toMap()
     suspend fun fetch(older: Boolean=false) {
         loading=true
-        try { timeline=timeline.apply(Api.activities(if(older) timeline.next else null),older); error="" }
+        try { timeline=timeline.apply(Api.activities(if(older) timeline.next else null),older).updated(Chat.activityUpdates.values); error="" }
         catch(e: CancellationException) { throw e } catch(e: Exception) { error=e.message ?: "活动加载失败" } finally { loading=false }
     }
     LaunchedEffect(Chat.activityVersion.intValue) { fetch() }
+    LaunchedEffect(updates) { timeline=timeline.updated(updates.values) }
     LazyColumn(contentPadding=PaddingValues(bottom=20.dp)) {
         if(timeline.running.isNotEmpty()) item { SectionTitle("进行中") }
-        timeline.running.forEach { a -> item(key="running:${a.id}") { CardList(Modifier.padding(bottom=8.dp)) {
-            ListRow(a.label,"已运行 ${elapsed(a.started)}",Icons.Outlined.Pending,onClick={Nav.open(Route.ActivityDetail(a.id,a.label))},trailing={QuietButton("停止") { scope.launch { runCatching { Api.postJson("/api/activities/${Api.encode(a.id)}/stop") }.onFailure { error=it.message ?: "停止失败" } } }})
-        } } }
+        timeline.running.forEach { a -> item(key="running:${a.id}") {
+            ActivityRow(a.label,a.summary,"${clock(a.started)} · 进行中",Icons.Outlined.Pending,onClick={Nav.open(Route.ActivityDetail(a.id,a.label))},trailing={QuietButton("停止") { scope.launch { runCatching { Api.postJson("/api/activities/${Api.encode(a.id)}/stop") }.onFailure { error=it.message ?: "停止失败" } } }})
+        } }
         groupActivities(timeline.recent).forEach { (group,records) ->
             item { SectionTitle(group.label) }
-            records.forEach { a -> item(key=a.id) { ListRow(a.title,"${clock(a.ts)} · ${a.status.label}",Icons.Outlined.CheckCircleOutline,onClick={Nav.open(Route.ActivityDetail(a.id,a.title))}) } }
+            records.forEach { a -> item(key=a.id) { ActivityRow(a.title,a.summary,"${clock(a.ts)} · ${a.status.label}",Icons.Outlined.CheckCircleOutline,onClick={Nav.open(Route.ActivityDetail(a.id,a.title))}) } }
         }
         if(loading) item { Loading() }
         if(error.isNotBlank()) item { ErrorNote(error); QuietButton("重试") { scope.launch { fetch() } } }
@@ -76,8 +81,22 @@ private fun ActivitiesPanel() {
     }
 }
 @Composable
+private fun ActivityRow(title: String,summary: String,time: String,icon: ImageVector,onClick: () -> Unit,trailing: (@Composable () -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().tap(onClick=onClick).padding(vertical=12.dp),verticalAlignment=Alignment.Top) {
+        Box(Modifier.padding(top=2.dp).size(32.dp).background(Pal.Quiet,CircleShape),contentAlignment=Alignment.Center) {
+            Icon(icon,null,tint=Pal.Icon,modifier=Modifier.size(18.dp))
+        }
+        Column(Modifier.weight(1f).padding(start=12.dp)) {
+            Text(title,style=Type.title(15),color=Pal.Ink,maxLines=1,overflow=TextOverflow.Ellipsis)
+            if(summary.isNotBlank()) Text(summary,style=Type.body(13),color=Pal.Muted,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(top=3.dp))
+            Text(time,style=Type.body(12),color=Pal.Faint,modifier=Modifier.padding(top=3.dp))
+        }
+        trailing?.let { Box(Modifier.padding(start=8.dp)) { it() } }
+    }
+}
+@Composable
 private fun PermissionsPanel() {
-    val (loaded,error)=load("settings") { Api.settings() }
+    val (loaded,error)=load("settings",revision=Chat.settingsVersion.intValue) { Api.settings() }
     var settings by remember(loaded) { mutableStateOf(loaded) }
     var saving by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }

@@ -80,7 +80,9 @@ sealed interface Route {
     data object Browser : Route
     data object Capabilities : Route
     data class GoalDetail(val name: String) : Route
+    data class FeedDetail(val quote: com.xiamu.agent.FeedQuote) : Route
     data class RuntimeSettings(val permissions: Boolean = false) : Route
+    data class ProviderForm(val id: String? = null) : Route
     data class ActivityDetail(val id: String,val title: String) : Route
     data class SideChat(val id: String? = null) : Route
     data class Connectors(val tab: Int = 1,val device: String? = null) : Route
@@ -101,6 +103,8 @@ object Nav {
     val console=mutableStateOf(false)
     val drawer=mutableStateOf(false)
     val feedSettings=mutableStateOf(false)
+    val feedTarget=mutableStateOf<com.xiamu.agent.FeedQuote?>(null)
+    fun showQuote(quote: com.xiamu.agent.FeedQuote) { home(1); feedTarget.value=quote }
     fun open(r: Route) { console.value=false; drawer.value=false; stack.add(r) }
     fun back() { stack.removeLastOrNull() }
     fun home(tab: Int) { stack.clear(); console.value=false; drawer.value=false; this.tab.intValue=tab }
@@ -144,7 +148,9 @@ fun RoutePage(r: Route) {
         Route.Browser -> BrowserScreen()
         Route.Capabilities -> SubPage("本机能力") { item { EnableAllCapabilities() }; item { LocalCapabilities() } }
         is Route.GoalDetail -> GoalDetailScreen(r.name)
+        is Route.FeedDetail -> FeedDetailScreen(r.quote)
         is Route.RuntimeSettings -> RuntimeSettingsScreen(r.permissions)
+        is Route.ProviderForm -> ProviderFormScreen(r.id)
         is Route.ActivityDetail -> ActivityDetailScreen(r)
         is Route.SideChat -> SideChatScreen(r)
         is Route.Connectors -> ConnectorsScreen(r)

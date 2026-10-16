@@ -75,6 +75,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -99,16 +101,15 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ChatScreen(list: LazyListState,bottom: Dp,scroll: ConversationScrollState = remember { ConversationScrollState() },
-    items: List<ChatItem> = Chat.items,streaming: String = Chat.streaming.value,error: String = Chat.error.value,
+    items: List<ChatItem> = Chat.items,error: String = Chat.error.value,
     sentVersion: Int = Draft.sentVersion.intValue,emptyText: String = if(Chat.connected.value) "豆豆正在准备第一句话…" else "正在连接云端…",
     onChoose: (String,String) -> Unit = Chat::choose) {
-    BindConversationScroll(list,scroll,items.size,"${items.size}:${streaming.length}",sentVersion,bottom)
+    BindConversationScroll(list,scroll,items.size,items.lastOrNull(),sentVersion,bottom)
     val visible by remember(list) { derivedStateOf { list.layoutInfo.visibleItemsInfo.map { it.index }.toSet() } }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(state=list,modifier=Modifier.fillMaxSize().testTag("chat-list"),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=FloatingHeaderSpace+8.dp,bottom=bottom+12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             if(items.isEmpty()) item { EmptyNote(emptyText) }
             itemsIndexed(items,key={ i,item -> when(item) { is ChatItem.User -> item.id.ifBlank { "pending:$i" }; is ChatItem.Assistant -> item.id.ifBlank { "assistant:$i" } } }) { i,item -> ChatRow(item,mediaActive=i in visible,onChoose=onChoose) }
-            if(streaming.isNotBlank()) item { Bubble { Markdown(streaming) } }
             if(error.isNotBlank()) item { ErrorNote(error) }
         }
         ReturnToBottom(list,scroll,Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=bottom+12.dp))
@@ -119,14 +120,17 @@ internal fun ChatRow(item: ChatItem,highlight: Boolean = false,mediaActive: Bool
     when(item) {
         is ChatItem.User -> Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
             Spacer(Modifier.width(42.dp))
-            Column(Modifier.weight(1f,fill=false).clip(RoundedCornerShape(21.dp,21.dp,5.dp,21.dp)).background(Pal.UserBubble).padding(horizontal=15.dp,vertical=11.dp)) {
+            Column(Modifier.weight(1f,fill=false).widthIn(max=310.dp).clip(RoundedCornerShape(21.dp,21.dp,5.dp,21.dp)).background(Pal.UserBubble).padding(horizontal=15.dp,vertical=11.dp)) {
+                item.quote?.let { FeedQuoteCard(it,Modifier.fillMaxWidth().padding(bottom=8.dp),onOpen={Nav.showQuote(it)}) }
                 Attachments(item.attachments,mediaActive)
                 if(item.text.isNotBlank()) SelectionContainer { Text(item.text,style=Type.body(15),color=Pal.UserText) }
-                if(item.pending) Text("发送中…",style=Type.body(11),color=Pal.UserText.copy(alpha=.65f))
             }
         }
-        is ChatItem.Assistant -> Bubble(highlight) { Column {
-            if(item.text.isNotBlank()) SelectionContainer { Markdown(item.text,color=Pal.Ink) }
+        is ChatItem.Assistant -> {
+            var menu by remember(item.id) { mutableStateOf(false) }
+            val clipboard=LocalClipboardManager.current
+            Bubble(highlight,onLongClick={menu=true}) { Column {
+            if(item.text.isNotBlank()) Markdown(item.text,color=Pal.Ink)
             item.cards.filter { it !is SayCard.Media }.forEach { SayCardView(it,mediaActive) }
             MediaViews(item.displayMedia,mediaActive)
             if(item.options.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(top=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
@@ -137,13 +141,19 @@ internal fun ChatRow(item: ChatItem,highlight: Boolean = false,mediaActive: Bool
                     }
                 }
             }
+            DropdownMenu(expanded=menu,onDismissRequest={menu=false},containerColor=Pal.Card,shape=RoundedCornerShape(16.dp)) {
+                DropdownMenuItem(text={Text("复制",color=Pal.Ink)},onClick={clipboard.setText(AnnotatedString(item.text));menu=false})
+            }
         } }
+        }
     }
 }
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun Bubble(highlight: Boolean = false,content: @Composable () -> Unit) {
+internal fun Bubble(highlight: Boolean = false,onLongClick: (() -> Unit)? = null,content: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth()) {
-        Box(Modifier.weight(1f,fill=false).clip(RoundedCornerShape(21.dp,21.dp,21.dp,5.dp)).background(if(highlight) Pal.Quiet else Pal.Card).padding(horizontal=15.dp,vertical=12.dp)) { content() }
+        Box(Modifier.weight(1f,fill=false).clip(RoundedCornerShape(21.dp,21.dp,21.dp,5.dp)).background(if(highlight) Pal.Quiet else Pal.Card)
+            .then(if(onLongClick!=null) Modifier.combinedClickable(onClick={},onLongClick=onLongClick) else Modifier).padding(horizontal=15.dp,vertical=12.dp)) { content() }
         Spacer(Modifier.width(24.dp))
     }
 }
@@ -152,7 +162,7 @@ private fun SayCardView(card: SayCard,active: Boolean) {
     val scope=rememberCoroutineScope()
     val context=ctx()
     when(card) {
-        is SayCard.Connector -> CardList(Modifier.padding(top=10.dp)) { ListRow(connectorTitle(card.id),"连接应用",Icons.Outlined.Hub,onClick={
+        is SayCard.Connector -> CardList(Modifier.padding(top=10.dp)) { ListRow(connectorTitle(card.id),"连接应用",leading={ConnectorLogo(card.id)},onClick={
             scope.launch {
                 try {
                     val c=com.xiamu.agent.connectors.CloudConnectors.list().let { it.connected+it.catalog }.firstOrNull { it.name==card.id }
@@ -161,7 +171,7 @@ private fun SayCardView(card: SayCard,active: Boolean) {
             }
         }) }
         is SayCard.Goal -> CardList(Modifier.padding(top=10.dp)) { ListRow(card.name,"查看目标",Icons.Outlined.CheckBox,onClick={Nav.open(Route.GoalDetail(card.name))}) }
-        is SayCard.Device -> CardList(Modifier.padding(top=10.dp)) { ListRow(if(card.capability=="health") "健康数据" else "开启本机能力","由你在这台设备上授权",Icons.Outlined.PhoneAndroid,onClick={Nav.open(Route.Capabilities)}) }
+        is SayCard.Device -> CardList(Modifier.padding(top=10.dp)) { ListRow(if(card.capability=="health") "健康数据" else "开启本机能力","由你在这台设备上授权",leading={SystemCapabilityIcon(card.capability ?: "device")},onClick={Nav.open(Route.Capabilities)}) }
         is SayCard.Link -> Column(Modifier.fillMaxWidth().padding(top=10.dp).clip(RoundedCornerShape(16.dp)).background(Pal.Background).tap { openBrowser(context,card.url) }) {
             card.image?.let { ContentImage(it,Modifier.fillMaxWidth().height(140.dp)) }
             Column(Modifier.padding(12.dp)) { Text(card.title,style=Type.title(15),color=Pal.Ink); if(card.description.isNotBlank()) Text(card.description,style=Type.body(13),color=Pal.Muted); Text(runCatching { java.net.URI(card.url).host }.getOrDefault(card.url),style=Type.body(12),color=Pal.Link,modifier=Modifier.padding(top=4.dp)) }
@@ -177,12 +187,17 @@ private fun Attachments(list: List<Attachment>, active: Boolean) {
     if (list.isEmpty()) return
     val c = ctx()
     val scope = rememberCoroutineScope()
-    list.forEach { a ->
+    val images=list.filter { it.kind=="image" }
+    if(images.isNotEmpty()) Column(Modifier.padding(bottom=8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+        images.chunked(2).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+            row.forEach { a -> RemoteImage(a.path,Modifier.size(if(images.size==1) 220.dp else 118.dp).clip(RoundedCornerShape(12.dp)).tap { Nav.open(Route.Image(a.path)) }) }
+        } }
+    }
+    list.filter { it.kind!="image" }.forEach { a ->
         when (a.kind) {
-            "image" -> RemoteImage(a.path, Modifier.sizeIn(maxWidth = 220.dp, maxHeight = 260.dp).clip(RoundedCornerShape(14.dp)).tap { Nav.open(Route.Image(a.path)) })
             "voice" -> VoiceRow(a, active)
             else -> Row(
-                Modifier.widthIn(max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Card)
+                Modifier.padding(bottom=6.dp).widthIn(max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Card)
                     .tap { scope.launch { runCatching { openFile(c, a.path, a.name) }.onFailure { Chat.error.value = "打不开：${it.message}" } } }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,

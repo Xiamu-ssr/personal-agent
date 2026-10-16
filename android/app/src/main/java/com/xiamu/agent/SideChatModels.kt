@@ -35,10 +35,5 @@ fun createdSideChatId(result: JSONObject): String {
 
 /** Merge an HTTP snapshot with messages already received on WS while that request was in flight. */
 fun mergeSideMessages(history: List<ChatItem>,live: List<ChatItem>): List<ChatItem> {
-    fun id(item: ChatItem)=when(item) { is ChatItem.User->item.id; is ChatItem.Assistant->item.id }
-    fun time(item: ChatItem)=when(item) { is ChatItem.User->item.ts; is ChatItem.Assistant->item.ts }
-    return (history+live).groupBy(::id).values.map { versions ->
-        val latest=versions.last()
-        if(latest is ChatItem.Assistant) latest.copy(optionsUsed=versions.filterIsInstance<ChatItem.Assistant>().any { it.optionsUsed }) else latest
-    }.sortedBy(::time)
+    return mergeChatMessages(history,live)
 }

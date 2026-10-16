@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.delay
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Response
@@ -90,6 +91,16 @@ object Api {
     suspend fun postJson(path: String, body: JSONObject = JSONObject()): JSONObject =
         call(req(path).post(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
 
+    /** Retry a lost transport response with exactly the same idempotent request body. */
+    suspend fun postMessage(path: String, body: JSONObject): JSONObject {
+        require(body.optString("clientId").isNotBlank())
+        return try { postJson(path,body) } catch(e: ApiError) {
+            if(e.code!=0) throw e
+            delay(350)
+            postJson(path,body)
+        }
+    }
+
     suspend fun putJson(path: String, body: JSONObject): JSONObject =
         call(req(path).put(body.toString().toRequestBody("application/json".toMediaType())).build()).let { if (it.isBlank()) JSONObject() else JSONObject(it) }
 
@@ -124,9 +135,8 @@ object Api {
 
     suspend fun bytes(dataPath: String): ByteArray = fetch(req(filePath(dataPath)).build(), http) { it.body?.bytes() ?: byteArrayOf() }
 
-    suspend fun connectorIcon(name: String): ByteArray = fetch(req("/api/connectors/${encode(name)}/icon").build(), http) { it.body?.bytes() ?: byteArrayOf() }
-
     suspend fun feed(before: String? = null): FeedPage = FeedPage.from(getJson("/api/feed?days=7" + (before?.let { "&before=${encode(it)}" } ?: "")))
+    suspend fun feedItem(path: String): FeedPost = FeedPost.from(getJson("/api/feed/item?path=${encode(path)}"))
     suspend fun feedSettings() = FeedSettings.from(getJson("/api/feed/settings"))
     suspend fun saveFeedSettings(value: FeedSettings): FeedSettings { value.validate(); return FeedSettings.from(putJson("/api/feed/settings",value.json())) }
     suspend fun feedback(path: String,action: String) = postJson("/api/feed/feedback",JSONObject().put("path",path).put("action",action))
@@ -139,17 +149,29 @@ object Api {
     suspend fun health(): HealthData = HealthData.from(getJson("/api/health"))
     suspend fun syncHealth(): HealthData = HealthData.from(postJson("/api/health/sync"))
     suspend fun settings(): AgentSettings = AgentSettings.from(getJson("/api/settings"))
-    suspend fun saveSettings(model: String? = null, permissionMode: String? = null): AgentSettings {
+    suspend fun saveSettings(model: ModelSelection? = null, permissionMode: String? = null): AgentSettings {
         require(model != null || permissionMode != null)
-        return AgentSettings.from(putJson("/api/settings",JSONObject().apply { model?.let { put("model",it) }; permissionMode?.let { put("permissionMode",it) } }))
+        return AgentSettings.from(putJson("/api/settings",JSONObject().apply { model?.let { put("model",it.json()) }; permissionMode?.let { put("permissionMode",it) } }))
     }
+    suspend fun saveProvider(id: String?,draft: ProviderDraft): ModelProvider = providerRequest(draft.apiKey) {
+        val body=draft.json(editing=id!=null).toString().toRequestBody("application/json".toMediaType())
+        val request=if(id==null) req("/api/providers").post(body) else req("/api/providers/${encode(id)}").patch(body)
+        ModelProvider.from(JSONObject(call(request.build())).getJSONObject("provider"))
+    }
+    suspend fun testProvider(baseUrl: String,apiKey: ProviderKey,model: String): Long = providerRequest(apiKey) {
+        val result=postJson("/api/providers/test",JSONObject().put("baseUrl",baseUrl).put("apiKey",apiKey.value()).put("model",model))
+        check(result.optBoolean("ok")) { "测试失败，请稍后重试" }; result.getLong("ms")
+    }
+    suspend fun deleteProvider(id: String) { call(req("/api/providers/${encode(id)}").delete().build()) }
+    private suspend fun <T> providerRequest(key: ProviderKey,block: suspend () -> T): T = try { block() }
+        catch(e: kotlinx.coroutines.CancellationException) { throw e }
+        catch(e: Exception) { throw ApiError((e as? ApiError)?.code ?: 0,JSONObject().put("error",providerError(e.message,key)).toString()) }
     suspend fun activityHistory(id: String) = ActivityHistory.from(getJson("/api/activities/${encode(id)}/history")).also { require(it.id==id) { "返回的活动不匹配" } }
     suspend fun sideChatHistory(id: String) = SideChatHistory.from(getJson("/api/activities/${encode(id)}/history")).also { require(it.id==id) { "返回的旁聊不匹配" } }
-    suspend fun createSideChat(text: String,attachments: List<Attachment>): String = createdSideChatId(postJson("/api/side-chats",JSONObject().put("text",text).put("attachments",JSONArray(attachments.map { it.toJson() }))))
+    suspend fun createSideChat(text: String,attachments: List<Attachment>,clientId: String): String = createdSideChatId(postMessage("/api/side-chats",OutgoingMessage(text,attachments,clientId).json()))
     suspend fun chooseSideOption(id: String,messageId: String,optionId: String) = postJson("/api/options/choose",JSONObject().put("activityId",id).put("messageId",messageId).put("optionId",optionId))
-    suspend fun sendToActivity(id: String,text: String,attachments: List<Attachment> = emptyList()) {
-        val body=JSONObject().put("text",text).put("attachments",JSONArray(attachments.map { it.toJson() }))
-        val result=postJson("/api/activities/${encode(id)}/send",body)
+    suspend fun sendToActivity(id: String,text: String,attachments: List<Attachment>,clientId: String) {
+        val result=postMessage("/api/activities/${encode(id)}/send",OutgoingMessage(text,attachments,clientId).json())
         check(result.optBoolean("ok") && result.optString("id")==id) { "续聊发送失败" }
     }
     suspend fun pathBytes(path: String): ByteArray = fetch(req(path).build(),http) { it.body?.bytes() ?: byteArrayOf() }

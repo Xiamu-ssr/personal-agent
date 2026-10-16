@@ -7,7 +7,6 @@ import kotlinx.coroutines.*
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import org.json.JSONArray
 import org.json.JSONObject
 
 object Chat {
@@ -16,10 +15,11 @@ object Chat {
     val busy=mutableStateOf(false)
     val avatar=mutableStateOf(AvatarStatus())
     val agentName=mutableStateOf("豆豆")
-    val streaming=mutableStateOf("")
     val error=mutableStateOf("")
     val filesVersion=mutableIntStateOf(0)
     val activityVersion=mutableIntStateOf(0)
+    val settingsVersion=mutableIntStateOf(0)
+    val activityUpdates=mutableStateMapOf<String,ActivityTitleUpdate>()
     val feedVersion=mutableIntStateOf(0)
     val feedSettingsVersion=mutableIntStateOf(0)
     val feedUnread=mutableStateOf(false)
@@ -34,7 +34,7 @@ object Chat {
     private var generation=0
     private var revision=0
     private var retry=0
-    private fun publish() { busy.value=state.busy; avatar.value=state.avatar; streaming.value=state.streaming }
+    private fun publish() { busy.value=state.busy; avatar.value=state.avatar }
     fun connect() {
         if(!Prefs.configured) return
         wanted=true
@@ -46,12 +46,21 @@ object Chat {
         wanted=false; generation++; socket?.close(1000,null); socket=null; connected.value=false
         state.disconnected(); SideChats.disconnected(); background.clear(); publish()
     }
-    fun reset() { disconnect(); SideChats.reset(); items.clear(); error.value=""; agentName.value="豆豆"; inbox=FeedInbox(); feedUnread.value=false }
-    fun send(text: String,attachments: List<Attachment> = emptyList()): Boolean {
-        if(!connected.value || socket?.send(JSONObject().put("t","send").put("text",text).put("attachments",JSONArray(attachments.map { it.toJson() })).toString())!=true) {
-            error.value="还没连上云端，请稍后重试"; return false
+    fun reset() { disconnect(); SideChats.reset(); state.clear(); activityUpdates.clear(); error.value=""; agentName.value="豆豆"; inbox=FeedInbox(); feedUnread.value=false }
+    suspend fun send(message: OutgoingMessage): Boolean {
+        val result=Api.postMessage(message.path,message.json())
+        val id=result.optString("id")
+        check(result.optBoolean("ok") && id.isNotBlank()) { "消息尚未确认，请重试" }
+        // Display only server messages. A receipt lost on WS is recovered from history.
+        if(items.none { it is ChatItem.User && it.id==id }) {
+            val session=generation
+            scope.launch {
+                runCatching { Api.getJson("/api/history?n=200") }.onSuccess { history ->
+                    if(session==generation) { state.replaceHistory(history.optJSONArray("items").objects().mapNotNull(::historyItem));publish() }
+                }
+            }
         }
-        state.sent(text,attachments,System.currentTimeMillis()); revision++; return true
+        revision++; error.value=""; return true
     }
     fun interrupt() { if(socket?.send("{\"t\":\"interrupt\"}")!=true) error.value="连接断开，未能停止" }
     fun choose(messageId: String,optionId: String) {
@@ -75,9 +84,8 @@ object Chat {
                 if(before==revision) { state.status(s.optBoolean("busy")); state.avatar(AvatarStatus.from(s.optJSONObject("avatar"))); publish() }
                 // Check the actual server state, never infer onboarding from a local preference.
                 if(s.optBoolean("chatEmpty")) Api.postJson("/api/first-chat",JSONObject().put("device","android"))
-                val version=revision
                 val history=Api.getJson("/api/history?n=200")
-                if(session==generation && revision==version) { state.replaceHistory(history.optJSONArray("items").objects().mapNotNull(::historyItem)); publish() }
+                if(session==generation) { state.replaceHistory(history.optJSONArray("items").objects().mapNotNull(::historyItem)); publish() }
                 // New posts can arrive while the App has no socket. Reconcile on reconnect.
                 runCatching { Api.feed() }.onSuccess { page -> if(session==generation) { inbox.receive(page.items.map { it.path }); persistFeed() } }
 
@@ -89,12 +97,13 @@ object Chat {
         when(m.optString("t")) {
             "hello" -> {
                 generation++; revision++
+                // Re-read canonical activity titles after events missed offline.
+                activityUpdates.clear(); activityVersion.intValue++
                 state.hello(m.optJSONArray("history").objects().mapNotNull(::historyItem),m.optBoolean("busy"),AvatarStatus.from(m.optJSONObject("avatar")))
                 connected.value=true; error.value=""; refresh(); filesVersion.intValue++
             }
             "user" -> { (historyItem(m) as? ChatItem.User)?.let(state::user); revision++ }
             "say" -> { (historyItem(m) as? ChatItem.Assistant)?.let(state::say); revision++ }
-            "delta" -> { state.delta(m.optString("id"),m.optString("text")); revision++ }
             "activity_message" -> { SideChats.message(m); activityVersion.intValue++ }
             "options_used" -> { if(sideChatEventId(m)!=null) SideChats.message(m) else { state.optionsUsed(m.optString("messageId")); revision++ } }
             "status" -> { state.status(m.optBoolean("busy")); revision++ }
@@ -102,7 +111,11 @@ object Chat {
             "turn_end" -> { state.endTurn(); revision++ }
             "activity", "activity_step", "activity_stop" -> {
                 SideChats.activity(m)
-                activityVersion.intValue++
+                val update=ActivityTitleUpdate.from(m)
+                if(update!=null) {
+                    val previous=activityUpdates[update.id]
+                    activityUpdates[update.id]=update.copy(title=update.title ?: previous?.title,summary=update.summary ?: previous?.summary)
+                } else activityVersion.intValue++
                 if(m.optString("t")=="activity_stop" && !m.optBoolean("ok")) error.value=m.optString("error").ifBlank { "停止活动失败" }
             }
             "background_activities" -> {
@@ -120,6 +133,7 @@ object Chat {
             }
             "feed_new" -> { inbox.receive(m.optJSONArray("items").objects().map { it.optString("path") }); persistFeed(); feedVersion.intValue++ }
             "feed_settings" -> feedSettingsVersion.intValue++
+            "settings" -> settingsVersion.intValue++
             "files_changed", "memory_updated", "connectors_changed", "devices" -> filesVersion.intValue++
             "error" -> error.value=m.optString("error").ifBlank { "请求失败，请重试" }
         }; publish()

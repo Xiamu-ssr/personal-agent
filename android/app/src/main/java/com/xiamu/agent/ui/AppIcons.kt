@@ -1,74 +1,76 @@
 package com.xiamu.agent.ui
 
-import android.content.Intent
-import android.graphics.BitmapFactory
-import android.provider.CalendarContract
-import android.provider.Settings
-import android.provider.Telephony
-import android.net.Uri
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
-import com.xiamu.agent.Api
-import com.xiamu.agent.Prefs
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
-import java.security.MessageDigest
+import androidx.compose.ui.unit.sp
 
-internal fun cacheKey(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
-private val monochromeIcon = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+val CapabilityEnabled = Color(0xFF28A754)
 
-/** Official connector bytes from the same authenticated service; no invented brand drawings. */
+/** Local brand-color tiles, shared by settings, catalog, details, and chat cards. */
 @Composable
 fun ConnectorLogo(name: String, size: Dp = 36.dp) {
-    val c = ctx()
-    val server = Prefs.server
-    val (bitmap, _) = load("connector-logo:$server:$name") {
-        if (Api.serverUri(server) == null) return@load null
-        withContext(Dispatchers.IO) {
-            val file = File(c.cacheDir, "connector-icons/${cacheKey("$server/$name")}.png")
-            val cached = if (file.exists()) BitmapFactory.decodeFile(file.path) else null
-            cached ?: run {
-                val bytes = Api.connectorIcon(name)
-                val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: error("图标无法读取")
-                file.parentFile?.mkdirs(); file.writeBytes(bytes)
-                decoded
-            }
-        }
+    val (color,letter)=when(name) {
+        "gmail" -> Color(0xFFDB4437) to "G"
+        "qq-mail", "exmail" -> Color(0xFF287BE0) to "Q"
+        "netease-163" -> Color(0xFFD93536) to "163"
+        "netease-126" -> Color(0xFFD93536) to "126"
+        "weread" -> Color(0xFF3277E5) to "读"
+        "wind" -> Color(0xFFD42B39) to "W"
+        "github" -> Color(0xFF171717) to "G"
+        "tavily" -> Color(0xFF6556D9) to "T"
+        "aliyun-mail" -> Color(0xFFFF6A00) to "阿"
+        "imap" -> Color(0xFF298A9A) to "M"
+        "apps" -> Color(0xFF6659CF) to null
+        else -> Color(0xFF5578A8) to null
     }
-    if (bitmap != null) Image(bitmap.asImageBitmap(), null, Modifier.size(size), colorFilter = monochromeIcon)
-    else IconTile(connectorIcon(name), Pal.Ink, size)
+    ColorIconTile(color,connectorIcon(name),size,letter)
 }
 
-/** Resolve the actual calendar/SMS/settings/Health Connect app installed on this phone. */
 @Composable
-fun SystemCapabilityIcon(name: String) {
-    val c = ctx()
-    val icon = remember(name) {
-        val pm = c.packageManager
-        val packages = when (name) {
-            "sms" -> listOfNotNull(Telephony.Sms.getDefaultSmsPackage(c), "com.google.android.apps.messaging", "com.android.mms")
-            "calendar_events" -> listOf("com.google.android.calendar", "com.android.calendar")
-            "health" -> listOf("com.google.android.apps.healthdata", "com.google.android.healthconnect.controller", "com.android.healthconnect.controller")
-            "clipboard_write" -> listOf("com.google.android.inputmethod.latin", "com.android.inputmethod.latin")
-            else -> listOf("com.android.settings")
-        }
-        val intent = when (name) {
-            "calendar_events" -> Intent(Intent.ACTION_VIEW, CalendarContract.CONTENT_URI.buildUpon().appendPath("time").build())
-            "sms" -> Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:"))
-            else -> Intent(Settings.ACTION_SETTINGS)
-        }
-        packages.firstNotNullOfOrNull { runCatching { pm.getApplicationIcon(it).toBitmap(96, 96) }.getOrNull() }
-            ?: runCatching { pm.resolveActivity(intent, 0)?.loadIcon(pm)?.toBitmap(96, 96) }.getOrNull()
+fun SystemCapabilityIcon(name: String, size: Dp = 36.dp) {
+    val color=when(name) {
+        "battery", "sms" -> Color(0xFF28AF61)
+        "notify" -> Color(0xFFEB4757)
+        "location", "device" -> Color(0xFF347BE7)
+        "calendar_events" -> Color(0xFFF18B2D)
+        "clipboard_write", "clipboard_read" -> Color(0xFF28A9B5)
+        "health" -> Color(0xFFE44F87)
+        "camera" -> Color(0xFF657C98)
+        "microphone", "shortcuts" -> Color(0xFF8C5BCC)
+        "files", "folder" -> Color(0xFFD8A52A)
+        else -> Color(0xFF6278C7)
     }
-    if (icon != null) Image(icon.asImageBitmap(), null, Modifier.size(36.dp), colorFilter = monochromeIcon)
-    else IconTile(capIcon(name), Pal.Ink)
+    val icon=when(name) {
+        "device" -> Icons.Outlined.PhoneAndroid
+        "camera" -> Icons.Outlined.PhotoCamera
+        "microphone" -> Icons.Outlined.Mic
+        "files" -> Icons.Outlined.Folder
+        else -> capIcon(name)
+    }
+    ColorIconTile(color,icon,size)
+}
+
+@Composable
+private fun ColorIconTile(color: Color, icon: ImageVector, size: Dp, letter: String? = null) {
+    val shape=RoundedCornerShape(size*.27f)
+    Box(Modifier.size(size).clip(shape).background(color).border(.5.dp,Color.White.copy(alpha=.18f),shape),contentAlignment=Alignment.Center) {
+        if(letter!=null) Text(letter,color=Color.White,fontSize=(size.value*(if(letter.length>1) .35f else .49f)).sp,fontWeight=FontWeight.SemiBold)
+        else Icon(icon,null,tint=Color.White,modifier=Modifier.size(size*.58f))
+    }
 }

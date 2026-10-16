@@ -146,8 +146,8 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                                             ListRow(c.title, c.description, subLines = 2, leading = { ConnectorLogo(c.name) },
                                                 trailing = {
                                                     when {
-                                                        c.accounts.isNotEmpty() -> Tag("${c.accounts.size} 个账号", if (c.enabled) Pal.GoldInk else Pal.Danger)
-                                                        else -> Tag(if (c.enabled) "已连接" else "未开启")
+                                                        c.accounts.isNotEmpty() -> Tag("${c.accounts.size} 个账号", if (c.enabled) CapabilityEnabled else Pal.Danger)
+                                                        else -> Tag(if (c.enabled) "已连接" else "未开启",if(c.enabled) CapabilityEnabled else Pal.Muted)
                                                     }
                                                 }) { Nav.open(Route.ConnectorDetail(c)) }
                                         }
@@ -186,8 +186,8 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                                     else CardList {
                                         d.caps.forEachIndexed { i, cap ->
                                             if (i > 0) Hairline()
-                                            ListRow(cap.title, cap.description, capIcon(cap.name), Pal.Ink, subLines = 2,
-                                                trailing = { Tag(if (cap.enabled) "已开启" else "未开启", if (cap.enabled) Pal.GoldInk else Pal.Muted) })
+                                            ListRow(cap.title, cap.description, leading={SystemCapabilityIcon(cap.name)}, subLines = 2,
+                                                trailing = { Tag(if (cap.enabled) "已开启" else "未开启", if (cap.enabled) CapabilityEnabled else Pal.Muted) })
                                         }
                                     }
                                 }
