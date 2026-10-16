@@ -85,7 +85,9 @@ struct ChatItem: Identifiable, Equatable {
     var optionsUsed = false
     var cards: [SayCard] = []
     var activityID = ""
-    var visible: Bool { source != "onboarding" && (!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || !attachments.isEmpty || !cards.isEmpty || !media.isEmpty || !options.isEmpty) }
+    var clientID = ""
+    var quote: ChatQuote? = nil
+    var visible: Bool { source != "onboarding" && (!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || !attachments.isEmpty || !cards.isEmpty || !media.isEmpty || !options.isEmpty || quote != nil) }
     var visibleMedia: [MediaItem] {
         var seen=Set(cards.compactMap(\.mediaPath)); return media.filter { seen.insert($0.path).inserted }
     }
@@ -123,13 +125,13 @@ struct BackgroundActivity: Identifiable, Equatable {
     var backgroundActivities: [BackgroundActivity]=[]
     var choosing:Set<String> { get {transcript.choosing} set {transcript.choosing=newValue} }
     @ObservationIgnored private let socket=Socket(role:"app")
-    @ObservationIgnored private var sender: (([String:Any])->Bool)?
     @ObservationIgnored private var revision=0
     @ObservationIgnored private var avatarRevision=0
+    @ObservationIgnored private var statusRevision=0
     @ObservationIgnored private var booting=false
+    @ObservationIgnored private var syncRequested=false
     @ObservationIgnored private var refresh: Task<Void,Never>?
-    init(sender: (([String:Any])->Bool)?=nil) {
-        self.sender=sender
+    init() {
         socket.onOpen = { [weak self] in self?.connected=true; self?.error="" }
         socket.onClose = { [weak self] why in self?.connected=false; self?.error=why ?? "连接已断开，正在重连" }
         socket.onMessage = { [weak self] in self?.handle($0) }
@@ -137,15 +139,25 @@ struct BackgroundActivity: Identifiable, Equatable {
     func start() { configured=LocalVerification.explicitLoopback || Prefs.configured; socket.start() }
     func reconnect() { revision += 1; refresh?.cancel(); socket.stop(); connected=false; start() }
     func stop() {
-        revision += 1; refresh?.cancel(); socket.stop(); connected=false; configured=false
-        transcript.reset(); SideChats.shared.reset(); Nav.shared.sideChat=nil; busy=false; backgroundActivities=[]; error=""; avatarState = .idle
+        revision += 1; syncRequested=false; refresh?.cancel(); socket.stop(); connected=false; configured=false
+        transcript.reset(); SideChats.shared.reset(); ActivityListStore.shared.reset(); Nav.shared.sideChat=nil; busy=false; backgroundActivities=[]; error=""; avatarState = .idle
     }
-    private func transmit(_ row: [String:Any]) -> Bool { sender?(row) ?? socket.send(row) }
-    @discardableResult func send(_ text: String, attachments: [Attachment]=[]) -> Bool {
-        guard !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || !attachments.isEmpty else { return false }
-        guard transmit(["t":"send","text":text,"attachments":attachments.map(\.json)]) else { error="还没连上，稍等再发"; return false }
-        transcript.appendUser(text,attachments:attachments)
-        error=""; return true
+    #if MAC_VERIFY
+    func disconnectForReview() {socket.stop();connected=false}
+    #endif
+    private func transmit(_ row: [String:Any]) -> Bool { socket.send(row) }
+    @MainActor func send(_ text: String, attachments: [Attachment]=[], clientID: String = UUID().uuidString, quote: ChatQuote? = nil) async throws {
+        guard !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || !attachments.isEmpty || quote != nil else { throw ApiError(code:400,message:"先写点什么，或添加一个附件") }
+        let submission=MessageSubmission(text:text,attachments:attachments,clientID:clientID,quote:quote)
+        do {
+            let response=try await Api.json(submission.endpoint,method:"POST",body:submission.body)
+            guard response["ok"] as? Bool == true,let id=response["id"] as? String,!id.isEmpty else {throw ApiError(code:0,message:"消息还没有确认，请重试")}
+            // The websocket echo may have arrived before this acknowledgement. Both use the server ID.
+            var row:[String:Any]=["id":id,"role":"user","text":text,"attachments":attachments.map(\.json),"clientId":clientID,"ts":Date().timeIntervalSince1970*1000]
+            if let quote {row["quote"]=["kind":"feed","path":quote.path,"title":quote.title,"emoji":quote.emoji,"source":quote.source]}
+            if !items.contains(where:{$0.serverID == id}) {transcript.receive(row)}
+            transcript.sentRevision += 1;error=""
+        } catch {self.error=error.localizedDescription;throw error}
     }
     func interrupt() { if !transmit(["t":"interrupt"]) { error="还没连上，无法停止" } }
     @MainActor func choose(messageID:String,optionID:String) async {
@@ -155,6 +167,7 @@ struct BackgroundActivity: Identifiable, Equatable {
     func useOptions(_ id:String) {transcript.useOptions(id)}
     static func item(_ r: [String:Any]) -> ChatItem? {
         guard let role=r["role"] as? String, ["user","assistant"].contains(role), let id=r["id"] as? String, !id.isEmpty else { return nil }
+        guard role != "assistant" || r["fallback"] as? Bool != true else {return nil}
         // Stable IDs prevent history refills from jumping or duplicating the UI.
         let hash=Array(SHA256.hash(data:Data(id.utf8)).prefix(16))
         let uuid=hash.withUnsafeBytes { UUID(uuid:$0.loadUnaligned(as:uuid_t.self)) }
@@ -162,28 +175,36 @@ struct BackgroundActivity: Identifiable, Equatable {
                         attachments:(r["attachments"] as? [[String:Any]] ?? []).map(Attachment.init),media:MediaItem.parse(r["media"]),
                         ts:ProductTime.date(r["ts"]),source:r["source"] as? String ?? "",serverID:id,
                         options:(r["options"] as? [[String:Any]] ?? []).compactMap(SayOption.init),optionsUsed:r["optionsUsed"] as? Bool ?? false,
-                        cards:(r["cards"] as? [[String:Any]] ?? []).compactMap(SayCard.init),activityID:r["activityId"] as? String ?? "")
+                        cards:(r["cards"] as? [[String:Any]] ?? []).compactMap(SayCard.init),activityID:r["activityId"] as? String ?? "",
+                        clientID:r["clientId"] as? String ?? "",quote:(r["quote"] as? [String:Any]).flatMap(ChatQuote.init))
     }
-    private func upsert(_ row:[String:Any],final:Bool=true) {transcript.receive(row,final:final)}
+    private func upsert(_ row:[String:Any]) {transcript.receive(row)}
     @MainActor func bootstrap() async {
-        guard !booting else { return }; booting=true; defer { booting=false }
-        let version=revision, avatarVersion=avatarRevision
+        guard configured else {return}
+        guard !booting else {syncRequested=true;return};booting=true
+        defer {booting=false;if syncRequested {syncRequested=false;Task {await self.bootstrap()}}}
+        let version=revision, avatarVersion=avatarRevision, statusVersion=statusRevision
         do {
             async let state=Api.json("/api/state")
-            async let history=Api.json("/api/history?n=200")
+            async let history=Api.json("/api/history?n=1000")
             let (s,h)=try await (state,history)
             guard version == revision, !Task.isCancelled else { return }
             ProfileStore.shared.applyState(s)
             if avatarVersion == avatarRevision, let a=s["avatar"] as? [String:Any] { applyAvatar(a) }
             // Do not overwrite a newer websocket busy/avatar state with an older HTTP snapshot.
-            if !connected { busy=s["busy"] as? Bool ?? false }
-            for r in h["items"] as? [[String:Any]] ?? [] { upsert(r) }
-            items.sort { ($0.ts ?? .distantPast) < ($1.ts ?? .distantPast) }
+            if statusVersion == statusRevision { busy=s["busy"] as? Bool ?? false }
+            transcript.mergeSnapshot(h["items"] as? [[String:Any]] ?? [])
             if s["chatEmpty"] as? Bool == true, items.isEmpty {
                 _ = try await Api.json("/api/first-chat",method:"POST",body:["device":"mac"])
             }
             error=""
         } catch is CancellationError {} catch { self.error=error.localizedDescription }
+    }
+    /// Foreground/menu activation supplements websocket hello after a gap; no transcript reset.
+    @MainActor func catchUp() async {
+        guard configured else {return}
+        await bootstrap()
+        if let side=Nav.shared.sideChat {await side.load()}
     }
     private func applyAvatar(_ r: [String:Any]) {
         avatarRevision += 1
@@ -193,23 +214,24 @@ struct BackgroundActivity: Identifiable, Equatable {
     func handle(_ r: [String:Any]) {
         switch r["t"] as? String {
         case "hello":
-            revision += 1; connected=true; busy=r["busy"] as? Bool ?? false
-            for h in r["history"] as? [[String:Any]] ?? [] { upsert(h) }
+            revision += 1; statusRevision += 1; connected=true; busy=r["busy"] as? Bool ?? false
+            transcript.mergeSnapshot(r["history"] as? [[String:Any]] ?? [])
             if let a=r["avatar"] as? [String:Any] { applyAvatar(a) }
             devicesVersion += 1; jobsVersion += 1
             refresh?.cancel(); refresh=Task { @MainActor [weak self] in await self?.bootstrap() }
         case "user","say":
             var row=r; row["role"] = r["t"] as? String == "user" ? "user" : "assistant"; upsert(row)
-        case "delta":
-            if let id=r["id"] as? String,let text=r["text"] as? String {transcript.delta(id:id,text:text)}
         case "activity_message": SideChats.shared.receive(r); jobsVersion += 1
         case "options_used":
             if r["chatType"] as? String == "side",let id=r["activityId"] as? String {SideChats.shared.thread(id).transcript.useOptions(r["messageId"] as? String ?? "")}
             else {useOptions(r["messageId"] as? String ?? "")}
-        case "status": busy=r["busy"] as? Bool ?? false
+        case "status": statusRevision += 1; busy=r["busy"] as? Bool ?? false
         case "avatar": applyAvatar(r)
         case "turn_end": if let e=r["error"] as? String { error=e } // Signal only: never another bubble.
-        case "activity","activity_step","activity_stop": SideChats.shared.activity(r); jobsVersion += 1
+        case "activity":
+            ActivityListStore.shared.receive(r);SideChats.shared.activity(r)
+            if r["phase"] as? String != "updated" {jobsVersion += 1}
+        case "activity_step","activity_stop": jobsVersion += 1
         case "background_activities":
             if r["phase"] as? String == "snapshot" {
                 var byID: [String:BackgroundActivity]=[:]

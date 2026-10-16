@@ -2,8 +2,7 @@ import SwiftUI
 
 /// The menu-bar bubble: a quick chat that stays around when the main window is closed.
 struct MenuView: View {
-    @State private var input = ""
-    @State private var focused = false
+    @State private var dropping = false
     @State private var windowActivity = WindowActivity()
     private var chat: ChatClient { .shared }
     private var session: Session { .shared }
@@ -31,7 +30,8 @@ struct MenuView: View {
         .preferredColorScheme(Theme.scheme)
         .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
         .environment(\.interactiveWindow, windowActivity.active)
-        .task { if session.configured { await ProfileStore.shared.load() } }
+        .task { if session.configured { await ProfileStore.shared.load(); await chat.catchUp() } }
+        .onChange(of:windowActivity.active) { if windowActivity.active {Task {await chat.catchUp()}} }
     }
 
     private func openMain() {
@@ -56,42 +56,11 @@ struct MenuView: View {
     private var messages: some View { ChatMessages(compact: true) }
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .bottom, spacing: 8) {
-                GrowingInput(text: $input, focused: $focused, placeholder: "跟豆豆说…（⌥↩ 换行）",
-                             enabled: !Composer.shared.sending, fontSize: 13, verticalPadding: 8,
-                             onSubmit: send, onAttachmentPaste: { pasteAttachment($0) })
-                    .frame(maxWidth: .infinity)
-                Button(action: send) {
-                    ZStack {
-                        CapsuleBase()
-                        Image(systemName: "arrow.up").font(Theme.font(size: 13, weight: .bold)).foregroundStyle(Theme.actionText)
-                    }
-                    .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.plain)
-                .help("发送（↩︎）· ⌥↩︎ 换行")
-                .disabled(Composer.shared.sending || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.card))
-        }
-        .padding(10)
+        ComposerBar(placeholder:"跟豆豆说…",compact:true).padding(10)
+            .onDrop(of:[.fileURL,.image],isTargeted:$dropping) { Composer.shared.drop($0) }
+            .overlay { if dropping { RoundedRectangle(cornerRadius:20).strokeBorder(Theme.ink,style:StrokeStyle(lineWidth:1,dash:[4])).padding(8).allowsHitTesting(false) } }
     }
 
-    private func pasteAttachment(_ pasteboard: NSPasteboard) -> Bool {
-        guard !Composer.shared.sending, Composer.shared.paste(pasteboard) else { return false }
-        if !input.isEmpty { Composer.shared.text = input; input = "" }
-        Nav.shared.go(.chat)
-        openMain()
-        return true
-    }
-
-    private func send() {
-        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !Composer.shared.sending else { return }
-        if chat.send(text) { input = "" }
-    }
 }
 
 /// Native popover actions expose the same press target to mouse, accessibility and local acceptance.

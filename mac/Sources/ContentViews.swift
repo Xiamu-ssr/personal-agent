@@ -5,11 +5,10 @@ struct FeedPage:View {
     @State private var input=""
     @State private var settings=false
     @State private var refreshing=false
-    @State private var discussing:FeedPost?
-    @State private var discussion=""
     @State private var feedback:[String:String]=[:]
     @State private var sending=Set<String>()
     var body:some View {
+        ScrollViewReader { proxy in
         PageScaffold(title:"动态") {
             HStack { TextField("想看什么？",text:$input).textFieldStyle(.plain).onSubmit(ask)
                 Button(action:ask) { Image(systemName:"arrow.up") }.buttonStyle(.plain).disabled(input.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
@@ -20,7 +19,7 @@ struct FeedPage:View {
             ForEach(store.days,id:\.self) { day in
                 VStack(alignment:.leading,spacing:25) {
                     Text(day).font(Theme.font(size:11,weight:.medium)).foregroundStyle(Theme.sub)
-                    ForEach(store.items.filter { $0.date == day }) { p in post(p) }
+                    ForEach(store.items.filter { $0.date == day }) { p in post(p).id(p.path) }
                 }
             }
             if let cursor=store.next {
@@ -32,16 +31,12 @@ struct FeedPage:View {
         .task(id:ChatClient.shared.feedVersion) { await store.load(reset:true) }
         .onAppear { FeedBadge.shared.enter() }.onDisappear { FeedBadge.shared.leave() }
         .sheet(isPresented:$settings) { FeedSettingsView() }
-        .sheet(item:$discussing) { post in
-            VStack(alignment:.leading,spacing:20) {
-                Text("讨论动态").font(Theme.titleFont(22)); Text(post.title).font(Theme.font(size:15,weight:.medium))
-                TextField("这个对我有什么影响？",text:$discussion,axis:.vertical).textFieldStyle(.roundedBorder).lineLimit(3...6)
-                HStack { Button("取消") { discussing=nil }.buttonStyle(SoftButtonStyle()); Spacer()
-                    Button("到聊天里聊") { let text=discussion; Task { if await act(post,"discuss",text:text) { discussing=nil; Nav.shared.go(.chat) } } }.buttonStyle(PrimaryButtonStyle()).verificationAction("feed-discuss-send").disabled(sending.contains(post.path))
-                }
-            }.padding(30).frame(width:460)
+        .onChange(of:Nav.shared.feedTarget,initial:true) {
+            if let path=Nav.shared.feedTarget { proxy.scrollTo(path,anchor:.center);Nav.shared.feedTarget=nil }
+        }
         }
     }
+
     private func ask() { let s=input.trimmingCharacters(in:.whitespacesAndNewlines); guard !s.isEmpty else { return }; Nav.shared.ask(s); input="" }
     private func refresh() {
         refreshing=true; Task { defer { refreshing=false }; do { let r=try await Api.json("/api/feed/refresh",method:"POST"); Nav.shared.show(r["mode"] as? String == "skipped" ? "豆豆已经在更新动态了" : "豆豆开始找新动态了") } catch { Nav.shared.show(error.localizedDescription) } }
@@ -63,7 +58,7 @@ struct FeedPage:View {
                 HStack(spacing:23) {
                     Button { Task { _ = await act(p,"like") } } label:{ Image(systemName:feedback[p.path] == "like" ? "hand.thumbsup.fill" : "hand.thumbsup") }.verificationAction("feed-like-"+p.path).disabled(sending.contains(p.path))
                     Button { Task { _ = await act(p,"dislike") } } label:{ Image(systemName:feedback[p.path] == "dislike" ? "hand.thumbsdown.fill" : "hand.thumbsdown") }.verificationAction("feed-dislike-"+p.path).disabled(sending.contains(p.path))
-                    Button { discussion=""; discussing=p } label:{ Label("讨论",systemImage:"bubble") }.verificationAction("feed-discuss-"+p.path)
+                    Button { Composer.shared.discuss(p) } label:{ Label("讨论",systemImage:"bubble") }.verificationAction("feed-discuss-"+p.path)
                     Spacer(); if let d=p.time {Text(Fmt.ago(d)).font(Theme.font(size:11)).foregroundStyle(Theme.sub)}
                 }.font(Theme.font(size:12)).buttonStyle(.plain).foregroundStyle(Theme.sub).padding(.vertical,5)
                 Rectangle().fill(Theme.line).frame(height:1).padding(.top,5)
@@ -220,5 +215,29 @@ struct AuthenticatedThumbnail:View {
     var body:some View {
         ZStack { Theme.field; if let image { Image(nsImage:image).resizable().scaledToFit() } else { Image(systemName:icon).font(.system(size:35,weight:.light)).foregroundStyle(Theme.sub) } }
             .task(id:endpoint) { guard let e=endpoint, e.hasPrefix("/api/library/thumbnail?") else { return }; if let d=try? await Api.data(e) { image=NSImage(data:d) } }
+    }
+}
+
+struct FeedPostDetailPage: View {
+    let path: String
+    @State private var post: FeedPost?
+    @State private var error=""
+    var body: some View {
+        SubPage(title:"动态详情") {
+            if let post {
+                Text(post.icon).font(.system(size:32))
+                Text(post.title).font(Theme.titleFont(23))
+                Text(post.source).font(Theme.font(size:11)).foregroundStyle(Theme.sub)
+                MarkdownView(text:post.body,size:14)
+                if let image=post.image {RemoteImage(path:image,maxSide:570,maxHeight:320)}
+                if !post.hasSourceLink,let url=post.sourceLink {Link("阅读原文 ↗",destination:url).foregroundStyle(Theme.link)}
+                Button("讨论") {Composer.shared.discuss(post)}.buttonStyle(SoftButtonStyle())
+            } else {Note(text:error.isEmpty ? "加载中…" : error)}
+        }.task(id:path) {
+            do {
+                let row=try await Api.json("/api/feed/item?path="+Api.query(path))
+                guard let p=FeedPost(row) else {throw ApiError(code:0,message:"这条动态不完整")};post=p
+            } catch {self.error=error.localizedDescription}
+        }
     }
 }

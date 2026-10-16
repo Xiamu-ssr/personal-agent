@@ -230,12 +230,16 @@ struct MessageRow:View {
         HStack(alignment:.top) {
             if item.kind == .user { Spacer(minLength:compact ? 30 : 80) }
             VStack(alignment:.leading,spacing:10) {
-                if !item.text.isEmpty {
-                    MarkdownView(text:item.text,size:compact ? 13 : 15)
-                        .textSelection(.enabled).padding(.horizontal,16).padding(.vertical,13)
+                if !item.text.isEmpty || item.quote != nil {
+                    VStack(alignment:.leading,spacing:10) {
+                        if let quote=item.quote {
+                            Button {Nav.shared.openQuote(quote)} label: {QuoteCard(quote:quote)}.buttonStyle(.plain).verificationAction("quote-"+item.serverID)
+                        }
+                        if !item.text.isEmpty {MarkdownView(text:item.text,size:compact ? 13 : 15).textSelection(.enabled)}
+                    }.padding(.horizontal,16).padding(.vertical,13)
                         .background(item.kind == .user ? Theme.userBubble : Theme.card,in:RoundedRectangle(cornerRadius:22,style:.continuous))
                 }
-                ForEach(Array(item.attachments.enumerated()),id:\.offset) { AttachmentView(att:$0.element) }
+                if !item.attachments.isEmpty { MessageAttachments(attachments:item.attachments,compact:compact) }
                 ForEach(Array(item.cards.enumerated()),id:\.offset) { SayCardView(card:$0.element,compact:compact) }
                 ForEach(item.visibleMedia) { ReplyMediaView(item:$0) }
                 if !item.options.isEmpty {
@@ -253,7 +257,25 @@ struct MessageRow:View {
                 if item.pending { Text("发送中…").font(.system(size:10)).foregroundStyle(Theme.sub) }
             }.frame(maxWidth:compact ? 300 : 560,alignment:item.kind == .user ? .trailing : .leading)
             if item.kind == .assistant { Spacer(minLength:compact ? 10 : 80) }
-        }.foregroundStyle(Theme.ink)
+        }.foregroundStyle(Theme.ink).verificationAction("message-"+item.serverID)
+        .contextMenu {
+            Button("复制") {NSPasteboard.general.clearContents();NSPasteboard.general.setString(item.text,forType:.string)}
+        }
+    }
+}
+struct MessageAttachments: View {
+    let attachments:[Attachment]
+    var compact=false
+    private var images:[Attachment] {attachments.filter {$0.kind == "image"}}
+    var body:some View {
+        VStack(alignment:.leading,spacing:8) {
+            if !images.isEmpty {
+                LazyVGrid(columns:[GridItem(.adaptive(minimum:compact ? 115 : 150),spacing:8)],alignment:.leading,spacing:8) {
+                    ForEach(Array(images.enumerated()),id:\.offset) { row in AttachmentView(att:row.element).frame(maxWidth:.infinity,alignment:.leading) }
+                }
+            }
+            ForEach(Array(attachments.filter {$0.kind != "image"}.enumerated()),id:\.offset) {AttachmentView(att:$0.element)}
+        }
     }
 }
 struct SayCardView:View {
@@ -262,12 +284,12 @@ struct SayCardView:View {
     var body:some View {
         switch card {
         case .connector(let id):
-            cardButton(icon:"square.grid.2x2",title:ConnectorStore.shared.connector(id)?.title ?? id,subtitle:"连接应用") {
+            cardButton(icon:"square.grid.2x2",style:.connector(id),title:ConnectorStore.shared.connector(id)?.title ?? id,subtitle:"连接应用") {
                 Nav.shared.push(.connector(id)); MenuController.shared.close(); AppDelegate.openMain?()
             }.task { if !ConnectorStore.shared.loaded { await ConnectorStore.shared.load() } }
         case .goal(let name): cardButton(icon:"checkmark.square",title:name,subtitle:"查看计划与进展") { Nav.shared.push(.goal(name)); AppDelegate.openMain?(); MenuController.shared.close() }
         case .device(let capability):
-            cardButton(icon:"laptopcomputer",title:capability.flatMap { c in Capabilities.all.first { $0.name == c }?.title } ?? "本机能力",subtitle:"在这台 Mac 上授权") {
+            cardButton(icon:"laptopcomputer",style:.capability(capability ?? "computer_use"),title:capability.flatMap { c in Capabilities.all.first { $0.name == c }?.title } ?? "本机能力",subtitle:"在这台 Mac 上授权") {
                 Nav.shared.push(.connectors(tab:0,focus:capability)); AppDelegate.openMain?(); MenuController.shared.close()
             }
         case .browser: BrowserCard(compact:compact)
@@ -286,9 +308,9 @@ struct SayCardView:View {
             if let m=MediaItem(["kind":kind.rawValue,"path":path,"name":name]) { ReplyMediaView(item:m) }
         }
     }
-    private func cardButton(icon:String,title:String,subtitle:String,action:@escaping ()->Void)->some View {
+    private func cardButton(icon:String,style:AppIconStyle?=nil,title:String,subtitle:String,action:@escaping ()->Void)->some View {
         Button(action:action) { HStack(spacing:13) {
-            Image(systemName:icon).font(.system(size:23)).frame(width:34)
+            if let style {AppIcon(style:style,size:36)} else {Image(systemName:icon).font(.system(size:23)).frame(width:34)}
             VStack(alignment:.leading,spacing:5) { Text(title).font(Theme.font(size:14,weight:.medium)); Text(subtitle).font(Theme.font(size:12)).foregroundStyle(Theme.sub) }
             Spacer(); Image(systemName:"chevron.right").font(.system(size:11)).foregroundStyle(Theme.sub)
         }.padding(17).background(Theme.card,in:RoundedRectangle(cornerRadius:18)).contentShape(Rectangle()) }.buttonStyle(.plain)

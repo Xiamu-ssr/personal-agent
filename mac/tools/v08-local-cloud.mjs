@@ -7,16 +7,17 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
-const roundTwo=process.env.V08_MAC_R2 === "1";
+const patchReview=process.env.V081_MAC === "1";
+const roundTwo=process.env.V08_MAC_R2 === "1" || patchReview;
 const output=process.env.V08_MAC_OUTPUT || '/tmp/v08-mac-shots';
-fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'cloud-events.jsonl'),'');
+fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'cloud-events.jsonl'),'');fs.writeFileSync(path.join(output,'summary-results.jsonl'),'');
 const root=fs.mkdtempSync('/tmp/v08-mac-cloud-');
 Object.assign(process.env,{AGENT_ROOT:root,AGENT_TOKEN:'local-fixture',AGENT_HOST:'127.0.0.1',AGENT_PORT:'0',AGENT_TZ:'Asia/Shanghai'});
-const [{query},{Harness},{DeviceHub},{Content},{startServer},{Schedules},{migrateV08},{fakeAnthropic},{toolReply,textReply,resultFor,hasInput}]=await Promise.all([
+const [{query},{Harness},{DeviceHub},{Content},{startServer},{Schedules},{migrateV08},{fakeAnthropic},{toolReply,textReply,resultFor,hasInput},{activitySummary}]=await Promise.all([
  import(path.join(repo,'cloud/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs')),
  import(path.join(repo,'cloud/src/agent.mjs')),import(path.join(repo,'cloud/src/devices.mjs')),import(path.join(repo,'cloud/src/content.mjs')),
  import(path.join(repo,'cloud/src/server.mjs')),import(path.join(repo,'cloud/src/scheduler.mjs')),import(path.join(repo,'cloud/src/migrate-v08.mjs')),
- import(path.join(repo,'cloud/test/fake-anthropic.mjs')),import(path.join(repo,'cloud/test/native-fixture.mjs'))]);
+ import(path.join(repo,'cloud/test/fake-anthropic.mjs')),import(path.join(repo,'cloud/test/native-fixture.mjs')),import(path.join(repo,'cloud/src/activity-summary.mjs'))]);
 const write=(p,s)=>{fs.mkdirSync(path.dirname(path.join(root,p)),{recursive:true});fs.writeFileSync(path.join(root,p),s)};
 migrateV08({root,seedDir:path.join(repo,'cloud/seed')});
 write('data/soul/角色.md','- 名字：豆豆\n- 性格：温和、认真，有一点好奇心\n- 口吻：简洁自然\n');
@@ -44,11 +45,17 @@ const movie=path.join(repo,'mac/Resources/Mascot/happy/light.mp4');
 if(fs.existsSync(movie)){write('data/library/media/2026-10-15/开心一刻.mp4','');fs.copyFileSync(movie,path.join(root,'data/library/media/2026-10-15/开心一刻.mp4'))}
 const website=http.createServer((req,res)=> {res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'});res.end(`<!doctype html><meta charset="utf-8"><title>一周计划 · 演示</title><style>body{font:22px -apple-system;padding:65px;color:#111;background:white}small{color:#888}h1{font-size:52px}.box{background:#f3f3f3;padding:35px;border-radius:25px;width:70%}input,button{font:22px -apple-system;border:1px solid #ddd;padding:18px;border-radius:14px}button{background:black;color:white}#result{margin-top:25px}</style><small>豆豆 · 本地演示</small><h1>为重要的事，留一点时间。</h1><div class="box"><p>你想给这一周起什么名字？</p><input id="name" placeholder="输入一个主题"><button onclick="document.querySelector('#result').textContent='这一周：'+document.querySelector('#name').value">保存</button><div id="result"></div></div>`) });
 website.listen(0,'127.0.0.1');await once(website,'listening');
-const listeners=new Set(),events=[];let readStarted=false,releaseRead;
+const listeners=new Set(),events=[];let readStarted=false,releaseRead,summaryStarted=false,releaseSummary;
 const readGate=new Promise(r=>releaseRead=r);
+const summaryGate=new Promise(r=>releaseSummary=r);
 const bus={on:fn=>listeners.add(fn),emit:e=>{events.push(e);fs.appendFileSync(path.join(output,'cloud-events.jsonl'),JSON.stringify(e)+'\n');for(const fn of listeners)fn(e)}};
 let scenario="",turnCounter=0;
 const api=await fakeAnthropic(async body=> {
+ if(typeof body.system === 'string' && body.system.includes('根据活动记录概括中文话题')) {
+   const record=JSON.parse(body.messages[0].content),work=record.instruction.includes('0.8.1 验收');
+   if(patchReview && work){summaryStarted=true;await summaryGate}
+   return textReply(JSON.stringify(work ? {title:'阅读并整理资料',summary:'读取演示资料并整理了行动建议。'} : {title:'整理阅读清单',summary:'整理阅读方向，提供了下一步选项。'}));
+ }
  const all=JSON.stringify(body.messages);
  if(roundTwo && all.includes('旁聊演示：')) {
    const last=body.messages.findLast(m=>m.role==='user')?.content;
@@ -62,6 +69,13 @@ const api=await fakeAnthropic(async body=> {
  }
  if(scenario.includes('[动态]')||scenario.includes('[点子]'))return textReply(' ');
  if(scenario.includes('故障演示'))return {error:'本地演示错误',status:400};
+ if(patchReview && scenario.includes('0.8.1 验收')) {
+   if(!resultFor(body,'work_first'))return toolReply('work_first','mcp__doudou__say',{text:'我先读一下演示资料，再把过程和结论告诉你。'});
+   if(!resultFor(body,'work_read'))return toolReply('work_read','Read',{file_path:path.join(root,'workspace/demo/context.txt')});
+   if(!resultFor(body,'work_second'))return toolReply('work_second','mcp__doudou__say',{text:'资料看完了。接下来可以整理一个简短的行动清单。',cards:[{type:'connector',id:'gmail'},{type:'device',capability:'calendar_events'}]});
+   if(!resultFor(body,'work_third'))return toolReply('work_third','mcp__doudou__say',{text:'行动清单已经整理好。先选一件今天就能做的小事，再安排一次回顾。'});
+   return textReply('这段普通正文只留在活动轨迹里，不进入聊天。');
+ }
  if(roundTwo ? all.includes('演示忙时') : scenario.includes('忙时插话') || scenario.includes('演示忙时')) {
    if(!resultFor(body,'work_first'))return toolReply('work_first','mcp__doudou__say',{text:'我先读一下计划，马上回来和你说。'});
    if(!resultFor(body,'work_read'))return toolReply('work_read','Read',{file_path:path.join(root,'workspace/demo/context.txt')});
@@ -78,7 +92,10 @@ const api=await fakeAnthropic(async body=> {
  return textReply(' ');
 });
 const hub=new DeviceHub();
-const harness=new Harness({hub,bus,log(){},queryFactory:({prompt,options})=>query({prompt:(async function*(){ for await(const m of prompt){ scenario=JSON.stringify(m.message.content);turnCounter++;yield m; } })(),options:{...options,settingSources:[],agentProgressSummaries:false,
+const harness=new Harness({hub,bus,log(...items){if(String(items[0]).includes('activity summary failed'))console.log(...items)},summarize:async(record,{signal})=>{
+ const result=await activitySummary(record,{signal,env:{ANTHROPIC_BASE_URL:api.url,ANTHROPIC_API_KEY:'fake-local-only'}});
+ fs.appendFileSync(path.join(output,'summary-results.jsonl'),JSON.stringify({id:record.id,chatType:record.chatType,...result})+'\n');return result;
+},queryFactory:({prompt,options})=>query({prompt:(async function*(){ for await(const m of prompt){ scenario=JSON.stringify(m.message.content);turnCounter++;yield m; } })(),options:{...options,settingSources:[],agentProgressSummaries:false,
  hooks:{...options.hooks,PreToolUse:[...options.hooks.PreToolUse,{matcher:'Read',hooks:[async input=>{if(input.tool_use_id==='work_read'){readStarted=true;await readGate}return {}}]}]},
  env:{...options.env,ANTHROPIC_BASE_URL:api.url,ANTHROPIC_API_KEY:'fake-local-only',ANTHROPIC_AUTH_TOKEN:'',CLAUDE_CONFIG_DIR:path.join(root,'system/sessions'),CLAUDE_CODE_TMPDIR:path.join(root,'native-tmp'),CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:'1',DISABLE_TELEMETRY:'1',DISABLE_ERROR_REPORTING:'1'}}})});
 const content=new Content({root,bus}),schedules=new Schedules({harness,content});harness.startMain();
@@ -86,13 +103,14 @@ const server=startServer({harness,hub,bus,content,schedules,log(){},listen:{host
 const control=http.createServer(async(req,res)=>{
  res.setHeader('Content-Type','application/json');
  if(req.method==='POST' && req.url==='/release'){releaseRead();res.end('{"ok":true}');return}
+ if(req.method==='POST' && req.url==='/release-summary'){releaseSummary();res.end('{"ok":true}');return}
  if(req.method==='GET' && req.url==='/browser-value'){res.end(JSON.stringify({value:await harness.browser.page.locator('#name').inputValue()}));return}
  if(req.method==='POST' && req.url==='/browser'){await harness.browser.runAgent(page=>page.goto(`http://127.0.0.1:${website.address().port}`));res.end('{"ok":true}');return}
  if(req.method==='POST' && req.url==='/feed-new'){bus.emit({t:'feed_new',items:[{path:'data/feed/2026-10-15/0900-产品观察.md',title:'演示',date:'2026-10-15'}]});res.end('{"ok":true}');return}
- res.end(JSON.stringify({readStarted,busy:harness.busy,avatar:harness.avatar.value,results:events.filter(e=>e.t==='say').length,requests:api.requests.length}));
+ res.end(JSON.stringify({readStarted,summaryStarted,busy:harness.busy,avatar:harness.avatar.value,results:events.filter(e=>e.t==='say').length,requests:api.requests.length}));
 });control.listen(0,'127.0.0.1');await once(control,'listening');
 fs.writeFileSync(path.join(output,'local-cloud.json'),JSON.stringify({root,server:`http://127.0.0.1:${server.address().port}`,control:`http://127.0.0.1:${control.address().port}`,pid:process.pid}));
 console.log('LOCAL_CLOUD_READY '+server.address().port);
 let closing=false;
-async function close(){if(closing)return;closing=true;releaseRead();await harness.close();await server.browserRoutes?.close();server.closeAllConnections();server.close();control.closeAllConnections();control.close();website.closeAllConnections();website.close();await api.close();fs.writeFileSync(path.join(output,'cloud-summary.json'),JSON.stringify({requests:api.requests.length,events:events.map(e=>({t:e.t,phase:e.phase,state:e.state,id:e.id})),root},null,2));process.exit(0)}
+async function close(){if(closing)return;closing=true;releaseRead();releaseSummary();await harness.close();await server.browserRoutes?.close();server.closeAllConnections();server.close();control.closeAllConnections();control.close();website.closeAllConnections();website.close();await api.close();fs.writeFileSync(path.join(output,'cloud-summary.json'),JSON.stringify({requests:api.requests.length,events:events.map(e=>({t:e.t,phase:e.phase,state:e.state,id:e.id})),root},null,2));process.exit(0)}
 process.on('SIGINT',close);process.on('SIGTERM',close);

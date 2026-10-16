@@ -195,6 +195,7 @@ struct Note: View {
 struct ListRow<Trailing: View>: View {
     var icon: String? = nil
     var tint: Color = Theme.accent
+    var appStyle: AppIconStyle? = nil
     let title: String
     var subtitle = ""
     var action: (() -> Void)? = nil
@@ -203,7 +204,8 @@ struct ListRow<Trailing: View>: View {
 
     var body: some View {
         let row = HStack(spacing: 12) {
-            if let icon { IconTile(icon: icon, tint: tint, size: 32) }
+            if let appStyle { AppIcon(style:appStyle,size:32) }
+            else if let icon { IconTile(icon: icon, tint: tint, size: 32) }
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(Theme.titleFont(Theme.bodySize, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
                 if !subtitle.isEmpty { Text(subtitle).font(Theme.font(size: Theme.secondarySize)).foregroundStyle(Theme.sub).lineLimit(2) }
@@ -225,8 +227,8 @@ struct ListRow<Trailing: View>: View {
 }
 
 extension ListRow where Trailing == EmptyView {
-    init(icon: String? = nil, tint: Color = Theme.accent, title: String, subtitle: String = "", action: (() -> Void)? = nil) {
-        self.init(icon: icon, tint: tint, title: title, subtitle: subtitle, action: action, trailing: { EmptyView() })
+    init(icon: String? = nil, tint: Color = Theme.accent, appStyle: AppIconStyle? = nil, title: String, subtitle: String = "", action: (() -> Void)? = nil) {
+        self.init(icon: icon, tint: tint, appStyle:appStyle, title: title, subtitle: subtitle, action: action, trailing: { EmptyView() })
     }
 }
 

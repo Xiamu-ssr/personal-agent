@@ -28,6 +28,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     /// Closing the window keeps 豆豆 in the menu bar.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard LocalVerification.explicitLoopback || Prefs.configured else {return}
+        Task { @MainActor in await ChatClient.shared.catchUp() }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {

@@ -12,16 +12,17 @@ import Observation
     var error=""
     init(activityID:String?=nil) {
         self.activityID=activityID;transcript=ChatTranscript(activityID:activityID);composer=Composer()
-        composer.delivery={ [weak self] text,attachments in
-            guard let self else {throw CancellationError()};try await self.send(text,attachments:attachments)
+        composer.delivery={ [weak self] submission in
+            guard let self else {throw CancellationError()};try await self.send(submission)
         }
     }
     func bind(_ activityID:String) {self.activityID=activityID;transcript.bind(activityID)}
-    @MainActor func send(_ text:String,attachments:[Attachment]) async throws {
+    @MainActor func send(_ submission:MessageSubmission) async throws {
+        let text=submission.text,attachments=submission.attachments
         guard !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || !attachments.isEmpty else {
             throw ApiError(code:400,message:"先写点什么，或添加一个附件")
         }
-        let body:[String:Any]=["text":text,"attachments":attachments.map(\.json)]
+        let body=submission.body
         if let activityID {
             let response=try await Api.json(ActivityStore.endpoint(activityID,action:"send"),method:"POST",body:body)
             guard response["ok"] as? Bool == true,response["id"] as? String == activityID else {throw ApiError(code:0,message:"旁聊消息没有发出去，请重试")}
@@ -76,9 +77,14 @@ import Observation
         thread(id).transcript.receive(row)
     }
     func activity(_ row:[String:Any]) {
-        guard row["chatType"] as? String == "side",let id=row["id"] as? String,!id.isEmpty else {return}
+        guard let id=row["id"] as? String,!id.isEmpty,
+              row["chatType"] as? String == "side" || (row["phase"] as? String == "updated" && (threads[id] != nil || items.contains {$0.id == id})) else {return}
         let t=thread(id)
         if let title=row["title"] as? String {t.title=title}
+        if let i=items.firstIndex(where:{$0.id == id}) {
+            if let title=row["title"] as? String {items[i].title=title}
+            if let summary=row["summary"] as? String {items[i].summary=summary}
+        }
         if let status=row["status"] as? String {t.status=status}
         else if row["phase"] as? String == "started" {t.status="running"}
     }

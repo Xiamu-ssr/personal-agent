@@ -14,4 +14,4 @@ if [[ -f "$INC/module.modulemap" && -f "$INC/bridging.modulemap" ]]; then
 fi
 SOURCES=()
 while IFS= read -r source; do SOURCES+=("$source"); done < <(rg --files Sources -g '*.swift' | sort)
-swiftc -swift-version 5 -D MAC_VERIFY -parse-as-library -sdk "$SDK" "${FIX[@]}" "${SOURCES[@]}" "$1" -o "$2"
+swiftc -swift-version 5 -D MAC_VERIFY -parse-as-library -sdk "$SDK" "${FIX[@]}" "${SOURCES[@]}" Tests/TestTransport.swift Tests/ReviewDraggingInfo.swift "$1" -o "$2"

@@ -9,28 +9,26 @@ import Observation
     var choosing=Set<String>()
     var error=""
     @ObservationIgnored private var consumed=Set<String>()
-    @ObservationIgnored private var finished=Set<String>()
     init(activityID:String?=nil) { self.activityID=activityID }
     func bind(_ id:String) { precondition(activityID == nil || activityID == id); activityID=id }
-    func reset() { items=[]; consumed=[]; finished=[]; choosing=[]; error="" }
+    func reset() { items=[]; consumed=[]; choosing=[]; error="" }
     private func belongs(_ row:[String:Any])->Bool {
         if let activityID { return row["activityId"] as? String == activityID && row["chatType"] as? String == "side" }
         return row["chatType"] as? String != "side"
     }
-    func receive(_ row:[String:Any],final:Bool=true) {
+    func receive(_ row:[String:Any]) {
         guard belongs(row),let item=ChatClient.item(row) else {return}
-        upsert(item,final:final)
+        upsert(item)
     }
-    private func upsert(_ incoming:ChatItem,final:Bool=true) {
+    private func upsert(_ incoming:ChatItem) {
         var item=incoming
         if item.optionsUsed {consumed.insert(item.serverID)}
         item.optionsUsed = item.optionsUsed || consumed.contains(item.serverID)
         if let i=items.firstIndex(where:{$0.serverID == item.serverID}) {
             item.optionsUsed = item.optionsUsed || items[i].optionsUsed; items[i]=item
-        } else if item.kind == .user,let i=items.firstIndex(where:{$0.pending && $0.text == item.text && $0.attachments.map(\.path) == item.attachments.map(\.path)}) {
+        } else if !item.clientID.isEmpty,let i=items.firstIndex(where:{$0.kind == item.kind && $0.clientID == item.clientID}) {
             items[i]=item
         } else {items.append(item)}
-        if final {finished.insert(item.serverID)}
     }
     func mergeSnapshot(_ rows:[[String:Any]]) {
         for row in rows {receive(row)}
@@ -45,14 +43,6 @@ import Observation
         consumed.formUnion(other.consumed)
         for item in other.items {upsert(item)}
         for id in consumed {useOptions(id)}
-    }
-    func appendUser(_ text:String,attachments:[Attachment]) {
-        items.append(ChatItem(kind:.user,text:text,attachments:attachments,ts:Date(),pending:true));sentRevision += 1
-    }
-    func delta(id:String,text:String) {
-        guard activityID == nil,!finished.contains(id) else {return}
-        if let i=items.firstIndex(where:{$0.serverID == id}) {items[i].text += text}
-        else {receive(["id":id,"role":"assistant","text":text,"ts":Date().timeIntervalSince1970*1000],final:false)}
     }
     func useOptions(_ id:String) {
         consumed.insert(id)

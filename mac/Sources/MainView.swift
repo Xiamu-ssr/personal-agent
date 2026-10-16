@@ -31,6 +31,7 @@ struct MainView:View {
         .background(WindowActivityReader(activity:activity).frame(width:0,height:0))
         .environment(\.interactiveWindow,activity.active)
         .sheet(isPresented:Binding(get:{nav.console},set:{nav.console=$0})) { ConsoleView() }
+        .onChange(of:activity.active) { if activity.active {Task {await ChatClient.shared.catchUp()}} }
         .onAppear {
             AppDelegate.openMain={openWindow(id:"main")}
             AppearanceStore.shared.systemDark=systemScheme == .dark

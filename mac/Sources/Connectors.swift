@@ -1,6 +1,5 @@
 import Observation
 import SwiftUI
-import WebKit
 
 struct ConnectorOption: Identifiable {
     let value: String
@@ -344,54 +343,10 @@ private struct ConnectorFieldView: View {
     }
 }
 
-/// Official icons come from the server; the neutral placeholder is only used while unavailable.
 struct ConnectorImage: View {
     let name: String
     var size: CGFloat = 38
-    @State private var image: NSImage?
-    @State private var svg: String?
-    var body: some View {
-        Group {
-            if let image { Image(nsImage: image).resizable().scaledToFit() }
-            else if let svg { ConnectorSVG(text: svg) }
-            else { RoundedRectangle(cornerRadius: 10).fill(Theme.field).overlay(Image(systemName: "app.dashed").foregroundStyle(Theme.faint)) }
-        }.frame(width: size, height: size)
-        .task(id: Prefs.server + name) {
-            image = nil
-            svg = nil
-            let path = "/api/connectors/" + ConnectorAPI.component(name) + "/icon"
-            if let bytes = try? await Api.data(path) {
-                image = NSImage(data: bytes)
-                if image == nil, let text = String(data: bytes, encoding: .utf8), text.contains("<svg") { svg = text }
-            }
-        }
-    }
-}
-
-private struct ConnectorSVG: NSViewRepresentable {
-    let text: String
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeNSView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .nonPersistent()
-        config.defaultWebpagePreferences.allowsContentJavaScript = false
-        let view = WKWebView(frame: .zero, configuration: config)
-        view.setValue(false, forKey: "drawsBackground")
-        context.coordinator.load(view, text: text)
-        return view
-    }
-    func updateNSView(_ view: WKWebView, context: Context) {
-        guard context.coordinator.text != text else { return }
-        context.coordinator.load(view, text: text)
-    }
-    static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) { view.stopLoading() }
-    final class Coordinator {
-        var text: String?
-        func load(_ view: WKWebView, text: String) {
-            self.text = text
-            view.loadHTMLString("<html><head><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{width:100%;height:100%}</style></head><body>" + text + "</body></html>", baseURL: nil)
-        }
-    }
+    var body: some View { AppIcon(style:.connector(name),size:size) }
 }
 
 struct ConnectorListRow: View {

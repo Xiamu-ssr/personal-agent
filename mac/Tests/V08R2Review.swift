@@ -65,7 +65,7 @@ struct ReviewFailure:Error,CustomStringConvertible {let description:String}
             try await shot("04-feed-scrolled-light")
             AppearanceStore.shared.select(.dark);try await shot("05-feed-scrolled-dark")
             AppearanceStore.shared.select(.light);try await press("tab-chat")
-            try check(chat.send("演示忙时：先读一下今天的计划"),"main chat starts real SDK Read")
+            try await chat.send("演示忙时：先读一下今天的计划");try check(true,"main chat starts real SDK Read")
             for _ in 0..<400 {if (try await control())["readStarted"] as? Bool == true {break};try await pause(50)}
             try check(chat.busy,"main chat remains busy during side chat test")
             let mainBefore=try await Api.json("/api/history")

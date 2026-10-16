@@ -123,6 +123,7 @@ final class GrowingInputContainer: NSScrollView {
         editor.isAutomaticDashSubstitutionEnabled = false
         editor.isAutomaticSpellingCorrectionEnabled = false
         editor.identifier = NSUserInterfaceItemIdentifier("chat-composer")
+        editor.registerForDraggedTypes(editor.registeredDraggedTypes + [.fileURL,.png,.tiff])
         documentView = editor
         setContentHuggingPriority(.defaultLow, for: .horizontal)
     }
@@ -219,6 +220,26 @@ final class ComposerTextView: NSTextView {
         guard isEditable else { return }
         if pasteAttachment(from: .general) { return }
         super.paste(sender)
+    }
+
+    // NSTextView consumes Finder drops before the surrounding SwiftUI onDrop can see them.
+    // Route those through the same attachment reader as paste; never insert file paths into the text.
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true || NSImage.canInit(with:sender.draggingPasteboard) {
+            return isEditable ? .copy : []
+        }
+        return super.draggingEntered(sender)
+    }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        draggingEntered(sender)
+    }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true || NSImage.canInit(with:sender.draggingPasteboard) {return isEditable}
+        return super.prepareForDragOperation(sender)
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if pasteAttachment(from:sender.draggingPasteboard) { return true }
+        return super.performDragOperation(sender)
     }
 
     @discardableResult

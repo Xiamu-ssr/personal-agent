@@ -11,7 +11,8 @@ enum Tab: String, CaseIterable {
 enum Route: Hashable {
     case web(title:String,path:String), doc(title:String,path:String)
     case connectors(tab:Int,focus:String?=nil), connector(String), connectorForm(name:String,accountID:String?)
-    case devices, skills, agentSetting(AgentSetting), activity(id:String,title:String), goal(String), memoryItem(title:String,path:String)
+    case modelProvider(String?)
+    case devices, skills, agentSetting(AgentSetting), activity(id:String,title:String), goal(String), memoryItem(title:String,path:String), feedPost(String)
 }
 @Observable final class Nav {
     static let shared=Nav()
@@ -22,6 +23,9 @@ enum Route: Hashable {
     var toast=""
     var console=false
     var consoleTab=0
+    var feedTarget: String?
+    var directSending=false
+    @ObservationIgnored private var directIdentity=SubmissionIdentity()
     func go(_ t: Tab) { if t == tab { stacks[t]=[] }; tab=t; if t == .chat {sideChat=nil} }
     func openSide(_ thread:SideChatThread) {stacks[.chat]=[]; tab = .chat; sideChat=thread; console=false}
     func push(_ r: Route, in tab: Tab?=nil) { let t=tab ?? self.tab; self.tab=t; stacks[t,default:[]].append(r) }
@@ -45,5 +49,19 @@ enum Route: Hashable {
         case .external: Task { @MainActor in do { try await Api.openExternally(p) } catch { if let onFailure { onFailure() } else { show(error.localizedDescription) } } }
         }
     }
-    func ask(_ s:String) { if ChatClient.shared.send(s) { stacks[.chat]=[]; tab = .chat; sideChat=nil; console=false } else { show("还没连上，稍等再试") } }
+    @MainActor func openQuote(_ quote:ChatQuote) {
+        stacks[.feed]=[];tab = .feed;console=false
+        if FeedStore.shared.items.contains(where:{$0.path == quote.path}) {feedTarget=quote.path}
+        else {push(.feedPost(quote.path),in:.feed)}
+        AppDelegate.openMain?();MenuController.shared.close()
+    }
+    func ask(_ s:String) {
+        guard !directSending else {return};directSending=true
+        let id=directIdentity.id(for:.init(text:s,draftIDs:[],quote:nil))
+        Task { @MainActor in
+            defer {directSending=false}
+            do {try await ChatClient.shared.send(s,clientID:id);directIdentity.clear();stacks[.chat]=[];tab = .chat;sideChat=nil;console=false}
+            catch {show(error.localizedDescription)}
+        }
+    }
 }

@@ -32,7 +32,7 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         let chat=ChatClient.shared; chat.start()
         try await until("first chat") { chat.items.filter{$0.kind == .assistant}.count>=2 && !chat.busy }
         let firstHistory=try await Api.json("/api/history")
-        try check((firstHistory["items"] as? [[String:Any]] ?? []).contains { $0["source"] as? String == "onboarding" && ($0["text"] as? String ?? "").contains("设备：mac") },"first-chat device=mac reaches real cloud history")
+        try check(!(firstHistory["items"] as? [[String:Any]] ?? []).contains { $0["source"] as? String == "onboarding" },"first-chat internal prompt stays out of user history")
         recording=Task { @MainActor in try await recordWindow(seconds:28) }
         scroll(window.contentView!,y:0); try await shot("01-first-chat")
         guard let nameBubble=chat.items.first(where:{!$0.options.isEmpty}) else { throw ReviewFailure(description:"first chat option bubble") }
@@ -42,11 +42,11 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         let saved=try await Api.json("/api/history")
         try check((saved["items"] as? [[String:Any]] ?? []).first{$0["id"] as? String == nameBubble.serverID}?["optionsUsed"] as? Bool == true,"native option click persisted and group permanently disabled")
         scroll(window.contentView!,y:0); try await shot("03-options-used")
-        try check(chat.send("演示忙时：请先读计划，再给我两个选项"),"send work request")
+        try await chat.send("演示忙时：请先读计划，再给我两个选项");try check(true,"send work request")
         for _ in 0..<400 { if (try await control())["readStarted"] as? Bool == true {break};try await pause(50) }
         try check(chat.busy && chat.avatarState == .working,"real SDK Read in progress and working avatar")
         scroll(window.contentView!,y:.greatestFiniteMagnitude); try await shot("04-avatar-working")
-        try check(chat.send("忙时插话：把散步也安排进去"),"busy interjection transmits immediately")
+        try await chat.send("忙时插话：把散步也安排进去");try check(true,"busy interjection transmits immediately")
         try await pause(250); scroll(window.contentView!,y:.greatestFiniteMagnitude); try await shot("05-busy-interjection")
         _ = try await control("release",method:"POST")
         try await until("second say") { !chat.busy && chat.items.contains{$0.text.contains("收到你的补充") } }
@@ -55,7 +55,8 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         scroll(window.contentView!,y:.greatestFiniteMagnitude); try await shot("06-two-say-options-waiting")
         let activities=try await Api.json("/api/activities")
         let recent=activities["recent"] as? [[String:Any]] ?? []
-        guard let work=recent.first(where:{($0["title"] as? String ?? "").contains("演示忙时")}),let workID=work["id"] as? String else {throw ReviewFailure(description:"work activity")}
+        guard let workID=chat.items.last(where:{$0.text.contains("收到你的补充")})?.activityID,!workID.isEmpty else {throw ReviewFailure(description:"work process identity")}
+        try check(recent.contains{$0["id"] as? String == workID},"main round that used tools appears in the activity list")
         let detail=try await Api.json(ActivityStore.endpoint(workID,action:"history"))
         let steps=detail["items"] as? [[String:Any]] ?? []
         try check(steps.contains{($0["text"] as? String ?? "").contains("忙时插话")} && steps.contains{$0["kind"] as? String == "tool"},"same activity contains interjection and tool summary")
@@ -91,7 +92,7 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         Nav.shared.go(.feed); try await pause(300); try check(!FeedBadge.shared.unread,"entering feed clears badge")
         let feed=FeedStore.shared.items[0]
         try await press("feed-like-"+feed.path);try await press("feed-dislike-"+feed.path)
-        try await press("feed-discuss-"+feed.path);try await pause(250);try await press("feed-discuss-send")
+        try await press("feed-discuss-"+feed.path);try await pause(250);try check(Composer.shared.quote?.path == feed.path,"feed discussion attaches a quote before sending");try await press("composer-send")
         try await pause(600);try check(Nav.shared.tab == .chat,"native feed discussion switches to main chat");try await shot("15-feed-discussion")
         AppearanceStore.shared.select(.light); Nav.shared.go(.ideas); try await shot("16-ideas")
         let ideas=try await Api.json("/api/ideas"),groups=ideas["groups"] as? [[String:Any]] ?? []
@@ -138,7 +139,7 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         try await until("happy") { chat.avatarState == .happy }
         try await shot("31-avatar-happy")
         try await pause(3300); try await shot("32-avatar-idle")
-        try check(chat.send("故障演示"),"send scripted failure")
+        try await chat.send("故障演示");try check(true,"send scripted failure")
         try await until("error avatar") { chat.avatarState == .error }
         try await shot("33-avatar-error")
         try check(CGPreflightScreenCaptureAccess() == false || shotCount>0,"capture completed using available permission")

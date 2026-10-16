@@ -1,26 +1,6 @@
 import AppKit
 import SwiftUI
 
-final class MockTransport:URLProtocol {
-    static func body(_ r: URLRequest) -> Data {
-        if let d = r.httpBody { return d }
-        guard let stream = r.httpBodyStream else { return Data() }
-        stream.open(); defer { stream.close() }
-        var result = Data(); var buffer = [UInt8](repeating: 0, count: 4096)
-        while stream.hasBytesAvailable { let n = stream.read(&buffer, maxLength: buffer.count); if n <= 0 { break }; result.append(buffer, count: n) }
-        return result
-    }
-    static var respond:((URLRequest)throws->(Int,[String:Any]))?
-    override class func canInit(with request:URLRequest)->Bool { true }
-    override class func canonicalRequest(for request:URLRequest)->URLRequest { request }
-    override func startLoading() {
-        do { let (code,body)=try Self.respond!(request)
-            client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:code,httpVersion:nil,headerFields:["Content-Type":"application/json"])!,cacheStoragePolicy:.notAllowed)
-            client?.urlProtocol(self,didLoad:try JSONSerialization.data(withJSONObject:body)); client?.urlProtocolDidFinishLoading(self)
-        } catch { client?.urlProtocol(self,didFailWithError:error) }
-    }
-    override func stopLoading() {}
-}
 @main struct V08Tests {
     static var count=0
     static func check(_ pass:Bool,_ label:String) { if !pass { print("FAIL: "+label); exit(1) }; count += 1 }
@@ -37,12 +17,11 @@ final class MockTransport:URLProtocol {
         }
         for url in ["javascript:alert(1)","file:///tmp/test","https://user:pass@example.test"] { check(SayCard(["type":"link","url":url]) == nil,"reject invalid link") }
         check(SayCard(["type":"goal","name":"../角色"]) == nil,"reject goal traversal")
-        var wire:[[String:Any]]=[]
-        let chat=ChatClient(sender:{ wire.append($0); return true })
+        let chat=ChatClient()
         let bubble:[String:Any]=["t":"say","role":"assistant","id":"a","text":"取个名字？","options":[["id":"0","label":"豆豆"],["id":"1","label":"芽芽"]],"cards":[["type":"image","path":"data/a.png"]],"media":[["path":"data/a.png","kind":"image"],["path":"data/b.png","kind":"image"]],"ts":1000]
         chat.handle(bubble); chat.handle(bubble)
         check(chat.items.count == 1,"duplicate say merges by server ID")
-        check(!ChatItem(kind:.assistant,text:" \n").visible,"whitespace fallback never creates empty visual bubble")
+        check(!ChatItem(kind:.assistant,text:" \n").visible,"whitespace never creates an empty visual bubble")
         check(chat.items[0].visibleMedia.map(\.path) == ["data/b.png"],"card and Markdown media deduplicate")
         var calls=0
         MockTransport.respond={ r in calls += 1; check(r.url!.path == "/api/options/choose","choose uses v08 endpoint"); let b=try JSONSerialization.jsonObject(with:MockTransport.body(r)) as! [String:String]; check(b["messageId"] == "a" && b["optionId"] == "0","choose sends server identities"); return (200,["ok":true]) }
@@ -56,11 +35,12 @@ final class MockTransport:URLProtocol {
         chat.handle(["t":"say","role":"assistant","id":"future","text":"","options":[["id":"0","label":"继续"]]])
         check(chat.items[2].optionsUsed,"out of order consumption survives say")
         let n=chat.items.count; chat.handle(["t":"turn_end","text":"summary that must not duplicate"]); check(chat.items.count == n,"turn end does not add bubble")
-        chat.handle(["t":"status","busy":true]); check(chat.send("忙时插话"),"busy input remains enabled")
-        check(wire.last?["t"] as? String == "send","busy interjection transmits immediately")
+        chat.handle(["t":"status","busy":true])
+        MockTransport.respond={r in check(r.url!.path == "/api/send","busy interjection transmits immediately");return (200,["ok":true,"id":"u"]) }
+        do {try await chat.send("忙时插话");check(true,"busy input remains enabled")} catch {check(false,"busy input remains enabled")}
         chat.handle(["t":"user","role":"user","id":"u","text":"忙时插话"]); check(chat.items.filter{$0.kind == .user}.count == 1,"echo reconciles optimistic input")
         chat.handle(["t":"delta","id":"stream","text":"part"]); chat.handle(["t":"say","role":"assistant","id":"stream","text":"complete"]); chat.handle(["t":"delta","id":"stream","text":"late"])
-        check(chat.items.last?.text == "complete","say completes fallback stream and rejects late delta")
+        check(chat.items.last?.text == "complete","only say creates a bubble and raw deltas are ignored")
         chat.handle(["t":"background_activities","phase":"snapshot","items":[["id":"job","description":"工作","startedAt":1],["id":"job","description":"更新","startedAt":1]]]); check(chat.backgroundActivities.count == 1,"background snapshot deduplicates IDs")
         chat.handle(["t":"background_activities","phase":"snapshot","items":[]]); check(chat.backgroundActivities.isEmpty,"empty snapshot clears background set")
         chat.handle(["t":"avatar","state":"working","text":"在看邮件"]); chat.handle(["t":"status","busy":false]); check(chat.avatarState == .working,"main idle cannot override background working avatar")
@@ -97,7 +77,7 @@ final class MockTransport:URLProtocol {
     }
     @MainActor static func sideChats() async {
         SideChats.shared.reset()
-        let main=ChatClient(sender:{_ in true})
+        let main=ChatClient()
         let common:[String:Any]=["id":"shared-bubble","role":"assistant","text":"主聊选项","options":[["id":"0","label":"继续"]]]
         var mainEvent=common;mainEvent["t"]="say";main.handle(mainEvent)
         var requests:[String]=[]

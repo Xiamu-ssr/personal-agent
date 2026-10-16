@@ -18,33 +18,54 @@ struct ConsoleView:View {
     }
 }
 struct ActivityListView:View {
-    @State private var running:[ActivitySummary]=[]
-    @State private var recent:[ActivitySummary]=[]
-    @State private var next:Double?
-    @State private var error=""
-    @State private var loading=false
+    private var store:ActivityListStore {.shared}
+    @Environment(\.interactiveWindow) private var active
+    private var days:[String] {
+        var seen=Set<String>();return store.recent.map {day($0.time)}.filter {seen.insert($0).inserted}
+    }
+    private func day(_ date:Date?)->String {
+        guard let date else {return "更早"}
+        let calendar=Calendar.current
+        if calendar.isDateInToday(date) {return "今天"}
+        if calendar.isDateInYesterday(date) {return "昨天"}
+        let f=DateFormatter();f.locale=Locale(identifier:"zh_CN");f.dateFormat=calendar.component(.year,from:date) == calendar.component(.year,from:Date()) ? "M月d日" : "yyyy年M月d日"
+        return f.string(from:date)
+    }
     var body:some View {
-        ScrollView { VStack(alignment:.leading,spacing:12) {
-            if !running.isEmpty { Text("进行中").font(Theme.font(size:12)).foregroundStyle(Theme.sub); ForEach(running) { row($0) } }
-            if !recent.isEmpty { Text("最近的活动").font(Theme.font(size:12)).foregroundStyle(Theme.sub); ForEach(recent) { row($0) } }
-            if running.isEmpty && recent.isEmpty { Note(text:error.isEmpty ? "今天还没有活动" : error) }
-            if next != nil { Button("更早的活动") { Task { await load(reset:false) } }.buttonStyle(SoftButtonStyle()).disabled(loading) }
-            if !error.isEmpty && !recent.isEmpty { Note(text:error) }
-        }.padding(.horizontal,28).padding(.top,8) }.task(id:ChatClient.shared.jobsVersion) { await load(reset:true) }
+        ScrollView {LazyVStack(alignment:.leading,spacing:6) {
+            if !store.running.isEmpty {heading("进行中");ForEach(store.running) {ActivityRow(item:$0)}}
+            ForEach(days,id:\.self) {day in
+                heading(day)
+                ForEach(store.recent.filter {self.day($0.time) == day}) {ActivityRow(item:$0)}
+            }
+            if store.running.isEmpty && store.recent.isEmpty {Note(text:store.loading ? "加载中…" : store.error.isEmpty ? "今天还没有活动" : store.error)}
+            if store.next != nil {Button("更早的活动") {Task {await store.load(reset:false)}}.buttonStyle(SoftButtonStyle()).disabled(store.loading)}
+            if !store.error.isEmpty && !store.recent.isEmpty {Note(text:store.error)}
+        }.padding(.horizontal,28).padding(.top,8)}
+        .task(id:"\(ChatClient.shared.jobsVersion)-\(active)") {await store.load()}
     }
-    private func row(_ item:ActivitySummary)->some View {
-        ListRow(icon:item.status == "running" ? "circle.dotted" : "checkmark.circle",title:item.title,subtitle:(item.time.map(Fmt.when) ?? "")+" · "+item.label,action:{
-            Nav.shared.console=false; Nav.shared.push(.activity(id:item.id,title:item.title))
-        }).padding(.horizontal,8).background(Theme.card,in:RoundedRectangle(cornerRadius:14))
-    }
-    private func load(reset:Bool) async {
-        guard !loading else { return }; loading=true; defer {loading=false}
-        do { let r=try await Api.json("/api/activities?limit=30"+(!reset ? next.map { "&before=\(Int($0))" } ?? "" : ""))
-            if reset { running=(r["running"] as? [[String:Any]] ?? []).compactMap { ActivitySummary($0,running:true) }; recent=[] }
-            let rows=(r["recent"] as? [[String:Any]] ?? []).compactMap { ActivitySummary($0) }
-            for item in rows { if let i=recent.firstIndex(where:{$0.id == item.id}) { recent[i]=item } else { recent.append(item) } }
-            next=(r["next"] as? NSNumber)?.doubleValue; error=""
-        } catch { self.error=error.localizedDescription }
+    private func heading(_ title:String)->some View {Text(title).font(Theme.font(size:12,weight:.medium)).foregroundStyle(Theme.sub).padding(.top,8).padding(.bottom,6)}
+}
+struct ActivityRow:View {
+    let item:ActivitySummary
+    @State private var hovering=false
+    var body:some View {
+        Button {Nav.shared.console=false;Nav.shared.push(.activity(id:item.id,title:item.title))} label:{
+            HStack(alignment:.top,spacing:13) {
+                Image(systemName:item.status == "running" ? "circle.dotted" : item.chatType == "side" ? "bubble.left.and.bubble.right" : "circle.hexagongrid.fill")
+                    .font(.system(size:15,weight:.medium)).foregroundStyle(Theme.sub)
+                    .frame(width:32,height:32).background(Theme.field,in:Circle()).padding(.top,3)
+                VStack(alignment:.leading,spacing:4) {
+                    Text(item.title).font(Theme.font(size:14,weight:.semibold)).foregroundStyle(Theme.ink).lineLimit(1).verificationAction("activity-title-"+item.id)
+                    Text(item.summary.isEmpty ? " " : item.summary).font(Theme.font(size:12)).foregroundStyle(Theme.sub).lineLimit(1).truncationMode(.tail).verificationAction("activity-summary-"+item.id)
+                    HStack(spacing:6) {
+                        if let time=item.time {Text(Fmt.hm.string(from:time))}
+                        if item.status != "done" {Text(item.label)}
+                    }.font(Theme.font(size:11)).foregroundStyle(Theme.faint)
+                }.frame(maxWidth:.infinity,alignment:.leading)
+            }.padding(.horizontal,8).padding(.vertical,10).contentShape(Rectangle())
+                .background(hovering ? Theme.field : .clear,in:RoundedRectangle(cornerRadius:12))
+        }.buttonStyle(.plain).onHover {hovering=$0}.verificationAction("activity-row-"+item.id)
     }
 }
 struct PermissionPanel:View {
@@ -54,7 +75,7 @@ struct PermissionPanel:View {
         ScrollView { VStack(alignment:.leading,spacing:15) {
             Text("权限").font(Theme.titleFont(20)); Text("从下一轮主聊天起生效。关键的对外动作，豆豆会在聊天中先问你。").font(Theme.font(size:13)).foregroundStyle(Theme.sub)
             if let s=store.snapshot { ForEach(s.permissionModes) { option in
-                Button { Task { await store.select(.permissionMode,id:option.id) } } label:{ HStack(spacing:15) {
+                Button { Task { await store.selectPermission(option.id) } } label:{ HStack(spacing:15) {
                     Image(systemName:s.permissionMode == option.id ? "largecircle.fill.circle" : "circle").font(.system(size:22))
                     VStack(alignment:.leading,spacing:6) { Text(option.label).font(Theme.font(size:16,weight:.medium)); Text(option.note).font(Theme.font(size:12)).foregroundStyle(Theme.sub) }; Spacer()
                 }.card(radius:18,padding:22).contentShape(Rectangle()) }.buttonStyle(.plain).disabled(store.saving)

@@ -35,14 +35,17 @@ enum PasteContent {
 final class Composer {
     static let shared = Composer()
     let taskID: String?
-    @ObservationIgnored var delivery:((String,[Attachment]) async throws -> Void)?
-    var canDeliver:Bool { delivery != nil || taskID != nil || ChatClient.shared.connected }
+    @ObservationIgnored var delivery:((MessageSubmission) async throws -> Void)?
+    var canDeliver:Bool { delivery != nil || taskID != nil || ChatClient.shared.configured }
     var sentRevision = 0
     init(taskID: String? = nil) { self.taskID = taskID }
 
     enum Recording { case hold, note }
 
     var text = ""
+    var quote: ChatQuote? = nil
+    var focusRevision = 0
+    @ObservationIgnored private var submissionIdentity = SubmissionIdentity()
     var drafts: [Draft] = []
     var sending = false
     var error = ""
@@ -60,13 +63,13 @@ final class Composer {
     @ObservationIgnored private var recordRequest: UUID?
 
     func reset() {
-        operation?.cancel()
+        operation?.cancel(); operation = nil
         cancelRecording()
-        text = ""; drafts = []; error = ""
+        text = ""; drafts = []; quote = nil; submissionIdentity.clear(); error = ""
         voiceMode = false; sending = false; transcribing = false; retryAudio = nil
     }
 
-    var hasContent: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !drafts.isEmpty }
+    var hasContent: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !drafts.isEmpty || quote != nil }
 
     private func fail(_ s: String) {
         error = s
@@ -79,6 +82,11 @@ final class Composer {
         guard taskID == nil && delivery == nil else { return }
         Nav.shared.go(.chat)
         Nav.shared.stacks[.chat] = []
+    }
+
+    func discuss(_ post: FeedPost) {
+        quote = ChatQuote(post); voiceMode = false; focusRevision += 1
+        Nav.shared.go(.chat); Nav.shared.stacks[.chat] = []; Nav.shared.console = false
     }
 
     // MARK: attachments
@@ -99,12 +107,14 @@ final class Composer {
     }
 
     func add(image: NSImage, name: String = "图片") {
+        guard !sending else { return }
         guard let d = Self.jpeg(image) else { return fail("这张图片读不了") }
         let base = (name as NSString).deletingPathExtension
         drafts.append(Draft(data: d, name: (base.isEmpty ? "图片" : base) + ".jpg", kind: "image", thumb: image))
     }
 
     func add(urls: [URL]) {
+        guard !sending else { return }
         for url in urls {
             var isDir: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else {
@@ -152,6 +162,7 @@ final class Composer {
     }
 
     func drop(_ providers: [NSItemProvider]) -> Bool {
+        guard !sending else { return false }
         for p in providers {
             if p.canLoadObject(ofClass: URL.self) {
                 _ = p.loadObject(ofClass: URL.self) { url, _ in
@@ -171,7 +182,8 @@ final class Composer {
     // MARK: sending
 
     func send() {
-        operation = Task { @MainActor in _ = await sendContents() }
+        guard operation == nil, !sending else { return }
+        operation = Task { @MainActor in defer { operation = nil }; _ = await sendContents() }
     }
 
     /// The same upload/retry path serves main chat and task continuations.
@@ -179,6 +191,9 @@ final class Composer {
         guard !sending, !transcribing, recording == nil, !preparing, hasContent else { return false }
         let text = self.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let drafts = self.drafts
+        let quote = self.quote
+        guard quote == nil || drafts.isEmpty else { fail("讨论动态时，请先移除附件再发送"); return false }
+        let clientID = submissionIdentity.id(for: .init(text:text,draftIDs:drafts.map(\.id),quote:quote))
         if !canDeliver { fail("还没连上，稍等再发"); return false }
         sending = true
         defer { sending = false }
@@ -191,27 +206,27 @@ final class Composer {
                 if let i = self.drafts.firstIndex(where: { $0.id == d.id }) { self.drafts[i].uploaded = att }
                 atts.append(att)
             }
-            try await deliver(text, attachments: atts)
+            try await deliver(MessageSubmission(text:text,attachments:atts,clientID:clientID,quote:quote))
             if self.text.trimmingCharacters(in: .whitespacesAndNewlines) == text { self.text = "" }
             self.drafts.removeAll { d in drafts.contains { $0.id == d.id } }
+            if self.quote == quote { self.quote = nil }
+            submissionIdentity.clear(); error = ""
             toChat()
             return true
         } catch is CancellationError { return false }
         catch { if !Task.isCancelled { fail("发送失败：\(error.localizedDescription)") }; return false }
     }
 
-    @MainActor private func deliver(_ text: String, attachments: [Attachment] = []) async throws {
+    @MainActor private func deliver(_ submission: MessageSubmission) async throws {
         if let delivery {
-            try await delivery(text,attachments)
+            try await delivery(submission)
         } else if let taskID {
-            var body: [String: Any] = ["text": text]
-            if !attachments.isEmpty { body["attachments"] = attachments.map(\.json) }
-            let response = try await Api.json(ActivityStore.endpoint(taskID, action: "send"), method: "POST", body: body)
+            let response = try await Api.json(ActivityStore.endpoint(taskID, action: "send"), method: "POST", body: submission.body)
             guard response["ok"] as? Bool == true, response["id"] as? String == taskID else {
                 throw ApiError(code: 0, message: "续聊没有发出去，请重试")
             }
-        } else if !ChatClient.shared.send(text, attachments: attachments) {
-            throw ApiError(code: 0, message: ChatClient.shared.error)
+        } else {
+            try await ChatClient.shared.send(submission.text,attachments:submission.attachments,clientID:submission.clientID,quote:submission.quote)
         }
         sentRevision += 1
     }
@@ -270,6 +285,7 @@ final class Composer {
         guard canDeliver else { return fail("豆豆还没准备好，录音已保留，稍后再试") }
         transcribing = true
         operation = Task { @MainActor in
+            defer { operation = nil }
             do {
                 let text = try await Api.transcribe(data, format: "m4a")
                 try Task.checkCancellation()
@@ -277,14 +293,10 @@ final class Composer {
                 if text.isEmpty {
                     fail("没听清，再说一次")
                 } else {
-                    do {
-                        try await deliver(text)
-                        toChat()
-                    } catch {
-                        self.text = self.text.isEmpty ? text : self.text + "\n" + text
-                        voiceMode = false
-                        throw error
-                    }
+                    self.text = self.text.isEmpty ? text : self.text + "\n" + text
+                    voiceMode = false
+                    transcribing = false
+                    _ = await sendContents()
                 }
             } catch is CancellationError {
                 return
@@ -308,26 +320,8 @@ final class Composer {
         guard let (data, _) = recorder.finish() else { return fail("没录到声音") }
         let name = "语音笔记-\(Fmt.hm.string(from: Date()).replacingOccurrences(of: ":", with: "")).m4a"
         let draft = Draft(data: data, name: name, kind: "voice")
-        guard canDeliver else { drafts.append(draft); return fail("还没连上，录音已保留在输入框") }
-        sending = true
-        operation = Task { @MainActor in
-            var att: Attachment?
-            do {
-                att = try await Api.upload(data, name: name, kind: "voice")
-                try Task.checkCancellation()
-                if let att {
-                    try await deliver("", attachments: [att])
-                    toChat()
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                if Task.isCancelled { return }
-                drafts.append(draft)
-                fail("发送失败：\(error.localizedDescription)，录音已保留在输入框")
-            }
-            sending = false
-        }
+        drafts.append(draft)
+        send()
     }
 
     func cancelRecording() {
@@ -347,11 +341,13 @@ struct ComposerBar: View {
     private var chat: ChatClient { .shared }
     @State private var focused = false
     @State private var takingPhoto = false
+    var compact = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if c.recording != nil || c.transcribing { RecordingPanel(c: c) }
-            if !c.drafts.isEmpty { drafts }
+            if let quote = c.quote { QuoteCard(quote:quote,remove:{ c.quote = nil }).verificationAction("composer-quote") }
+            if !c.drafts.isEmpty { AttachmentStrip(c:c) }
             if !c.error.isEmpty {
                 Label(c.error, systemImage: "exclamationmark.circle").font(Theme.font(size: 12)).foregroundStyle(Theme.danger)
                     .padding(.horizontal, 8)
@@ -378,6 +374,7 @@ struct ComposerBar: View {
         .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Theme.card))
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
         .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 2)
+        .onChange(of:c.focusRevision,initial:true) { if c.focusRevision > 0 { focused = true } }
         .sheet(isPresented: $takingPhoto) { PhotoCaptureView { c.add(image: $0, name: "照片") } }
         #if MAC_VERIFY
         .onAppear { if c.taskID != nil { ComposerVerification.currentTask = c } }
@@ -404,6 +401,7 @@ struct ComposerBar: View {
 
     private var field: some View {
         GrowingInput(text: $c.text, focused: $focused, placeholder: placeholder, enabled: !c.sending,
+                     fontSize: compact ? 13 : Theme.bodySize,
                      onSubmit: { c.send() }, onAttachmentPaste: { c.paste($0) })
             .frame(maxWidth: .infinity)
     }
@@ -444,7 +442,7 @@ struct ComposerBar: View {
                 .frame(width: 38, height: 38)
             }
             .buttonStyle(.plain).verificationAction("composer-send")
-            .disabled(c.sending)
+            .disabled(c.sending || c.transcribing)
             .help("发送（↩︎）· ⌥↩︎ 换行")
             .accessibilityLabel(c.taskID == nil ? "发送" : "发送续聊")
             .verificationAction(c.taskID == nil ? "发送" : "发送续聊")
@@ -462,7 +460,11 @@ struct ComposerBar: View {
         .help(help)
     }
 
-    private var drafts: some View {
+}
+
+struct AttachmentStrip: View {
+    @Bindable var c: Composer
+    var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(c.drafts) { d in
@@ -485,14 +487,16 @@ struct ComposerBar: View {
                         .help("移除")
                         .disabled(c.sending)
                     }
-                    .padding(6)
+                    .fixedSize(horizontal:true,vertical:false)
+                    .frame(height:44)
+                    .padding(.horizontal,6)
                     .padding(.trailing, 2)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
                 }
             }
             .padding(.horizontal, 4)
-        }
+        }.frame(height:48).verificationAction("attachment-strip")
     }
 }
 

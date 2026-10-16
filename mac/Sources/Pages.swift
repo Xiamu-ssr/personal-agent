@@ -48,8 +48,10 @@ struct RouteView:View {
         case .devices:DevicesPage()
         case .skills:SkillsPage()
         case .agentSetting(let s):AgentSettingPage(setting:s)
+        case .modelProvider(let id):ModelProviderFormPage(providerID:id)
         case .activity(let id,let t):ActivityPage(id:id,title:t)
         case .goal(let n):GoalDetailPage(name:n)
+        case .feedPost(let p):FeedPostDetailPage(path:p)
         case .memoryItem(let t,let p):
             if p == "data/health/days.json" { HealthMemoryPage() } else { MemoryEditor(title:t,path:p) }
         }

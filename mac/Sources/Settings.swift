@@ -92,14 +92,14 @@ struct CapRow: View {
     init(cap: Capability) { self.cap = cap; _on = State(initialValue: cap.enabled) }
     var body: some View {
         HStack(spacing: 12) {
-            Image(nsImage: cap.appIcon).resizable().scaledToFit().frame(width: 36, height: 36)
+            AppIcon(style:.capability(cap.name),size:36)
             VStack(alignment: .leading, spacing: 3) {
                 Text(cap.title).font(Theme.font(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
                 Text(note.isEmpty ? (cap.hint ?? cap.description) : note).font(Theme.font(size: 12)).foregroundStyle(note.isEmpty ? Theme.sub : Theme.danger).lineLimit(2)
             }
             Spacer(minLength: 10)
             if asking { ActiveProgress().controlSize(.small) }
-            Toggle("", isOn: Binding(get: { on }, set: set)).toggleStyle(.switch).labelsHidden().tint(Theme.accent).disabled(asking)
+            Toggle("", isOn: Binding(get: { on }, set: set)).toggleStyle(.switch).labelsHidden().tint(Color(red:0.20,green:0.65,blue:0.39)).disabled(asking)
                 .accessibilityLabel(cap.title)
         }.padding(.vertical, 10).padding(.horizontal, 6)
     }
@@ -248,12 +248,12 @@ struct SettingsPage: View {
                         .verificationAction("模型")
                     }
                     CardSection(title: "能力与连接") {
-                        ListRow(icon: "square.grid.2x2", tint: Theme.accent, title: "连接应用",
+                        ListRow(icon: "square.grid.2x2", appStyle:.connector("tavily"), title: "连接应用",
                                 subtitle: "本机 \(Capabilities.enabled.count) 项已开启 · 云端 \(store.connected.count) 项已连接") {
                             Nav.shared.push(.connectors(tab: 0))
                         }
                         RowDivider()
-                        ListRow(icon: "laptopcomputer.and.iphone", tint: Theme.accent, title: "设备",
+                        ListRow(icon: "laptopcomputer.and.iphone", appStyle:.capability("computer_use"), title: "设备",
                                 subtitle: store.loaded ? "\((device.online ? 1 : 0) + store.others.filter(\.online).count + (store.cloudOnline ? 1 : 0)) 台在线（含云电脑）" : "本机、云电脑和其他设备") {
                             Nav.shared.push(.devices)
                         }
@@ -263,7 +263,7 @@ struct SettingsPage: View {
                         }
                     }
                     CardSection(title: "通知") {
-                        ListRow(icon: "bell", tint: Theme.accent, title: "接收消息通知",
+                        ListRow(icon: "bell", appStyle:.capability("notify"), title: "接收消息通知",
                                 subtitle: notifyNote.isEmpty ? "豆豆说话时，App 不在前台就弹系统通知" : notifyNote) {
                             Toggle("", isOn: Binding(get: { notify }, set: setNotify)).toggleStyle(.switch).labelsHidden().tint(Theme.accent)
                         }
@@ -294,7 +294,7 @@ struct SettingsPage: View {
                 }
             }
         }
-        .task(id: "\(chat.devicesVersion)-\(active)") {
+        .task(id: "\(chat.devicesVersion)-\(chat.settingsVersion)-\(active)") {
             await AgentSettingsStore.shared.load()
             await ProfileStore.shared.load()
             await store.load()
@@ -429,7 +429,7 @@ struct ConnectorsPage: View {
                     Group {
                         if d.caps.isEmpty { Note(text: "这台设备没有上报能力") } else {
                             Rows(items: d.caps) { c in
-                                ListRow(icon: "circle.grid.2x2", tint: c.enabled ? Theme.accent : Theme.faint, title: c.title, subtitle: c.description) {
+                                ListRow(appStyle:.capability(c.name), title: c.title, subtitle: c.description) {
                                     Text(c.enabled ? "已开启" : "未开启").font(Theme.font(size: 12, weight: .medium))
                                         .foregroundStyle(c.enabled ? Theme.online : Theme.faint)
                                 }
