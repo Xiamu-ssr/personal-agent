@@ -48,7 +48,7 @@ test("file guards, model caps and isolated MCP transports remain independent", a
   const pre = calls[0].options.hooks.PreToolUse;
   assert.equal((await pre[0].hooks[0]({ tool_name: "Read", tool_input: { file_path: "system/connectors/x/accounts.json" } })).hookSpecificOutput.permissionDecision, "deny");
   assert.deepEqual(await pre[1].hooks[0]({ tool_name: "Write", tool_input: { file_path: "data/memory/work/example.md" } }), {});
-  assert.equal(opts.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, "128000"); assert.equal(opts.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000");
+  assert.equal(opts.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, "128000"); assert.equal(opts.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "305000");
   assert.equal(opts.allowedTools.includes("mcp__doudou__say"), true);
   for (const server of Object.values(opts.mcpServers)) await server.instance.close();
   await calls[0].options.hooks.PreCompact[0].hooks[0]();

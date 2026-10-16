@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.RssFeed
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -90,6 +91,7 @@ internal fun connectorIcon(name: String): ImageVector = when (name) {
     "email", "envelope", "mail" -> Icons.Outlined.Email
     "calendar" -> Icons.Outlined.CalendarMonth
     "github" -> Icons.Outlined.Code
+    "tencent-quotes" -> Icons.Outlined.ShowChart
     "notion" -> Icons.Outlined.Description
     "rss" -> Icons.Outlined.RssFeed
     "feishu" -> Icons.Outlined.Hub
@@ -146,6 +148,7 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                                             ListRow(c.title, c.description, subLines = 2, leading = { ConnectorLogo(c.name) },
                                                 trailing = {
                                                     when {
+                                                        c.usesSwitch -> Tag(if (c.enabled) "已连接" else "未开启", if (c.enabled) CapabilityEnabled else Pal.Muted)
                                                         c.accounts.isNotEmpty() -> Tag("${c.accounts.size} 个账号", if (c.enabled) CapabilityEnabled else Pal.Danger)
                                                         else -> Tag(if (c.enabled) "已连接" else "未开启",if(c.enabled) CapabilityEnabled else Pal.Muted)
                                                     }

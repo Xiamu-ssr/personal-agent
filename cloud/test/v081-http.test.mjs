@@ -10,7 +10,7 @@ import { Harness } from "../src/agent.mjs";
 import { DeviceHub } from "../src/devices.mjs";
 import { Content } from "../src/content.mjs";
 import { startServer } from "../src/server.mjs";
-import { config } from "../src/config.mjs";
+import { config, VERSION } from "../src/config.mjs";
 import { tailJsonl, writeJson } from "../src/store.mjs";
 import { queryFixture } from "./query-fixture.mjs";
 import { recoveryContext } from "../src/conversation-recovery.mjs";
@@ -92,7 +92,7 @@ test("feed discussion persists and broadcasts user words plus quote, sends full 
   }
   await tick(); assert.ok(received.some((e) => e.t === "user" && e.quote?.path === rel));
   const recovery = recoveryContext({ root: config.root, chatLog: config.chatLog }); assert.ok(recovery.includes(rel)); assert.match(recovery, /新产品发布/);
-  assert.equal(received.find((e) => e.t === "hello").version, "0.8.1");
+  assert.equal(received.find((e) => e.t === "hello").version, VERSION);
   const activities = (await request("/api/activities")).body;
   assert.deepEqual(activities.running, []); assert.deepEqual(activities.recent, []);
   assert.ok((await request(`/api/activities/${h.main.activityId}/history`)).body.items.length);

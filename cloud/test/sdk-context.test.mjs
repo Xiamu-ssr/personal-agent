@@ -78,22 +78,24 @@ async function nativeFixture(t, api, { baseline = false, isolated = false } = {}
   };
 }
 
-test("actual SDK child inherits 128K; cached total below 167K stays; above 167K compacts at low effort", { timeout: 60_000 }, async (t) => {
+test("actual SDK child inherits 128K; cached total below 272K stays; above 272K compacts at low effort", { timeout: 60_000 }, async (t) => {
   let normal = 0;
   const api = await fakeAnthropic((body) => {
     if (compactRequest(body)) return {};
     normal++;
-    return { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: normal === 1 ? 162000 : 164001 } };
+    return { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: normal === 1 ? 268000 : 269001 } };
   });
   const f = await nativeFixture(t, api);
-  assert.equal((await f.turn("First tiny request.")).subtype, "success");
+  const first = await f.turn("First tiny request.");
+  assert.equal(first.subtype, "success");
+  assert.equal(first.modelUsage["anthropic/claude-haiku-5.5"].contextWindow, 1000000);
   assert.equal((await f.turn("Second tiny request.")).subtype, "success");
   assert.equal(api.requests.filter(compactRequest).length, 0);
   assert.equal((await f.turn("Third tiny request.")).subtype, "success");
-  assert.deepEqual(f.childEnv(), { max: "128000", window: "200000", pct: "100" });
+  assert.deepEqual(f.childEnv(), { max: "128000", window: "305000", pct: "100" });
   assert.ok(api.requests.every((r) => r.max_tokens === 128000));
   const compact = api.requests.find(compactRequest);
-  assert.ok(compact, "a 95001 cache-inclusive API input causes compaction before the next request");
+  assert.ok(compact, "a 272001 cache-inclusive API input causes compaction before the next request");
   assert.equal(compact.output_config?.effort, "low");
   assert.doesNotMatch(JSON.stringify(compact.messages), /1500 tokens/);
   assert.ok(f.messages.some((m) => m.type === "system" && m.subtype === "compact_boundary"));
@@ -101,15 +103,23 @@ test("actual SDK child inherits 128K; cached total below 167K stays; above 167K 
 });
 
 test("isolated SDK query uses the same real wire cap and compaction controls", { timeout: 45_000 }, async (t) => {
-  const api = await fakeAnthropic();
+  let normal = 0;
+  const api = await fakeAnthropic((body) => {
+    if (compactRequest(body)) return {};
+    return { usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: ++normal === 1 ? 268000 : 269001 } };
+  });
   const f = await nativeFixture(t, api, { isolated: true });
   assert.equal((await f.turn("Tiny isolated task.")).subtype, "success");
-  assert.equal((await f.turn("/compact Preserve data/todos.md, keep it brief.")).subtype, "success");
+  assert.equal((await f.turn("Second isolated turn.")).subtype, "success");
+  assert.equal(api.requests.filter(compactRequest).length, 0);
+  assert.equal((await f.turn("Third isolated turn.")).subtype, "success");
+  assert.deepEqual(f.childEnv(), { max: "128000", window: "305000", pct: "100" });
   assert.equal(api.requests[0].max_tokens, 128000);
+  assert.ok(api.requests.find(compactRequest), "isolated input also compacts after crossing 272K");
   assert.equal(api.requests.find(compactRequest)?.output_config?.effort, "low");
 });
 
-test("native subagent inherits 128K and compacts after cached input crosses 167K", { timeout: 45_000 }, async (t) => {
+test("native subagent inherits 128K and compacts after cached input crosses 272K", { timeout: 45_000 }, async (t) => {
   const file = path.join(config.data, "native-child-fixture.txt");
   fs.mkdirSync(config.data, { recursive: true });
   fs.writeFileSync(file, "fictional child tool output\n");
@@ -121,7 +131,7 @@ test("native subagent inherits 128K and compacts after cached input crosses 167K
     const reads = (all.match(/toolu_fake_read_\d/g) || []).length / 2;
     if (!all.includes("Delegate this tiny") && all.includes("NATIVE_CHILD_ONLY") && reads < 3) {
       return { content: [{ type: "tool_use", id: "toolu_fake_read_" + reads, name: "Read", input: { file_path: file } }], stop_reason: "tool_use",
-        usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: reads === 2 ? 164001 : 1000 } };
+        usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: reads === 2 ? 269001 : 1000 } };
     }
     return {};
   });
@@ -158,7 +168,7 @@ test("actual resumed SDK session escapes failed compaction, keeps data, hides En
   const api = await fakeAnthropic((body) => {
     if (compactRequest(body)) return failCompact ? { error: "prompt is too long: 200001 tokens > 200000 maximum" } : {};
     if (!resultFor(body, "recovery_say")) return toolReply("recovery_say", "mcp__doudou__say", { text: "OK" });
-    return { ...textReply("OK"), usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 164001 } };
+    return { ...textReply("OK"), usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 269001 } };
   });
   const calls = [], events = [], harnesses = [];
   const dir = path.join(config.sessions, "real-recovery-fixture");

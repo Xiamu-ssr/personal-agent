@@ -88,9 +88,13 @@ export class Content {
       const { meta, body } = frontmatter(this.read(rel));
       if (!meta.title) throw new Error();
       let image;
-      if (meta.image && !/[\\/]/.test(meta.image)) {
-        const imagePath = path.posix.join(path.posix.dirname(rel), meta.image);
-        try { localFile(this.root, imagePath, "data/feed"); image = imagePath; } catch {}
+      if (meta.image && !/^[a-z][a-z0-9+.-]*:|^\/|[\\\x00-\x1f]/i.test(meta.image)) {
+        const directory = path.posix.dirname(rel), candidate = directory + "/" + meta.image;
+        try {
+          // Validate before normalizing: nested image directories are valid; traversal and escaping symlinks are not.
+          const file = localFile(this.root, candidate, directory);
+          if (fileType(file).kind === "image" && fs.statSync(file).size > 0) image = path.posix.normalize(candidate);
+        } catch {}
       }
       return { path: rel, date: rel.split("/")[2], title: meta.title, source: meta.source || "", url: meta.url || "", published: meta.published || "", icon: meta.icon || "", ...(image && { image }), body };
     } catch { throw problem("没有这条动态", 404); }

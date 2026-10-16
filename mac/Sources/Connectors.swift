@@ -61,6 +61,7 @@ struct CloudConnector: Identifiable {
     let accounts: [ConnectorAccount]
     var id: String { name }
     var canAdd: Bool { fields != nil && (multiAccount || accounts.isEmpty) }
+    var usesSwitch: Bool { fields?.isEmpty == true && !multiAccount }
 
     init(_ json: [String: Any]) {
         name = json["name"] as? String ?? ""
@@ -159,17 +160,31 @@ struct ConnectorDetailPage: View {
             if let connector {
                 HStack(spacing: 16) {
                     ConnectorImage(name: connector.name, size: 56)
-                    Text("账号 · \(connector.accounts.count) 个")
+                    Text(connector.usesSwitch ? "免费 · 无需账号或密钥" : "账号 · \(connector.accounts.count) 个")
                         .font(Theme.font(size: 13)).foregroundStyle(Theme.sub)
                     Spacer()
                 }
                 .card(radius: 16, padding: 20)
                 if !error.isEmpty { Note(text: error, icon: "exclamationmark.circle") }
                 if !store.error.isEmpty { Note(text: store.error, icon: "wifi.exclamationmark") }
-                accounts(connector)
-                if connector.canAdd {
-                    Button("添加账号") { Nav.shared.push(.connectorForm(name: name, accountID: nil)) }
-                        .buttonStyle(PrimaryButtonStyle(height: 40)).disabled(working != nil)
+                if connector.usesSwitch {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("连接服务").font(Theme.font(size: 15, weight: .medium))
+                            Text(working != nil ? "处理中…" : connector.accounts.isEmpty ? "未连接，豆豆暂不使用这个服务" : "已连接，豆豆可以按需查询")
+                                .font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
+                        }
+                        Spacer()
+                        Toggle("连接服务", isOn: Binding(get: { !connector.accounts.isEmpty }, set: { setEnabled(connector, $0) }))
+                            .labelsHidden().toggleStyle(.switch).disabled(working != nil)
+                            .verificationAction("connector-toggle-" + name)
+                    }.card(radius: 16, padding: 18)
+                } else {
+                    accounts(connector)
+                    if connector.canAdd {
+                        Button("添加账号") { Nav.shared.push(.connectorForm(name: name, accountID: nil)) }
+                            .buttonStyle(PrimaryButtonStyle(height: 40)).disabled(working != nil)
+                    }
                 }
 
             } else { Note(text: store.loaded ? "这个连接器已不在目录中，返回后刷新试试" : "加载中…") }
@@ -179,6 +194,19 @@ struct ConnectorDetailPage: View {
             Button("删除", role: .destructive) { if let account = deleting { remove(account) } }
             Button("取消", role: .cancel) { deleting = nil }
         } message: { Text("删除「\(deleting?.label ?? "")」后，豆豆将无法继续读取这个账号。") }
+    }
+
+    private func setEnabled(_ connector: CloudConnector, _ enabled: Bool) {
+        guard working == nil, enabled != !connector.accounts.isEmpty else { return }
+        working = "connection"; error = ""
+        Task { @MainActor in
+            defer { working = nil }
+            do {
+                if enabled { try await ConnectorAPI.save(name: name, id: nil, values: [:]) }
+                else if let account = connector.accounts.first { try await ConnectorAPI.delete(name: name, id: account.id) }
+            } catch { self.error = error.localizedDescription }
+            await store.load()
+        }
     }
 
     private func accounts(_ connector: CloudConnector) -> some View {

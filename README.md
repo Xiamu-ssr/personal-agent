@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/Release-v0.8.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v0.8.0"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2"><img src="https://img.shields.io/badge/Release-v0.8.2-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v0.8.2"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=101612" alt="Android · macOS · Cloud">
   <a href="https://github.com/anthropics/claude-agent-sdk-typescript"><img src="https://img.shields.io/badge/Built%20with-Claude%20Agent%20SDK-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with Claude Agent SDK"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=101612" alt="MIT License"></a>
@@ -21,21 +21,23 @@
   <tr>
     <td width="33%" align="center"><h3>3 端</h3>Android · macOS · 自有云</td>
     <td width="34%" align="center"><h3>5 个栏目</h3>聊天 · 动态 · 点子 · 目标 · 资源库</td>
-    <td width="33%" align="center"><h3>11 个连接器</h3>邮箱 · 搜索 · 阅读 · 数据 · GitHub</td>
+    <td width="33%" align="center"><h3>12 个连接器</h3>邮箱 · 搜索 · 阅读 · 行情 · GitHub</td>
   </tr>
 </table>
 
 ## 开始使用
 
-**当前版本：[v0.8.0 · 会话即入口](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
+**当前版本：[v0.8.2 · 动态配图与免费行情](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
-| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.0/doudou-0.8.0.apk) | Android 9 或更新版本 |
-| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.0/doudou-0.8.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
+| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.2/doudou-0.8.2.apk) | Android 9 或更新版本 |
+| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.2/doudou-0.8.2.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
 | 云端 | [部署指南](docs/deployment.md) | Linux、Node.js ≥ 20.9、systemd、Nginx、HTTPS |
 
 先[部署云端](#部署)，生成一次性配对码，再在 App 填入自己的服务器地址。第一次聊天，豆豆会问怎么称呼你、自己叫什么，再推荐需要连接的应用和本机能力。
+
+**从 0.8.1 升级：更新云端和 App，原有配对继续使用。** 本版修复动态配图，新增默认关闭、无需 Key 的腾讯行情开关；Tavily 和 Wind 支持多账号额度切换，密钥在 App 中显示首尾以便区分。
 
 **从 0.7 升级：云端与客户端都需要更新到 0.8。** 旧版 App 不再兼容；首次启动云端会迁移旧数据，升级前请备份。详见[升级说明](docs/deployment.md#从-07-升级到-08)。
 
@@ -230,9 +232,10 @@ node spec/build.mjs
 
 ## 验证与已知限制
 
-[v0.8.0 发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.0)记录了：云端 **184 项**测试、Android **97 项**单元测试与 **73 张截图 / 7 段录屏**、Mac **80 项**逻辑断言和通用安装包构建。线上还用真实模型验证了「说话」和云端浏览器。这些是该版本的验收记录，不是每个设备、账号与网站的兼容性保证。
+[v0.8.2 发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2)记录了：云端 **265 项**测试、Android **160 项**单元测试、Mac **66 项**逻辑断言，以及生产 Node 20 环境的 **51 项**针对性测试。线上 **10 张**既有动态图片通过下载和解码检查；Mac 实际验证了动态配图、腾讯行情开关及股票 / ETF / 指数查询。这些记录不等于所有设备、账号与网站的兼容性保证。
 
-- Android 界面验收使用模拟器；健康数据和手机权限仍需要真机验证。
+- 本版 Android 已构建签名安装包，尚未进行真机验收；健康数据和手机权限仍需要真机验证。
+- MiMo-V2.6-Pro 与内置模型约 272K 输入压缩线已配置；超长上下文仅做本地 SDK / CLI 验证，未作付费模型压力测试。
 - 网页登录、验证码和网站自身限制可能需要用户接管；模型、搜索和第三方服务的费用另计。
 - 动态刷新时间受搜索与模型响应影响，不保证在每个检查时点立即生成内容。
 - 云端浏览器占用额外内存；服务模板限制本体 900MB、浏览器 800MB，小内存机器需留意系统与其他服务的余量。
@@ -243,22 +246,22 @@ node spec/build.mjs
 
 ```bash
 cd android
-./gradlew assembleRelease
+./gradlew assembleRelease -PenableReleaseSigning=true
 # 产物：app/build/outputs/apk/release/app-release.apk
 ```
 
-自己的签名配置放在 `~/.personal-agent/signing.properties`；没有该文件时，当前脚本使用 debug 签名。
+自己的签名配置放在 `~/.personal-agent/signing.properties`，并通过上面的参数启用；没有签名配置时，当前脚本使用 debug 签名。
 
 **Mac**：macOS 14+、Xcode Command Line Tools，在仓库根目录运行：
 
 ```bash
 # 首次构建创建自己的本地签名身份，可能弹出钥匙串授权
 bash mac/tools/make-signing-identity.sh
-VERSION=0.8.0 bash mac/build.sh
-# 产物：mac/build/doudou-0.8.0.dmg；Apple 芯片 + Intel 通用
+VERSION=0.8.2 bash mac/build.sh
+# 产物：mac/build/doudou-0.8.2.dmg；Apple 芯片 + Intel 通用
 ```
 
-Mac 安装包采用本地签名，未做 Apple 公证；首次安装的打开方式见[发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.0)。
+Mac 安装包采用本地签名，未做 Apple 公证；首次安装的打开方式见[发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.2)。
 
 ## License 与致谢
 

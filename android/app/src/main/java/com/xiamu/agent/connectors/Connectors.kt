@@ -32,7 +32,9 @@ data class ConnectorInfo(
     val fields: List<ConnectorField>?,
     val multiAccount: Boolean,
     val accounts: List<ConnectorAccount>,
-)
+) {
+    val usesSwitch: Boolean get() = fields?.isEmpty() == true && !multiAccount
+}
 
 data class ConnectedDevice(val id: String, val name: String, val kind: String, val online: Boolean, val lastSeen: Long, val caps: List<ConnectorInfo>)
 data class Connections(

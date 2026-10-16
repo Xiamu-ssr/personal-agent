@@ -20,8 +20,8 @@ android {
         applicationId = "com.xiamu.agent"
         minSdk = 28
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.8.1"
+        versionCode = 15
+        versionName = "0.8.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

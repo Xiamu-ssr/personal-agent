@@ -10,6 +10,7 @@ export const MODELS = [
   { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", note: "消耗约 40×；缓存读约 20×" },
   { id: "z-ai/glm-5.3-flash", label: "GLM 5.3 Flash", note: "输入约 1.5×，输出约 1×；缓存读约 3×" },
   { id: "z-ai/glm-5.3-flashx", label: "GLM 5.3 FlashX", note: "输入约 3.75×，输出约 2.5×；缓存读约 7.5×" },
+  { id: "xiaomi/mimo-v2.6-pro", label: "MiMo-V2.6-Pro", note: "输入约 4.35×，输出约 1.74×；缓存读约 0.36×" },
 ];
 export const ZENMUX = { id: "zenmux", name: "ZenMux", builtin: true, protocol: "anthropic", models: MODELS.map(({ id, label, note }) => ({ id, name: label, note })) };
 

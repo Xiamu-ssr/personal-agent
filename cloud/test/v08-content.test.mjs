@@ -37,6 +37,23 @@ test("feed paginates whole days, newest first, tolerates bad posts and emits onl
   put(root, "data/feed/2026-10-15/1000-新增.md", postText("新增")); assert.equal(content.discoverFeed().length, 1); assert.equal(events.at(-1).t, "feed_new");
 });
 
+test("feed resolves images relative to the post directory, including nested folders, and rejects unsafe or non-image references", () => {
+  const { root, content } = setup(), directory = "data/feed/2026-10-15", rel = directory + "/0800-图片.md";
+  put(root, directory + "/img/新闻封面.webp", "image-bytes");
+  put(root, directory + "/说明.txt", "text");
+  put(root, directory + "/empty.png", "");
+  const outside = put(root, "data/library/media/private.png", "private-image");
+  fs.symlinkSync(outside, path.join(root, directory, "img/escape.png"));
+  const useImage = (image) => { put(root, rel, postText("图片").replace("image: cover.png", "image: " + image)); return content.post(rel); };
+  assert.equal(useImage("img/新闻封面.webp").image, directory + "/img/新闻封面.webp");
+  assert.equal(content.feed().items[0].image, directory + "/img/新闻封面.webp");
+  for (const image of ["../2026-10-14/cover.png", "img/../img/新闻封面.webp", "img/escape.png", "missing.png", "说明.txt", "empty.png", "/etc/private.png", "https://example.test/cover.png", "img\\新闻封面.webp"]) {
+    const post = useImage(image);
+    assert.equal(post.image, undefined, image);
+    assert.equal(post.title, "图片", "an invalid optional image must not hide the whole post");
+  }
+});
+
 test("feedback persists likes/dislikes/discussion and discussion starts main chat with post context", async () => {
   const { root, content } = setup(), rel = "data/feed/2026-10-15/0800-消息.md", sent = [];
   put(root, rel, postText("新消息"));

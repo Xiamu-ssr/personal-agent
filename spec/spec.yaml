@@ -249,7 +249,7 @@ domains:
           - 忙时收到的新消息在下一步之前交给模型；这一轮是系统发起的（比如交还浏览器后接着干），你的消息也进这一轮。
           - 工具环境：Python 默认 3.11，预装 PDF、Word、Excel 解析库和 PDF 转文字工具。
           - 不设工具审批。走到关键一步之前（下单付款、发出消息或邮件、提交表单、删除、替你答应别人），先用「说话」发选项卡问你，你点了才继续。
-          - 模型在 App 里切换，从下一轮起全部用新模型；推理强度 max；200K 窗口，内置压缩。
+          - 模型在 App 里切换，从下一轮起全部用新模型；推理强度 max；内置模型预计下一次输入约 272K 时内置压缩，自定义模型约 100K。
           - 权限：自动（默认）拦下危险操作，完全放行什么都不拦；两种都不向 App 弹请求。
       - id: cl_devgw
         name: 设备网关
@@ -331,9 +331,9 @@ domains:
       - 12
     role: 提供推理；内置 ZenMux，也可以自己添加服务；在 App 设置里选择，下一轮起生效。
     can:
-      - 内置 ZenMux 的四种模型，以及你自己添加的任何 Anthropic 协议服务
+      - 内置 ZenMux 的五种模型，以及你自己添加的任何 Anthropic 协议服务
       - 推理强度均为 max
-      - 全部使用 200K 上下文窗口
+      - 内置模型预计下一次输入约 272K 时压缩（CLI 策略窗口 305K），自定义模型约 100K
     cannot:
       - 不负责个人内容的长期保存
     holds:
@@ -353,6 +353,10 @@ domains:
         desc: 可在设置中切换
       - id: md_glm
         name: GLM 5.3 FlashX
+        icon: 🧠
+        desc: 可在设置中切换
+      - id: md_mimo
+        name: MiMo-V2.6-Pro
         icon: 🧠
         desc: 可在设置中切换
       - id: md_custom
@@ -376,13 +380,13 @@ domains:
     compact: true
     role: 已经支持的在线服务，一服务一连接器。
     can:
-      - 只读邮箱、深入调研与网页正文、微信读书、Wind 金融数据、GitHub
-      - 同一邮箱服务可连多个账号
+      - 只读邮箱、深入调研与网页正文、微信读书、Wind 金融数据、腾讯行情、GitHub
+      - 同一邮箱服务可连多个账号；Tavily 与 Wind 可在明确额度耗尽后切换备用账号
     cannot:
       - 未支持的服务暂时接不了，内置能力不展示
     holds:
       - 第三方账号数据
-    doc: "- 在 App 自己填写参数，或请豆豆引导、代填；账号验证成功才保存。"
+    doc: "- 在 App 自己填写参数，或请豆豆引导、代填；账号验证成功才保存。密钥在 App 中显示首尾提示以便区分。腾讯行情无需账号与 Key，直接开关，默认关闭。"
     chips: []
     catalog: connectors
   - id: dev
@@ -701,10 +705,10 @@ questions:
     decided: 主聊天是一条连续的会话，不会每条消息另开一个。会对你说话的事都进主会话，包括目标跟进，回它时上下文是全的。不需要和你对话的事（动态、点子、夜间整理、补读、委派的重活）各开新会话，免得每半小时一次的动态把主会话的上下文和账单撑爆；委派的结果交回主会话，动态要聊就点「讨论」带进来。
   - id: q_session
     title: 上下文与压缩
-    decided: 统一 200K 窗口，使用 Claude Code 内置压缩，不附加自定义压缩要求。
+    decided: 内置模型预计下一次输入约 272K 时使用 Claude Code 内置压缩，CLI 策略窗口为 305K（预留 20K 输出与 13K 摘要）；自定义模型约 100K，不附加自定义压缩要求。
   - id: q_model
     title: 模型
-    decided: 内置 ZenMux 的 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash、GLM 5.3 FlashX，另可自己添加 Anthropic 协议的模型服务（Base URL + 模型 ID + 显示名）；App 内切换，两端同步，下一轮起全部使用新模型，推理强度 max。所有用到模型的事都用选中的这一个：聊天、活动标题和摘要、动态、点子、目标跟进、夜间整理、旁聊；只有语音转文字另用一个能听音频的模型。
+    decided: 内置 ZenMux 的 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash、GLM 5.3 FlashX、MiMo-V2.6-Pro，另可自己添加 Anthropic 协议的模型服务（Base URL + 模型 ID + 显示名）；App 内切换，两端同步，下一轮起全部使用新模型，推理强度 max。所有用到模型的事都用选中的这一个：聊天、活动标题和摘要、动态、点子、目标跟进、夜间整理、旁聊；只有语音转文字另用一个能听音频的模型。
   - id: q_permission
     title: 权限
     decided: 自动（默认）拦下危险操作，完全放行什么都不拦；在控制台切换，两种都不会向 App 弹请求。
@@ -786,8 +790,8 @@ connectors:
         - 备注（可选）
     - id: tavily
       name: Tavily
-      description: 深入调研和整篇网页正文提取
-      multiAccount: false
+      description: 深入调研和整篇网页正文提取；明确额度耗尽后尝试备用账号
+      multiAccount: true
       setup:
         - API Key
     - id: weread
@@ -798,10 +802,15 @@ connectors:
         - 个人 API Key
     - id: wind
       name: Wind AI
-      description: 万得金融数据：股票、基金、指数、债券、宏观、公告研报、量化分析；连上时一起装好官方技能
-      multiAccount: false
+      description: 万得金融数据：股票、基金、指数、债券、宏观、公告研报、量化分析；连上时一起装好官方技能；明确额度耗尽后切换备用账号，有状态任务保持账号一致
+      multiAccount: true
       setup:
         - API Key
+    - id: tencent-quotes
+      name: 腾讯行情
+      description: 免费查询沪深京股票、ETF 和指数的最新公开报价；无需 Key、默认关闭、保留报价时间、只读不交易
+      multiAccount: false
+      setup: []
     - id: github
       name: GitHub
       description: 查看仓库、issue、评论和通知（只读，不标记通知已读）

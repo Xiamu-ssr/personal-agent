@@ -10,6 +10,7 @@ import tavily from "./tavily/index.mjs";
 import weread from "./weread/index.mjs";
 import wind from "./wind/index.mjs";
 import github from "./github/index.mjs";
+import tencent_quotes from "./tencent-quotes/index.mjs";
 
-export const connectors = [qq_mail, netease_163, netease_126, gmail, exmail, aliyun_mail, imap, tavily, weread, wind, github];
+export const connectors = [qq_mail, netease_163, netease_126, gmail, exmail, aliyun_mail, imap, tavily, weread, wind, github, tencent_quotes];
 export default connectors;

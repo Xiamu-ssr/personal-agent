@@ -272,7 +272,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
     if (p === "/api/connectors") {
       return json(res, 200, {
-        cloud: { id: "cloud", name: "云电脑", kind: "cloud", online: true, ...connectors.list() },
+        cloud: { id: "cloud", name: "云电脑", kind: "cloud", online: true, ...connectors.list({ forApp: true }) },
         devices: hub.known(),
       });
     }

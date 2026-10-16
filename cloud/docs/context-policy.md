@@ -1,4 +1,20 @@
-# 云端上下文与压缩恢复（v0.4，200K 窗口）
+# 云端上下文与压缩恢复
+
+## 当前策略（2026-10-16）
+
+按用户最新要求，将**内置模型下一请求的估计输入压缩线调到 272000 tokens**。主会话、隔离任务和 SDK 子 agent 共用此策略。输入包含缓存读取与缓存写入，不以未缓存输入单独计数。
+
+内置模型保留 128000 最大输出。锁定的 CLI 先预留 20000 输出和 13000 摘要，因此设置 `CLAUDE_CODE_AUTO_COMPACT_WINDOW=305000`、`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=100`，得到 `305000 - 20000 - 13000 = 272000`。不能直接把窗口变量设成 272000，否则输入约 239000 就会压缩。
+
+五个内置模型的 ZenMux 目录均声明至少 1M 上下文，因此设置 `CLAUDE_CODE_DISABLE_1M_CONTEXT=0`，解除旧的 200K 客户端能力限制；只改策略窗口而不解除限制，会被 `min(C,A)` 截断。`triggerTokens=272000`，日志中的 `inputLimit=277000` 包含 5000 工具/新消息增长余量。压缩基于 CLI 对下一次输入的估算，大工具结果、新消息和压缩请求自身仍可超过 272K，它不是收费硬上限。
+
+新增内置模型 `xiaomi/mimo-v2.6-pro`（MiMo-V2.6-Pro），经同一 ZenMux Messages API。2026-10-16 目录声明上下文 1048576、最大输出 131072；这里统一发送 128000 输出上限。估价采用每百万 Token 输入 $0.435、输出 $0.87、缓存读 $0.0036，不套用 Haiku 的超过 100K 倍率。来源：[ZenMux 模型页](https://zenmux.ai/xiaomi/mimo-v2.6-pro)、公开 `/api/v1/models` 目录。
+
+用户自定义服务没有声明上下文容量，因此保持 8192 最大输出、121192 策略窗口、100000 触发点及 200K 客户端能力上限；不能未经容量核验就对任意服务强制发送超过 200K 的请求。
+
+部署后通过数值日志核验内置模型的 `max_output=128000 compact_window=305000 compact_pct=100`。本地验证使用真实 SDK/CLI 和假 Messages API，检查缓存合计 271000 时下一轮不压缩、272001 时下一轮执行压缩，以及五个内置模型的原地切换、主会话/隔离会话/子 agent 的继承。假 API 只伪造 usage，不向真实模型灌入大历史。
+
+## 历史审计记录（以下 200K/167K 参数已由上述 305K/272K 策略替换）
 
 本轮只修改 cloud，没有提交、部署或访问服务器。本地审计版本是 Agent SDK **0.3.295**，附带 Claude Code **2.1.295**（manifest commit `07e8f67ea3282bf154a9e05673a0942b1b173cef`）。package 和 lock 都已固定 SDK 版本，升级时应重新核对本页的内部算法。
 
@@ -52,7 +68,7 @@ T = min(floor(E * P / 100), E - 13000)
 
 `PreCompact` 用 SDK 的 `applyFlagSettings` 临时设置 `effortLevel/maxEffortLevel=low`，`PostCompact` 恢复业务配置；子 agent 停止和下一轮派发也清理失败后遗留的覆盖。隔离任务改用单条 streaming input，因此同样可使用这个控制接口。控制是同一个 SDK 进程的 flag 层，重叠压缩按 agent 跟踪；压缩期间该进程并发请求也可能受 low cap 影响，主会话与隔离任务是不同进程。
 
-保留 adaptive thinking，使用内置 `short` 摘要模板（`CLAUDE_CODE_CURRIED_TRINKET`），去掉默认模板要求另写 `<analysis>` 的长篇摘要思路。PreCompact command hook 追加中文要求：目标不超过 1500 tokens，保留历史要点、决定、记忆线索、文件路径、待办，省略重复内容与长工具输出。1500 是指令目标，SDK 没有公开的每次压缩单独硬输出上限；该请求仍允许 128K。
+当前保留 adaptive thinking，使用 CLI 内置摘要模板；不设置 `CLAUDE_CODE_CURRIED_TRINKET`，也不追加旧实验中的「1500 tokens」指令。PreCompact/PostCompact 只控制 effort。SDK 没有公开的每次压缩单独硬输出上限；该请求仍允许 128K。
 
 CLI 有输入过长自救：`zir()` 最多重试 3 次，`men/Sye` 按超限差值或约 20% 的旧消息组裁剪后重试；reactive 路径 `bye()` 也有差值指导的分组裁剪。真实 CLI + 本地 400 prompt-too-long mock 已验证后一次请求更短并成功。但输出耗尽或其他摘要错误不能靠裁剪输入保证解决。
 
@@ -72,10 +88,10 @@ v0.4 的 `npm run check` 与 `npm test` 在本地 Node 26.5.0 通过，69/69 项
 
 Claude 上线时需要：
 
-1. 用 lock 安装，确认 SDK 0.3.295/CLI 2.1.295。服务首次启动查看 `[sdk env] max_output=128000 compact_window=200000 compact_pct=100`，不要打印整个环境。
+1. 用 lock 安装，确认 SDK 0.3.295/CLI 2.1.295。服务首次启动查看 `[sdk env] max_output=128000 compact_window=305000 compact_pct=100`，不要打印整个环境。
 2. 用服务同一组模型/网关环境执行 `node scripts/probe-model.mjs`，确认 status=200、accepted=true，检查极短回复的 usage。脚本只请求 OK、effort=low。若仍失败，先按遮罩后的错误说明处理兼容/授权问题，不能把本地 mock 当网关验收。
 3. 对已卡死主会话发送一句短消息，观察成功压缩，或中文恢复提示及新 session；确认能继续聊天并正确读取原记忆/待办。
-4. 随实际使用检查 `[context]` / `[compact]` 元数据与网关该次 usage，确认缓存合计口径、接近 167K 的整理及整理后输入回落。Linux/ZenMux 集成和真实长历史摘要质量仍需上线验收，无需为了验收生成 128K 输出或灌入真实巨量历史。
+4. 随实际使用检查 `[context]` / `[compact]` 元数据与网关该次 usage，确认缓存合计口径、接近 272K 的整理及整理后输入回落。假 API 验证不等于真实长历史摘要质量验收，无需为了验收生成 128K 输出或灌入真实巨量历史。
 
 ## 本地 CLI 定位依据
 

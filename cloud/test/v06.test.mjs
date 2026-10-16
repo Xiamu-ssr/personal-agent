@@ -122,6 +122,12 @@ test("only Haiku gets the cache-inclusive 100K surcharge; Opus has no long-conte
   assert.equal(estimateUsageCost(haiku,{input_tokens:50_000,cache_read_input_tokens:50_001}),(50_000*.1+50_001*.01)*5/1_000_000);
 });
 
+test("MiMo charges cached and uncached input separately without Haiku's 100K surcharge",()=> {
+  const model="xiaomi/mimo-v2.6-pro";
+  const cost=estimateUsageCost(model,{input_tokens:100_000,cache_read_input_tokens:171_000,cache_creation_input_tokens:1000,output_tokens:2000});
+  assert.ok(Math.abs(cost-(101_000*.435+171_000*.0036+2000*.87)/1_000_000)<1e-12);
+});
+
 test("calendar uses package lunar/holiday/shift dates and only mentions the day's solar term",()=> {
   const context=(date)=>calendarContext({now:new Date(date+"T04:00:00Z")});
   const national=context("2026-10-01");assert.match(national,/农历八月廿一/);assert.match(national,/法定节假日（国庆节）/);assert.equal(national.split("\n").length,2);

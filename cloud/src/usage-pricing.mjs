@@ -4,6 +4,7 @@ export const MODEL_PRICES={
   "anthropic/claude-opus-5.5":{input:4,cacheRead:.2,output:20,cacheWrite:5,cacheWrite1h:8},
   "z-ai/glm-5.3-flash":{input:.15,cacheRead:.03,output:.5},
   "z-ai/glm-5.3-flashx":{input:.375,cacheRead:.075,output:1.25},
+  "xiaomi/mimo-v2.6-pro":{input:.435,cacheRead:.0036,output:.87},
 };
 export function estimateUsageCost(model,usage={}) {
   const prices=MODEL_PRICES[model];if(!prices)throw new Error("不支持的模型");

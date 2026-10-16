@@ -13,7 +13,7 @@ import { fakeConnectorApi } from "./fake-connector-api.mjs";
 import { callTool, toolResult } from "./tool-call.mjs";
 
 test("released catalog has seven independent mail providers plus Tavily/WeRead/Wind/GitHub, real icon files and no legacy/custom/builtin fields", () => {
-  assert.deepEqual(registry.map((d) => d.name), ["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap", "tavily", "weread", "wind", "github"]);
+  assert.deepEqual(registry.map((d) => d.name), ["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap", "tavily", "weread", "wind", "github", "tencent-quotes"]);
   const manager = new ConnectorManager({ root: fs.mkdtempSync(path.join(testRoot, "catalog-")) });
   assert.deepEqual(Object.keys(manager.list()).sort(), ["catalog", "installed"]);
   for (const d of registry) {
@@ -77,7 +77,7 @@ test("Tavily fake HTTP uses Bearer, free usage test, search depth mapping and fu
   assert.equal(extract.results[0].raw_content, "完整正文\n第二段");
   await assert.rejects(callTool(tools, "search", { query: "x", max_results: 21 }));
   await assert.rejects(callTool(tools, "extract", { urls: ["file:///etc/passwd"] }));
-  await assert.rejects(manager.addAccount("tavily", { apiKey: key }), /只支持一个账号/);
+  await assert.rejects(manager.addAccount("tavily", { apiKey: key }), /已经添加过/);
   for (const [status, expected] of [[401, /API Key 无效/], [429, /额度不足/], [503, /服务暂不可用/], ["invalid", /JSON 无法解析/]]) {
     fault = status;
     const failed = await toolResult(tools, "search", { query: "fake-error" });

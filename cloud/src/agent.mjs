@@ -266,7 +266,7 @@ export class Harness {
         // CLI defaults to treating background agents as session "running" even between main turns.
         // We expose their separate activity list, so idle must describe the main thread alone.
         CLAUDE_CODE_BG_TASKS_REPORT_RUNNING: "0",
-        // Last in the env overlay: inherited values cannot disable the 200K policy.
+        // Last in the env overlay: inherited values cannot disable the selected input trigger.
         ...context.env,
       },
       hooks: {

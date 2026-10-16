@@ -56,7 +56,7 @@ test("Wind mock initializes/lists/tests seven services, forwards calls privately
   await assert.rejects(manager.addAccount("wind",{apiKey:"invalid-local-key"}),/API Key 不对或已失效/);
   assert.equal(manager.accounts.get("wind").length,0);
   const added=await manager.addAccount("wind",{apiKey:FAKE_KEY});assert.equal(added.status,"ok");assert.equal(manager.list().installed[0].accounts[0].values.apiKey,SECRET_MASK);
-  await assert.rejects(manager.addAccount("wind",{apiKey:FAKE_KEY}),/一个账号/);
+  await assert.rejects(manager.addAccount("wind",{apiKey:FAKE_KEY}),/已经添加过/);
   const tools=connector.tools(manager.accounts.get("wind"),manager.context("wind",manager.accounts.get("wind")));
   assert.deepEqual(tools.map((t)=>t.name),["call","list_tools","list_skills","install_skill","ask_alice"]);
   for(const server of WIND_SERVERS) {

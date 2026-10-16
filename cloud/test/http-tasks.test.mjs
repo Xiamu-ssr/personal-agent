@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket from "ws";
-import { config, CODE } from "../src/config.mjs";
+import { config, CODE, VERSION } from "../src/config.mjs";
 import { Harness } from "../src/agent.mjs";
 import { Content } from "../src/content.mjs";
 import { writeJson, tailJsonl } from "../src/store.mjs";
@@ -42,7 +42,7 @@ async function fixture(t) {
 test("v08 HTTP/WS: first chat, multiple bubbles, one-shot options, immediate input, activity history/continuation and notifications", async (t) => {
   const { h, calls, events, notifications, request, app } = await fixture(t);
   assert.equal((await request("/api/activities", "GET", undefined, false)).status, 401);
-  assert.equal((await request("/api/state")).data.version, "0.8.1");
+  assert.equal((await request("/api/state")).data.version, VERSION);
   const a = await app(); assert.equal("queued" in a.hello, false); assert.equal("tasks" in a.hello, false);
   assert.equal((await request("/api/first-chat", "POST", { device: "web" })).status, 400);
   assert.equal((await request("/api/first-chat", "POST", { device: "mac" })).data.started, true);

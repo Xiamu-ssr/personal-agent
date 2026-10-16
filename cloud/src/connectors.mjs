@@ -7,6 +7,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import registry from "../connectors/index.mjs";
 import { writePrivateJson } from "./private-json.mjs";
 import { config, VERSION } from "./config.mjs";
+import { accountQuota, clearAccountQuota, secretPreview } from "../connectors/_shared/query-accounts.mjs";
 
 export const SECRET_MASK = "••••";
 export class ConnectorError extends Error {
@@ -121,13 +122,25 @@ export class ConnectorManager {
     return this.redact(out, this.secrets(name, [values]));
   }
 
-  list() {
+  list({ forApp = false } = {}) {
     const installed = [], catalog = [];
     for (const definition of this.definitions.values()) {
       const accounts = this.accounts.get(definition.name) || [];
       const item = { name: definition.name, title: definition.title, description: definition.description, icon: `/api/connectors/${definition.name}/icon`,
         fields: definition.fields, multiAccount: definition.multiAccount, status: accounts.length ? "on" : "off" };
-      if (accounts.length) installed.push({ ...item, accounts: accounts.map((a) => ({ ...this.publicAccount(a), values: this.maskedValues(definition.name, a.values) })) });
+      const state = definition.quotaPooling && accounts.length ? this.readState(definition.name) : {};
+      if (accounts.length) installed.push({ ...item, accounts: accounts.map((a) => {
+        const record = this.publicAccount(a), quota = definition.quotaPooling && accountQuota(state, a);
+        if (quota) Object.assign(record, { status: "quota", checkedAt: quota.checkedAt, error: "这个账号额度已耗尽，查询将尝试备用账号；额度恢复或充值后可点「重新测试」" });
+        // Existing clients render the account label, so credential hints need no App update.
+        // Management/model tools keep the original label and fully masked values.
+        if (forApp) {
+          const hints = definition.fields.filter((field) => field.type === "secret" && a.values[field.key])
+            .map((field) => `${field.label}: ${secretPreview(a.values[field.key])}`);
+          if (hints.length) record.label += " · " + hints.join(" · ");
+        }
+        return { ...record, values: this.maskedValues(definition.name, a.values) };
+      }) });
       else catalog.push(item);
     }
     return this.redact({ installed, catalog });
@@ -190,6 +203,7 @@ export class ConnectorManager {
       const values = this.values(name, patch);
       const accounts = this.accounts.get(name);
       if (!this.definition(name).multiAccount && accounts.length) throw new ConnectorError("这个连接器只支持一个账号");
+      if (this.definition(name).quotaPooling && accounts.some((account) => account.values.apiKey === values.apiKey)) throw new ConnectorError("这个 API Key 已经添加过了，请添加不同账号的 Key");
       await this.check(name, values);
       const record = { id: crypto.randomUUID().slice(0, 8), label: this.redact(this.definition(name).label(values), this.secrets(name, [values])), values, status: "ok", checkedAt: Date.now(), error: null };
       if(this.definition(name).install)await this.definition(name).install(this.context(name,[...accounts,record]));
@@ -204,6 +218,7 @@ export class ConnectorManager {
     return this.enqueue(name, async () => {
       const old = this.find(name, id);
       const values = this.values(name, patch, old.values);
+      if (this.definition(name).quotaPooling && this.accounts.get(name).some((account) => account.id !== id && account.values.apiKey === values.apiKey)) throw new ConnectorError("这个 API Key 已经添加过了，请使用不同账号的 Key");
       await this.check(name, values);
       const record = { ...old, label: this.redact(this.definition(name).label(values), this.secrets(name, [values])), values, status: "ok", checkedAt: Date.now(), error: null };
       if(this.definition(name).install)await this.definition(name).install(this.context(name,this.accounts.get(name).map((a)=>a.id===id?record:a)));
@@ -213,6 +228,7 @@ export class ConnectorManager {
         if (state.accounts) delete state.accounts[id];
         this.writeState(name, state);
       }
+      if (this.definition(name).quotaPooling && old.values.apiKey !== values.apiKey) clearAccountQuota(this.context(name, this.accounts.get(name)), id);
       this.save(name, this.accounts.get(name).map((a) => a.id === id ? record : a));
       return this.publicAccount(record);
     });
@@ -222,6 +238,7 @@ export class ConnectorManager {
     return this.enqueue(name, async () => {
       this.find(name, id);
       if(this.accounts.get(name).length===1&&this.definition(name).uninstall)await this.definition(name).uninstall(this.context(name,this.accounts.get(name)));
+      if (this.definition(name).quotaPooling) clearAccountQuota(this.context(name, this.accounts.get(name)), id);
       const state = this.readState(name);
       if (state.accounts) delete state.accounts[id];
       this.writeState(name, state);
@@ -233,7 +250,10 @@ export class ConnectorManager {
   testAccount(name, id) {
     return this.enqueue(name, async () => {
       const record = { ...this.find(name, id), checkedAt: Date.now(), status: "ok", error: null };
-      try { await this.check(name, record.values); } catch (e) { record.status = "error"; record.error = e.message; }
+      try {
+        await this.check(name, record.values);
+        if (this.definition(name).quotaPooling) clearAccountQuota(this.context(name, this.accounts.get(name)), id);
+      } catch (e) { record.status = "error"; record.error = e.message; }
       this.save(name, this.accounts.get(name).map((a) => a.id === id ? record : a));
       return this.publicAccount(record);
     });

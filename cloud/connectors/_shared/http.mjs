@@ -6,9 +6,13 @@ export async function requestJson(url, apiKey, body, { fetchImpl = fetch, title 
       ...(body && { body: JSON.stringify(body) }), signal: AbortSignal.timeout(20_000), redirect: "error" });
   } catch { throw new Error(`${title}连接超时或网络不可用，请稍后重试`); }
   if (!response.ok) {
-    if ([401, 403].includes(response.status)) throw new Error(`${title} API Key 无效或权限不足，请重新生成`);
-    if ([402, 429, 432, 433].includes(response.status)) throw new Error(`${title}额度不足或请求过于频繁，请稍后重试`);
-    throw new Error(`${title}服务暂不可用（HTTP ${response.status}）`);
+    const message = [401, 403].includes(response.status) ? `${title} API Key 无效或权限不足，请重新生成` :
+      [402, 429, 432, 433].includes(response.status) ? `${title}额度不足或请求过于频繁，请稍后重试` : `${title}服务暂不可用（HTTP ${response.status}）`;
+    const error = new Error(message);
+    error.status = response.status;
+    // Private classification metadata: callers return the translated message, not this raw body.
+    try { error.data = await response.json(); } catch {}
+    throw error;
   }
   try {
     const data = await response.json();

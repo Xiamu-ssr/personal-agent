@@ -3,28 +3,38 @@ import assert from "node:assert/strict";
 import { contextPolicy, inputUsage } from "../src/context-policy.mjs";
 import { MODELS, modelEnvironment } from "../src/app-settings.mjs";
 
-test("200K CLI window reserves 20K output and 13K summary for a 167K trigger", () => {
+test("305K CLI window reserves 20K output and 13K summary for a 272K trigger", () => {
   const p = contextPolicy("anthropic/claude-haiku-5.5", {});
   assert.equal(p.canonical, "claude-haiku-5-5");
   assert.equal(p.maxOutputTokens, 128000);
-  assert.equal(p.windowTokens, 200000);
+  assert.equal(p.windowTokens, 305000);
+  assert.equal(p.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "305000");
   const effective = p.windowTokens - Math.min(p.maxOutputTokens, 20000);
-  assert.equal(Math.min(Math.floor(effective * Number(p.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE) / 100), effective - 13000), 167000);
+  assert.equal(Math.min(Math.floor(effective * Number(p.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE) / 100), effective - 13000), 272000);
   assert.equal(p.inputLimit - p.triggerTokens, 5000);
   assert.equal(p.env.DISABLE_AUTO_COMPACT, "0");
 });
 
-test("all four settings models use a fixed 200K policy; obsolete env overrides have no effect", () => {
+test("all five settings models use a 272K input trigger without the legacy 200K clamp", () => {
   for (const { id: model } of MODELS) {
     const p = contextPolicy(model, { AGENT_CONTEXT_INPUT_LIMIT: "1", AGENT_MAX_OUTPUT_TOKENS: "1" });
     assert.equal(p.canonical, model === "anthropic/claude-opus-5.5" ? "claude-opus-5-5" : "claude-haiku-5-5");
-    assert.equal(p.windowTokens, 200000);
-    assert.equal(p.triggerTokens, 167000);
+    assert.equal(p.windowTokens, 305000);
+    assert.equal(p.triggerTokens, 272000);
+    assert.equal(p.inputLimit, 277000);
     assert.equal(p.maxOutputTokens, 128000);
-    assert.equal(p.env.CLAUDE_CODE_DISABLE_1M_CONTEXT, "1");
+    assert.equal(p.env.CLAUDE_CODE_DISABLE_1M_CONTEXT, "0");
     assert.equal("CLAUDE_CODE_CURRIED_TRINKET" in p.env, false);
   }
   assert.throws(() => contextPolicy("unknown"), /不支持/);
+});
+
+test("custom services retain the conservative 100K trigger until their context capability is known", () => {
+  const p = contextPolicy("custom-model", { custom: true });
+  assert.equal(p.maxOutputTokens, 8192);
+  assert.equal(p.windowTokens, 121192);
+  assert.equal(p.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "121192");
+  assert.equal(p.windowTokens - Math.min(p.maxOutputTokens, 20000) - 13000, 100000);
 });
 
 test("Opus model environment uses the provider id for all families, subagents and permission classifiers", () => {

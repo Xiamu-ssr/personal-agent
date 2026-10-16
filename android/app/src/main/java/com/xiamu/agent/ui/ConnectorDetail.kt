@@ -26,6 +26,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -83,6 +84,30 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
                     }
                 }
                 if (loadError.isNotBlank() || error.isNotBlank()) item { ErrorNote(error.ifBlank { loadError }) }
+                if (connector.usesSwitch) item {
+                    Row(Modifier.fillMaxWidth().card().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("连接服务", fontSize = Type.Body, fontWeight = FontWeight.Medium, color = Pal.Ink)
+                            Text(if (busy != null) "处理中…" else if (connector.accounts.isEmpty()) "免费，无需账号或密钥" else "已连接，豆豆可以按需查询",
+                                fontSize = Type.Secondary, color = Pal.Muted, modifier = Modifier.padding(top = 6.dp))
+                        }
+                        Switch(checked = connector.accounts.isNotEmpty(), enabled = busy == null,
+                            modifier = Modifier.testTag("connector-toggle-${connector.name}"), onCheckedChange = { enabled ->
+                                if (busy == null && enabled != connector.accounts.isNotEmpty()) {
+                                    busy = "connection"; error = ""
+                                    scope.launch {
+                                        try {
+                                            if (enabled) gateway.save(connector.name, null, org.json.JSONObject())
+                                            else connector.accounts.firstOrNull()?.let { gateway.delete(connector.name, it.id) }
+                                            connectionsChanged()
+                                        } catch (e: Exception) { if (e is CancellationException) throw e; error = e.message ?: "连接失败" }
+                                        finally { busy = null }
+                                    }
+                                }
+                            })
+                    }
+                }
+                if (!connector.usesSwitch) {
                 item { SectionTitle("账号") { Text("${connector.accounts.size} 个", fontSize = Type.Label, color = Pal.Muted) } }
                 if (connector.accounts.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().card().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -121,8 +146,9 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
                         }
                     }
                 }
+                }
             }
-            Column(Modifier.navigationBarsPadding().fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+            if (!connector.usesSwitch) Column(Modifier.navigationBarsPadding().fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
                 when {
                     connector.fields == null -> FooterNote("账号表单即将支持")
                     !connector.multiAccount && connector.accounts.isNotEmpty() -> FooterNote("这个连接器支持一个账号，可以编辑或删除后重新添加")

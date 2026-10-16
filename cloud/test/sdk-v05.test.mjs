@@ -42,7 +42,7 @@ function fixture(t,api,release=()=>{}) {
   return {h,wire,events,optionsUsed,spawned,until,turn};
 }
 
-test("真实 SDK 四模型原地切换，原会话和静态自定义系统提示词保留",{timeout:60_000},async(t)=>{
+test("真实 SDK 五模型原地切换，原会话和静态自定义系统提示词保留",{timeout:60_000},async(t)=>{
   putAppSettings(config.root,{...DEFAULT_SETTINGS,permissionMode:"bypassPermissions"});
   const api=await fakeAnthropic();
   const f=fixture(t,api);
@@ -55,17 +55,17 @@ test("真实 SDK 四模型原地切换，原会话和静态自定义系统提示
     assert.equal(api.requests.at(-1).model,row.id);
     assert.equal(f.h.main.sessionId,session);
     assert.ok(hasInput(api.requests.at(-1),"V05_FIRST_CONTEXT"));
-    assert.equal(result.modelUsage[row.id].contextWindow,200000);
+    assert.equal(result.modelUsage[row.id].contextWindow,1000000);
     assert.equal(api.requests.at(-1).output_config.effort,"max");
   }
   assert.equal(f.optionsUsed.length,1,"model changes use streaming control without restarting the query");
   assert.equal(typeof f.optionsUsed[0].systemPrompt,"string");
   assert.ok(api.requests[0].system.some((b)=>b.text===f.optionsUsed[0].systemPrompt));
   assert.equal(f.h.main.settings.model,MODELS.at(-1).id);
-  assert.ok(f.spawned.every((s)=>s.subagent===s.autoModel&&s.backgroundClassifier===s.autoModel&&s.window==="200000"));
+  assert.ok(f.spawned.every((s)=>s.subagent===s.autoModel&&s.backgroundClassifier===s.autoModel&&s.window==="305000"));
 });
 
-test("四模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用内置压缩并恢复 max",{timeout:120_000},async(t)=>{
+test("五模型真实 CLI 均在 272K 触发压缩，保留输出上限并恢复 max",{timeout:120_000},async(t)=>{
   for(const row of MODELS) await t.test(row.id,{timeout:40_000},async(t)=>{
     putAppSettings(config.root,{model:{ provider: "zenmux", id: row.id },permissionMode:"bypassPermissions"});
     let normal=0;
@@ -73,14 +73,14 @@ test("四模型真实 CLI 均为 200K，低于 167K 不压缩，超过后使用�
       if(compactRequest(body))return {};
       const turn=hasInput(body,"V05_WINDOW_THIRD")?3:hasInput(body,"V05_WINDOW_SECOND")?2:1,id="window_say_"+turn;
       if(!resultFor(body,id))return {...toolReply(id,"mcp__doudou__say",{text:"OK"}),usage:{input_tokens:0,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:0}};
-      return {...textReply("OK"),usage:{input_tokens:1000,cache_creation_input_tokens:2000,cache_read_input_tokens:++normal===1?162000:164001}};
+      return {...textReply("OK"),usage:{input_tokens:1000,cache_creation_input_tokens:2000,cache_read_input_tokens:++normal===1?268000:269001}};
     });
     const f=fixture(t,api);
     const first=await f.turn("V05_WINDOW_FIRST");
-    assert.equal(first.subtype,"success");assert.equal(first.modelUsage[row.id].contextWindow,200000);
+    assert.equal(first.subtype,"success");assert.equal(first.modelUsage[row.id].contextWindow,1000000);
     assert.equal(first.modelUsage[row.id].maxOutputTokens,128000);
     assert.equal(api.requests[0].thinking.type,"adaptive");
-    if(row.id==="anthropic/claude-opus-5.5")assert.ok(Math.abs(first.modelUsage[row.id].costUSD-.04656)<1e-10,"CLI uses the Opus 5.5 profile's pricing");
+    if(row.id==="anthropic/claude-opus-5.5")assert.ok(Math.abs(first.modelUsage[row.id].costUSD-.06776)<1e-10,"CLI uses the Opus 5.5 profile's pricing: "+first.modelUsage[row.id].costUSD);
     assert.equal((await f.turn("V05_WINDOW_SECOND")).subtype,"success");
     assert.equal(api.requests.filter(compactRequest).length,0);
     assert.equal((await f.turn("V05_WINDOW_THIRD")).subtype,"success");

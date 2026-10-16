@@ -16,7 +16,7 @@ test("settings defaults, partial updates, persisted private file and strict vali
   const value=getAppSettings(root);assert.deepEqual(value.model,DEFAULT_SETTINGS.model);assert.equal(value.permissionMode,"auto");
   assert.deepEqual(value.model,{provider:"zenmux",id:"anthropic/claude-haiku-5.5"});
   const models=value.providers[0].models;
-  assert.deepEqual(models.map((m)=>m.id),["anthropic/claude-haiku-5.5","anthropic/claude-opus-5.5","z-ai/glm-5.3-flash","z-ai/glm-5.3-flashx"]);
+  assert.deepEqual(models.map((m)=>m.id),["anthropic/claude-haiku-5.5","anthropic/claude-opus-5.5","z-ai/glm-5.3-flash","z-ai/glm-5.3-flashx","xiaomi/mimo-v2.6-pro"]);
   assert.deepEqual(models[1],{id:"anthropic/claude-opus-5.5",name:"Claude Opus 5.5",note:"消耗约 40×；缓存读约 20×"});
   assert.deepEqual(models.map((m)=>m.id),MODELS.map((m)=>m.id));assert.ok(models.every((m)=>m.name&&m.note&&!m.note.includes("\n")));
   putAppSettings(root,{model:{ provider: "zenmux", id: MODELS[1].id }});assert.deepEqual(readAppSettings(root),{model:{provider:"zenmux",id:MODELS[1].id},permissionMode:"auto"});
