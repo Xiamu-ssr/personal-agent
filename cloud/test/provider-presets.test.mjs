@@ -26,6 +26,9 @@ test('the shared catalog has usable, unique provider templates and distinguishes
   assert.deepEqual(textOnly.input, ['text']);
   assert.equal(multimodal.compat.maxTokensField, 'max_tokens');
   assert.equal(multimodal.compat.requiresReasoningContentOnAssistantMessages, true);
+  for (const id of ['deepseek-ai/DeepSeek-V4.1-Flash', 'zai-org/GLM-5.3-Flash', 'zai-org/GLM-5.3']) {
+    assert.equal(nativeModelDefinition(silicon, silicon.models.find(m => m.id === id)).contextWindow, 1048576);
+  }
   const gemini = presets.find(p => p.id === 'gemini');
   assert.equal(nativeModelDefinition(gemini, gemini.models[0]).compat.requiresReasoningContentOnAssistantMessages, false);
 });

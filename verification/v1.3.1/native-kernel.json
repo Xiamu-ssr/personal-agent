@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "kernel": "openclaw",
+  "version": "2026.10.4",
+  "nativeMemoryRecall": true,
+  "nativeToolRoundTrip": true,
+  "sameMainSession": true,
+  "restartContinuation": true,
+  "nativeStop": true,
+  "modelRequests": 5
+}

@@ -29,6 +29,8 @@
 
 **当前版本：[v1.3.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.3.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
+云端已更新至 1.3.1，修正动态执行连接的 5 分钟静默超时、模型上下文和重复工具目录；客户端继续使用 1.3.0。[查看验证记录](verification/v1.3.1/README.md)。
+
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
 | Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.3.0/doudou-1.3.0.apk) | Android 9 或更新版本 |

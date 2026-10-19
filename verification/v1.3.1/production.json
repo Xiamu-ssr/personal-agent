@@ -1,0 +1,53 @@
+{
+  "version": "1.3.1",
+  "status": "done",
+  "nativeToolResults": 32,
+  "nativeToolErrors": [],
+  "nestedToolCalls": 0,
+  "elapsedSeconds": 338,
+  "tools": {
+    "read": 2,
+    "exec": 11,
+    "web_fetch": 4,
+    "tavily.search": 11,
+    "view_image": 1,
+    "write": 2
+  },
+  "failedTools": 0,
+  "newPosts": 2,
+  "hasFinalResult": true,
+  "posts": {
+    "newPosts": 2,
+    "allHaveBodyAndSource": true,
+    "decodedImages": [
+      {
+        "format": "jpeg",
+        "width": 600,
+        "height": 400
+      },
+      {
+        "format": "png",
+        "width": 1132,
+        "height": 1031
+      }
+    ]
+  },
+  "externalApi": {
+    "responses": [
+      200,
+      200
+    ],
+    "https": true,
+    "version": "1.3.1",
+    "feedReadable": true,
+    "postsWithSources": true
+  },
+  "deployment": {
+    "ready": true,
+    "protocol": "2",
+    "persistentConfigurationPreserved": true,
+    "singleToolCatalog": true,
+    "selectedContextWindow": 1048576,
+    "privateOfflineBackupCreated": true
+  }
+}

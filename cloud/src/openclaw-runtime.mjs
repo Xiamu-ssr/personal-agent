@@ -11,6 +11,7 @@ import { listProviders, providerRecord } from './providers.mjs';
 import { readAppSettings } from './app-settings.mjs';
 import { nativeModelDefinition } from './provider-presets.mjs';
 import { writePrivateJson } from './private-json.mjs';
+import { openResponse } from './openresponses.mjs';
 export const MAIN_SESSION = 'agent:main:main';
 export class OpenClawRuntime {
  constructor({root=config.root,port=config.gatewayPort,log=()=>{},env=process.env}={}) {
@@ -43,7 +44,7 @@ export class OpenClawRuntime {
     maxConcurrent:2,heartbeat:{every:'0m'},compaction:{mode:'safeguard',memoryFlush:{enabled:true}},sandbox:{mode:'off'}},entries:{main:{name:config.agentName}}},
    session:{dmScope:'main',reset:{mode:'none'}},
    models:{mode:'replace',catalogRefresh:{enabled:false},providers},update:{checkOnStart:false},
-   tools:{profile:'full',deny:['sessions_spawn','agents_list','cron','browser','web_search'],exec:{security:'full',ask:'off'}},
+   tools:{profile:'full',toolSearch:false,deny:['sessions_spawn','agents_list','cron','browser','web_search'],exec:{security:'full',ask:'off'}},
    plugins:{allow:['doudou'],load:{paths:[path.join(CODE,'openclaw-plugin')]},entries:{doudou:{enabled:true}}},
   });
  }
@@ -67,24 +68,7 @@ export class OpenClawRuntime {
  }
  async respond(input,{sessionKey=MAIN_SESSION,signal,onText=()=>{}}={}) {
   if(!this.ready)throw new Error('豆豆内核正在启动，请稍后重试');
-  const res=await fetch(this.url+'/v1/responses',{method:'POST',signal,headers:{authorization:`Bearer ${this.token}`,'content-type':'application/json','x-openclaw-session-key':sessionKey},body:JSON.stringify({model:'openclaw/main',input,stream:true})});
-  if(!res.ok)throw new Error(`OpenClaw HTTP ${res.status}`);
-  let pending='',output='',completed=false,usage;const decoder=new TextDecoder();
-  for await(const chunk of res.body) {
-   pending+=decoder.decode(chunk,{stream:true});
-   pending=pending.replace(/\r\n/g,'\n');
-   let end;
-   while((end=pending.indexOf('\n\n'))>=0){const frame=pending.slice(0,end);pending=pending.slice(end+2);
-    const data=frame.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trim()).join('\n');
-    if(!data||data==='[DONE]')continue;
-    const event=JSON.parse(data);
-    if(event.type==='response.output_text.delta'){output+=event.delta||'';onText(event.delta||'');}
-    if(event.type==='response.completed'){completed=true;usage=event.response?.usage;}
-    if(event.type==='response.failed'||event.type==='error')throw new Error(event.response?.error?.message||event.error?.message||'OpenClaw 执行失败');
-   }
-  }
-  if(!completed)throw new Error('OpenClaw 响应中断');
-  return {text:output.trim(),usage};
+  return openResponse(this.url,{token:this.token,sessionKey,input,signal,onText});
  }
  async abort(sessionKey) { if(!this.rpcReady)throw new Error('内核停止接口尚未就绪');return this.client.request('chat.abort',{sessionKey}); }
  async reload() {this.configure();}

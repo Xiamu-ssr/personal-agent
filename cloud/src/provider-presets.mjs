@@ -9,8 +9,8 @@ export const PROVIDER_PRESETS = [
     id: 'siliconflow', name: '硅基流动', protocol: 'openai', baseUrl: 'https://api.siliconflow.cn/v1',
     hint: '已预填常用模型，可以增删。', docsUrl: 'https://docs.siliconflow.cn/docs/api/chat-completions-post',
     models: [
-      model('deepseek-ai/DeepSeek-V4.1-Flash', 'DeepSeek V4.1 Flash', vision),
-      model('zai-org/GLM-5.3-Flash', 'GLM 5.3 Flash', vision),
+      model('deepseek-ai/DeepSeek-V4.1-Flash', 'DeepSeek V4.1 Flash', { ...vision, contextWindow: 1048576 }),
+      model('zai-org/GLM-5.3-Flash', 'GLM 5.3 Flash', { ...vision, contextWindow: 1048576 }),
       model('Qwen/Qwen3.6-35B-A3B', 'Qwen 3.6 35B A3B', vision),
       model('Qwen/Qwen3.6-27B', 'Qwen 3.6 27B', vision),
       model('Qwen/Qwen3.5-35B-A3B', 'Qwen 3.5 35B A3B', vision),
@@ -18,7 +18,7 @@ export const PROVIDER_PRESETS = [
       model('Qwen/Qwen3.5-4B', 'Qwen 3.5 4B', vision),
       model('Qwen/Qwen3-VL-8B-Instruct', 'Qwen 3 VL 8B', { vision: true }),
       model('moonshotai/Kimi-K2.7-Code', 'Kimi K2.7 Code', vision),
-      model('zai-org/GLM-5.3', 'GLM 5.3', { reasoning: true }),
+      model('zai-org/GLM-5.3', 'GLM 5.3', { reasoning: true, contextWindow: 1048576 }),
     ],
   },
   {

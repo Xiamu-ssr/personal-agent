@@ -7,8 +7,8 @@ const root=fs.mkdtempSync(path.join(os.tmpdir(),'doudou-v1-native-'));
 process.env.AGENT_ROOT=root;process.env.AGENT_TOKEN='local-native-test';process.env.AGENT_PORT='14441';process.env.OPENCLAW_PORT='18791';
 const fake=await fakeAnthropic((body,index)=>{
  const names=body.tools?.map(t=>t.name)||[];
- assert.ok(names.includes('tool_call') && JSON.stringify(body.system).includes('doudou_call'),'Doudou plugin was not admitted');
- if(index===0)return {stop_reason:'tool_use',content:[{type:'tool_use',id:'tool_native_1',name:'tool_call',input:{id:'doudou_call',args:{name:'goals.put',args:{name:'原生工具验证',title:'原生工具验证',status:'进行中',progress:10,body:'由真实 OpenClaw 工具循环写入'}}}}]};
+ assert.ok(names.includes('doudou_call') && !names.includes('tool_call'),'Doudou tools must expose one invocation layer');
+ if(index===0)return {stop_reason:'tool_use',content:[{type:'tool_use',id:'tool_native_1',name:'doudou_call',input:{name:'goals.put',args:{name:'原生工具验证',title:'原生工具验证',status:'进行中',progress:10,body:'由真实 OpenClaw 工具循环写入'}}}]};
  if(index===4)return new Promise(resolve=>setTimeout(()=>resolve({content:[{type:'text',text:'延时运行'}]}),8000));
  if(index===1){assert.ok(JSON.stringify(body.messages).includes('tool_result'));return {content:[{type:'text',text:'原生执行完成，暗号青竹'}]};}
  assert.ok(JSON.stringify(body.messages).includes('暗号青竹'),'main session continuity lost');

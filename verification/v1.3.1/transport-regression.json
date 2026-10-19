@@ -1,0 +1,13 @@
+{
+  "silentIntervalMs": 305000,
+  "baseline": {
+    "ok": false,
+    "message": "terminated",
+    "cause": "UND_ERR_BODY_TIMEOUT",
+    "elapsedMs": 301466
+  },
+  "fixed": {
+    "ok": true,
+    "elapsedMs": 305012
+  }
+}
