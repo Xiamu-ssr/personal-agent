@@ -292,7 +292,6 @@ struct SayCardView:View {
             cardButton(icon:"laptopcomputer",style:.capability(capability ?? "computer_use"),title:capability.flatMap { c in Capabilities.all.first { $0.name == c }?.title } ?? "本机能力",subtitle:"在这台 Mac 上授权") {
                 Nav.shared.push(.connectors(tab:0,focus:capability)); AppDelegate.openMain?(); MenuController.shared.close()
             }
-        case .browser: BrowserCard(compact:compact)
         case .link(let url,let title,let description,let image):
             if let u=DataPath.http(url) {
                 Link(destination:u) {

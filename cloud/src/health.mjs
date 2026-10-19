@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { readJson, dateIn } from "./store.mjs";
 import { writePrivateJson } from "./connectors.mjs";
@@ -7,7 +6,6 @@ import { shiftDate } from "./calendar-context.mjs";
 const fields={sleepMinutes:"sleep_minutes",restingHr:"resting_heart_rate_bpm",hrv:"hrv_ms",steps:"steps"};
 const emptyDay=(date)=>({date,sleepMinutes:null,restingHr:null,hrv:null,steps:null});
 const round=(n)=>typeof n==="number"&&Number.isFinite(n)&&n>=0?Math.round(n):null;
-const plain=(s)=>s.replace(/!\[[^\]]*\]\([^)]*\)/g,"").replace(/\[([^\]]+)\]\([^)]*\)/g,"$1").replace(/<[^>]+>/g,"").replace(/^\s*(?:[-*+]\s+|\d+\.\s+|>\s*)/,"").replace(/[*_`]/g,"").trim();
 
 export function mergeHealthDays(existing,items,today) {
   const byDate=new Map((Array.isArray(existing)?existing:[]).filter((d)=>/^\d{4}-\d{2}-\d{2}$/.test(d.date)).map((d)=>[d.date,{...emptyDay(d.date),...d}]));
@@ -72,16 +70,6 @@ export class HealthSync {
   view() {
     const saved=this.stored(),today=dateIn(this.timezone,this.clock()),byDate=new Map((saved.days||[]).map((d)=>[d.date,d]));
     return {syncedAt:saved.syncedAt||null,device:saved.device||null,note:saved.note||null,
-      days:Array.from({length:7},(_,n)=>byDate.get(shiftDate(today,n-6))||emptyDay(shiftDate(today,n-6))),
-      records:this.records()};
-  }
-  records() {
-    const dir=path.join(this.root,"data/memory/health");
-    if(!fs.existsSync(dir)||fs.lstatSync(dir).isSymbolicLink())return [];
-    return fs.readdirSync(dir,{withFileTypes:true}).filter((e)=>e.isFile()&&e.name.endsWith(".md")).map((e)=> {
-      const lines=fs.readFileSync(path.join(dir,e.name),"utf8").split(/\r?\n/),updated=lines[0]?.match(/^更新：\s*(\d{4}-\d{2}-\d{2})/)?.[1]||null;
-      const preview=lines.slice(1).filter((s)=>!/^\s*#/.test(s)).map(plain).filter(Boolean).slice(0,2).join("\n");
-      return {path:`data/memory/health/${e.name}`,title:path.basename(e.name,".md"),updated,preview};
-    }).sort((a,b)=>(b.updated||"").localeCompare(a.updated||"")||a.title.localeCompare(b.title));
+      days:Array.from({length:7},(_,n)=>byDate.get(shiftDate(today,n-6))||emptyDay(shiftDate(today,n-6)))};
   }
 }

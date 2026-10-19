@@ -38,9 +38,9 @@ export function readGoal(root, name, { done = false, timezone = "Asia/Shanghai",
   let raw;
   try { raw = fs.readFileSync(localFile(root, rel, "data/goals"), "utf8"); } catch { throw problem("没有这个目标", 404); }
   const { meta, body } = frontmatter(raw), progress = Number(meta.progress);
-  if (!meta.title || !["健康", "人际", "金融", "事业", "兴趣", "效率", "其他"].includes(meta.domain) || !["追踪中", "暂停", "完成", "放弃"].includes(meta.status) || !Number.isFinite(progress) || progress < 0 || progress > 100 || meta.due && !/^\d{4}-\d{2}-\d{2}$/.test(meta.due)) throw problem("目标 frontmatter 不完整或字段不正确");
-  cronFields(meta.cadence);
-  return { name, path: rel, ...meta, progress, body, nextCheckin: !done && meta.status === "追踪中" ? nextCron(meta.cadence, timezone, now) : null };
+  if (!meta.title || !["未开始", "进行中", "等待条件", "待用户反馈", "已完成", "暂停", "取消"].includes(meta.status) || !Number.isFinite(progress) || progress < 0 || progress > 100 || meta.due && !/^\d{4}-\d{2}-\d{2}$/.test(meta.due)) throw problem("目标 frontmatter 不完整或字段不正确");
+  if (meta.cadence) cronFields(meta.cadence);
+  return { name, path: rel, ...meta, progress, body, nextCheckin: !done && ["进行中", "等待条件"].includes(meta.status) && meta.cadence ? nextCron(meta.cadence, timezone, now) : null };
 }
 export function parseIdeas(raw) {
   const revision = digest(raw), groups = [];
@@ -63,10 +63,12 @@ export class Content {
     Object.assign(this, { root, bus, timezone, clock });
     this.feedIndex = new Map(this.feed({ days: 31 }).items.map((i) => [i.path, i.title]));
   }
-  read(rel) { return fs.readFileSync(localFile(this.root, rel, "data"), "utf8"); }
+  read(rel) { this.allowed(rel); return fs.readFileSync(localFile(this.root, rel, ""), "utf8"); }
+  allowed(rel) { if(typeof rel!=="string" || !/^(?:data\/|memory\/|SOUL\.md$|USER\.md$|MEMORY\.md$)/.test(rel) || /[\\\x00-\x1f]/.test(rel) || rel.split("/").includes("..")) throw problem("文件路径不正确"); }
   write(rel, text) {
-    const file = path.resolve(this.root, rel), base = path.join(fs.realpathSync(this.root), "data");
-    if (!inside(file, path.join(this.root, "data")) || !inside(resolvedPath(file), base)) throw problem("文件路径不在 data/ 内");
+    this.allowed(rel);
+    const file = path.resolve(this.root, rel);
+    if (!inside(resolvedPath(file), fs.realpathSync(this.root))) throw problem("文件路径不正确");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = `${file}.${crypto.randomUUID()}.tmp`;
     fs.writeFileSync(tmp, text, { mode: 0o600 });
@@ -178,11 +180,22 @@ export class Content {
     files("data/library/media", media);
     return { artifacts: artifacts.sort((a, b) => b.mtime - a.mtime), media: media.sort((a, b) => b.mtime - a.mtime) };
   }
+  putGoal({name,title,status="未开始",progress=0,body="",domain="",cadence="",due=""}) {
+    if(typeof name!=="string" || !name || /[\\/\x00-\x1f]/.test(name)||name===".."||name===".")throw problem("目标名不正确");
+    if(typeof body!=="string"||body.length>40000)throw problem("目标正文过长");
+    const meta={title,status,progress,domain,cadence,due};
+    const raw="---\n"+Object.entries(meta).filter(([,v])=>v!=="").map(([k,v])=>`${k}: ${JSON.stringify(v)}`).join("\n")+"\n---\n"+body+"\n";
+    // Validate before replacing an existing goal.
+    if(!title || !["未开始","进行中","等待条件","待用户反馈","已完成","暂停","取消"].includes(status) || !Number.isFinite(progress)||progress<0||progress>100)throw problem("目标状态或进展不正确");
+    if(cadence)cronFields(cadence);
+    this.write(`data/goals/${name}.md`,raw);this.bus.emit({t:"goals_updated"});return this.goal(name);
+  }
   memory() {
-    const list = (rel) => dirs(this.root, rel).filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => ({ name: e.name.slice(0, -3), path: `${rel}/${e.name}` }));
-    let role = "";
-    try { role = this.read("data/soul/角色.md"); } catch {}
-    return { soul: { path: "data/soul/角色.md", name: role.match(/^[-*]?\s*名字[：:]\s*(.+)/m)?.[1] || "豆豆", personality: role.match(/^[-*]?\s*性格[：:]\s*(.+)/m)?.[1] || "", voice: role.match(/^[-*]?\s*口吻[：:]\s*(.+)/m)?.[1] || "", diary: list("data/soul/diary") },
-      profile: "data/memory/profile/总档.md", categories: dirs(this.root, "data/memory").filter((e) => e.isDirectory()).map((e) => ({ name: e.name, items: list(`data/memory/${e.name}`) })), health: "data/health/days.json" };
+    const items=[];
+    const walk=(rel)=>{for(const e of dirs(this.root,rel)){if(e.isDirectory())walk(`${rel}/${e.name}`);else if(e.isFile()&&e.name.endsWith(".md"))items.push({name:e.name.slice(0,-3),path:`${rel}/${e.name}`});}};
+    walk("memory");items.sort((a,b)=>b.path.localeCompare(a.path));
+    for(const file of ["USER.md","MEMORY.md"])if(fs.existsSync(path.join(this.root,file)))items.unshift({name:file==="USER.md"?"关于你":"长期记忆",path:file});
+    let soul="";try{soul=fs.readFileSync(path.join(this.root,"SOUL.md"),"utf8");}catch{}
+    return {kernel:"openclaw",soul:{name:soul.match(/^[-*]?\s*(?:名字|Name)[：:]\s*(.+)/mi)?.[1]||"豆豆",path:"SOUL.md"},items,health:"data/health/days.json"};
   }
 }

@@ -17,7 +17,7 @@ export function feedDue(settings, timezone, now) {
   return elapsed < length && elapsed % settings.interval === 0;
 }
 export function schedulePrompt(kind, { lastSuccess, goal, prompts = config.prompts, timezone = config.timezone } = {}) {
-  const filename = { feed: "feed.md", goal: "goal-checkin.md", ideas: "ideas.md" }[kind];
+  const filename = { feed: "feed.md", goal: "goal-checkin.md", ideas: "ideas.md", heartbeat: "heartbeat.md" }[kind];
   if (!filename) throw new Error("没有这个安排的提示词");
   const raw = fs.readFileSync(path.join(prompts, filename), "utf8");
   const trigger = raw.search(/^\[(?:动态|目标跟进|点子)\]/m);
@@ -26,7 +26,7 @@ export function schedulePrompt(kind, { lastSuccess, goal, prompts = config.promp
     const formatted = lastSuccess && new Intl.DateTimeFormat("sv-SE", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(lastSuccess));
     body = formatted ? body.replace("<YYYY-MM-DD HH:MM>", formatted) : body.replace(/^(\[动态\])[^\r\n]*/, "$1");
   }
-  if (kind === "goal") body = body.replaceAll("<目标名>", goal);
+  if (kind === "goal") body = body.replaceAll("<目标名>", goal).replaceAll("<Goal ID>", goal);
   return body;
 }
 export function cleanWorkspace(log) {
@@ -52,7 +52,7 @@ export class Schedules {
   jobs() {
     const jobs = readJson(config.scheduleFile, []), overrides = readJson(path.join(config.system, "schedule-overrides.json"), {});
     for (const job of jobs) if (job.kind === "feed") job.enabled = this.content.feedSettings().enabled;
-    for (const goal of this.content.goals().items) if (goal.status === "追踪中") jobs.push({ id: `goal:${goal.name}`, name: `跟进 · ${goal.title}`, kind: "goal", goal: goal.name, cron: goal.cadence, enabled: overrides[`goal:${goal.name}`] !== false });
+    for (const goal of this.content.goals().items) if (["进行中","等待条件"].includes(goal.status) && goal.cadence) jobs.push({ id: `goal:${goal.name}`, name: `跟进 · ${goal.title}`, kind: "goal", goal: goal.name, cron: goal.cadence, enabled: overrides[`goal:${goal.name}`] !== false });
     return jobs;
   }
   list() {
@@ -68,6 +68,7 @@ export class Schedules {
       } else if (value.enabled && job.cron) {
         try { value.nextRun = nextCron(job.cron, config.timezone, now); } catch { value.error = "cron 格式不正确"; }
       }
+      if(value.enabled && job.at)value.nextRun=job.at;
       value.nextRun ||= null;
       return value;
     });
@@ -92,10 +93,10 @@ export class Schedules {
     if (this.active.has(job.id)) return { mode: "skipped", reason: "running" };
     const id = crypto.randomUUID(), label = job.name || job.id;
     let done;
-    if (job.kind === "health-sync" || job.kind === "cleanup" || job.kind === "compact") {
+    if (job.kind === "health-sync" || job.kind === "cleanup") {
       let succeeded = true;
       this.harness.history?.put(id, { title: label, kind: "maintenance", status: "running" });
-      this.harness.running?.set(id, { label, started: Date.now() });
+      this.harness.running?.set(id, { id, label, started: Date.now() });
       this.harness.bus?.emit({ t: "activity", phase: "started", id, title: label, ts: Date.now() });
       this.harness.avatar?.working();
       done = Promise.resolve().then(async () => {
@@ -103,7 +104,7 @@ export class Schedules {
         let message = "已完成", ok = true;
         if (job.kind === "health-sync") message = (await this.health.sync())?.note || "健康同步完成";
         else if (job.kind === "cleanup") message = `已清理 ${cleanWorkspace(this.log)} 个过期草稿目录`;
-        else if (!this.harness.compactMain()) { message = "主聊天正在工作，本次整理跳过"; ok = false; }
+
         const status = ok ? "done" : "stopped";
         this.harness.history?.put(id, { status, endedAt: Date.now(), latestResult: message, summary: message });
         this.harness.bus?.emit({ t: "activity", phase: "done", id, title: label, summary: message, status, ts: Date.now() });
@@ -116,21 +117,22 @@ export class Schedules {
       }).finally(() => { this.harness.running?.delete(id); this.harness.avatar?.settle(succeeded); });
     } else {
       const success = readJson(this.successFile, {});
-      const prompt = ["feed", "goal", "ideas"].includes(job.kind) ? schedulePrompt(job.kind, { lastSuccess: success[job.id], goal: job.goal, prompts: this.prompts }) : job.prompt;
+      const prompt = ["feed", "goal", "ideas", "heartbeat"].includes(job.kind) ? schedulePrompt(job.kind, { lastSuccess: success[job.id], goal: job.goal, prompts: this.prompts }) : job.prompt;
       if (typeof prompt !== "string" || !prompt.trim()) throw new Error("定时安排缺少提示词");
-      done = job.kind === "goal" ? this.harness.runMain(prompt, { id, label: triggerTitle(prompt) }) : this.harness.runIsolated(label, prompt, { id });
+      done = ["goal","heartbeat","reminder"].includes(job.kind) ? this.harness.runMain(prompt, { id, label: triggerTitle(prompt), reportError: false }) : this.harness.runIsolated(label, prompt, { id });
     }
     this.active.set(job.id, { id, done });
     const finished = done.then((result) => {
       if (result?.ok !== false) {
         const success = readJson(this.successFile, {}); success[job.id] = this.clock().toISOString(); writePrivateJson(this.successFile, success);
+        if(job.at){const jobs=readJson(config.scheduleFile,[]);const saved=jobs.find(j=>j.id===job.id);if(saved){saved.enabled=false;writePrivateJson(config.scheduleFile,jobs);}}
       }
       this.content.discoverFeed();
       return result;
     }).finally(() => this.active.delete(job.id));
     this.active.get(job.id).done = finished;
     finished.catch((e) => this.log("scheduled activity failed:", this.harness.connectors?.redact(e.message) || e.message));
-    return { mode: job.kind === "goal" ? "main" : "isolated", id };
+    return { mode: ["goal","heartbeat","reminder"].includes(job.kind) ? "main" : "isolated", id };
   }
   tick() {
     this.content.discoverFeed();
@@ -141,7 +143,7 @@ export class Schedules {
     for (const job of this.jobs()) {
       if (job.enabled === false) continue;
       try {
-        const hit = job.kind === "feed" ? feedDue(settings, config.timezone, now) : job.cron && cronMatches(job.cron, config.timezone, now);
+        const hit = job.kind === "feed" ? feedDue(settings, config.timezone, now) : job.at ? Date.parse(job.at)<=now.getTime() && !readJson(this.successFile,{})[job.id] : job.cron && cronMatches(job.cron, config.timezone, now);
         if (hit) this.run(job).catch((e) => this.log("cron failed:", e.message));
       } catch (e) { this.log(`bad cron for ${job.id}: ${e.message}`); }
     }

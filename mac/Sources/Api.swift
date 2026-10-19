@@ -40,6 +40,7 @@ enum Api {
         }
         var r = URLRequest(url: u, timeoutInterval: 20)
         r.httpMethod = method
+        r.setValue("1", forHTTPHeaderField: "X-Doudou-Protocol")
         if !token.isEmpty { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             r.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -172,10 +173,11 @@ enum Api {
     static func wsRequest(_ role: String) -> URLRequest? {
         guard let base = serverURL(), var parts = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
         parts.scheme = base.scheme?.lowercased() == "https" ? "wss" : "ws"
-        parts.percentEncodedPath += role == "browser" ? "/ws/browser" : "/ws"
-        parts.queryItems = role == "browser" ? nil : [URLQueryItem(name: "role", value: role)]
+        parts.percentEncodedPath += "/ws"
+        parts.queryItems = [URLQueryItem(name: "role", value: role)]
         guard let u = parts.url else { return nil }
         var r = URLRequest(url: u)
+        r.setValue("1", forHTTPHeaderField: "X-Doudou-Protocol")
         r.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         return r
     }

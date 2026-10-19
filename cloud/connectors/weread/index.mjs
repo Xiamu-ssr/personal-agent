@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "../../src/product-tools.mjs";
 import { requestJson, privateResult, apiKeyValues } from "../_shared/http.mjs";
 
 // Audited against Tencent/WeChatReading skills 1.0.5, 2026-10-11.
@@ -28,15 +28,15 @@ export function createWereadConnector({ gateway = WEREAD_GATEWAY, fetchImpl = fe
         catch (e) { return { content: [{ type: "text", text: JSON.stringify(privateResult({ error: e.message }, [values.apiKey], ctx)) }], isError: true }; }
       };
       return [
-        tool("shelf", "查看书架。条目总数为 books.length + albums.length +（mp 非空时 1）；albums 是有声书。", {}, wrap(() => request(values, "/shelf/sync"))),
-        tool("reading_stats", "阅读统计，时长单位为秒，总时长取 totalReadTime；dayAverageReadTime 按自然日平均。baseTime 为 Unix 秒，查询固定自然周期。", {
+        defineTool("shelf", "查看书架。条目总数为 books.length + albums.length +（mp 非空时 1）；albums 是有声书。", {}, wrap(() => request(values, "/shelf/sync"))),
+        defineTool("reading_stats", "阅读统计，时长单位为秒，总时长取 totalReadTime；dayAverageReadTime 按自然日平均。baseTime 为 Unix 秒，查询固定自然周期。", {
           mode: z.enum(["weekly", "monthly", "annually", "overall"]).optional(), baseTime: z.number().int().nonnegative().optional(),
         }, wrap((args) => request(values, "/readdata/detail", args))),
-        tool("highlights", "读取一本书的个人划线原文（不含书签）。书名先用 search_books 找 bookId。", { bookId }, wrap((args) => request(values, "/book/bookmarklist", args))),
-        tool("thoughts", "读取一本书的个人想法和点评；hasMore 时把回包 synckey 传给下一页。bookid 的 i 小写。", {
+        defineTool("highlights", "读取一本书的个人划线原文（不含书签）。书名先用 search_books 找 bookId。", { bookId }, wrap((args) => request(values, "/book/bookmarklist", args))),
+        defineTool("thoughts", "读取一本书的个人想法和点评；hasMore 时把回包 synckey 传给下一页。bookid 的 i 小写。", {
           bookid: bookId, synckey: z.number().int().nonnegative().optional(), count,
         }, wrap((args) => request(values, "/review/list/mine", args))),
-        tool("search_books", "搜索书籍，电子书 scope=10、网文=16、有声书=14、作者=6、全文=12、综合=0。显式选 scope；maxIdx 为翻页偏移。结果分组 scope 不一定等于请求 scope，不能据此过滤。", {
+        defineTool("search_books", "搜索书籍，电子书 scope=10、网文=16、有声书=14、作者=6、全文=12、综合=0。显式选 scope；maxIdx 为翻页偏移。结果分组 scope 不一定等于请求 scope，不能据此过滤。", {
           keyword: z.string().min(1).max(1000), scope: z.union([0, 10, 16, 14, 6, 12, 13, 2, 4].map((n) => z.literal(n))),
           maxIdx: z.number().int().nonnegative().optional(), count,
         }, wrap((args) => request(values, "/store/search", args))),

@@ -7,7 +7,7 @@ struct ConsoleView:View {
             VStack(spacing:7) { AgentAvatar(size:84); Text(ProfileStore.shared.agentName).font(Theme.font(size:20,weight:.semibold))
                 if ChatClient.shared.avatarState == .working { Text(ChatClient.shared.avatarText.isEmpty ? "努力工作中" : ChatClient.shared.avatarText).font(Theme.font(size:12)).foregroundStyle(Theme.sub) }
             }
-            PillTabs(titles:["活动","权限","电脑","定时","记忆"],selection:Binding(get:{Nav.shared.consoleTab},set:{Nav.shared.consoleTab=$0})).padding(6).background(Theme.card,in:Capsule())
+            PillTabs(titles:["活动","设备归属","设备","定时","记忆"],selection:Binding(get:{Nav.shared.consoleTab},set:{Nav.shared.consoleTab=$0})).padding(6).background(Theme.card,in:Capsule())
             Group {
                 switch Nav.shared.consoleTab { case 0: ActivityListView(); case 1: PermissionPanel(); case 2: ComputerPanel(); case 3: SchedulesPanel(); default: MemoryPanel() }
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
@@ -69,27 +69,25 @@ struct ActivityRow:View {
     }
 }
 struct PermissionPanel:View {
-    @Environment(\.interactiveWindow) private var active
-    private var store:AgentSettingsStore { .shared }
+    @State private var role=Prefs.deviceRole
     var body:some View {
-        ScrollView { VStack(alignment:.leading,spacing:15) {
-            Text("权限").font(Theme.titleFont(20)); Text("从下一轮主聊天起生效。关键的对外动作，豆豆会在聊天中先问你。").font(Theme.font(size:13)).foregroundStyle(Theme.sub)
-            if let s=store.snapshot { ForEach(s.permissionModes) { option in
-                Button { Task { await store.selectPermission(option.id) } } label:{ HStack(spacing:15) {
-                    Image(systemName:s.permissionMode == option.id ? "largecircle.fill.circle" : "circle").font(.system(size:22))
-                    VStack(alignment:.leading,spacing:6) { Text(option.label).font(Theme.font(size:16,weight:.medium)); Text(option.note).font(Theme.font(size:12)).foregroundStyle(Theme.sub) }; Spacer()
-                }.card(radius:18,padding:22).contentShape(Rectangle()) }.buttonStyle(.plain).disabled(store.saving)
-            } }
-            if !store.error.isEmpty { Note(text:store.error) }
-        }.padding(28) }.task(id:active) { await store.load(); while active && !Task.isCancelled { do { try await Task.sleep(nanoseconds:3_000_000_000) } catch { return }; await store.load() } }
+        ScrollView { VStack(alignment:.leading,spacing:16) {
+            Text("这台 Mac 属于谁").font(Theme.titleFont(20))
+            ForEach(["owner","agent"],id:\.self) { value in
+                Button { role=value; Prefs.deviceRole=value; DeviceClient.shared.reregister() } label: {
+                    HStack { Image(systemName:role == value ? "largecircle.fill.circle" : "circle"); VStack(alignment:.leading,spacing:6) {
+                        Text(value == "agent" ? "豆豆的设备" : "我的设备").font(Theme.font(size:16,weight:.medium))
+                        Text(value == "agent" ? "可以操作应用、文件与系统" : "默认读取；按明确任务使用 Computer Use").font(Theme.font(size:13)).foregroundStyle(Theme.sub)
+                    }; Spacer() }.card(radius:18,padding:20)
+                }.buttonStyle(.plain)
+            }
+            Note(text:"具体能力在连接应用中授权。豆豆按当前任务和设备归属判断操作范围。")
+        }.padding(28) }
     }
 }
 struct ComputerPanel:View {
     var body:some View {
         ScrollView { VStack(alignment:.leading,spacing:20) {
-            Text("云端浏览器").font(Theme.titleFont(20))
-            BrowserCard()
-            Text("你可以在独立窗口看实时画面，接管登录、填写或点击，再交还豆豆。").font(Theme.font(size:13)).foregroundStyle(Theme.sub)
             Text("在线设备").font(Theme.titleFont(18))
             ForEach(ConnectorStore.shared.devices.filter(\.online)) { d in
                 ListRow(icon:d.icon,title:d.name,subtitle:d.caps.filter(\.enabled).map(\.title).joined(separator:"、"),action:{ Nav.shared.console=false; Nav.shared.push(.devices) })
@@ -133,20 +131,13 @@ struct MemoryPanel:View {
     @State private var error=""
     var body:some View {
         ScrollView { VStack(alignment:.leading,spacing:20) {
-            let soul=data["soul"] as? [String:Any] ?? [:]
             VStack(alignment:.leading,spacing:12) {
-                Text("灵魂").font(Theme.titleFont(20)); Text((soul["name"] as? String ?? "豆豆")+" · "+(soul["personality"] as? String ?? "")).font(Theme.font(size:13)).foregroundStyle(Theme.sub)
-                memoryLink("名字、性格与口吻",path:soul["path"] as? String ?? "data/soul/角色.md",icon:"person.crop.circle")
-                ForEach(Array((soul["diary"] as? [[String:Any]] ?? []).enumerated()),id:\.offset) { _,d in memoryLink(d["name"] as? String ?? "日记",path:d["path"] as? String ?? "",icon:"book.closed") }
-            }.card(radius:20,padding:22)
-            VStack(alignment:.leading,spacing:10) {
-                Text("记忆").font(Theme.titleFont(20))
-                memoryLink("总档",path:data["profile"] as? String ?? "data/memory/profile/总档.md",icon:"person.text.rectangle")
-                ForEach(Array((data["categories"] as? [[String:Any]] ?? []).enumerated()),id:\.offset) { _,c in
-                    let category=c["name"] as? String ?? ""
-                    DisclosureGroup(Theme.category(category).name) { ForEach(Array((c["items"] as? [[String:Any]] ?? []).enumerated()),id:\.offset) { _,i in memoryLink(i["name"] as? String ?? "记忆",path:i["path"] as? String ?? "",icon:"doc.text") } }
+                Text("OpenClaw 记忆").font(Theme.titleFont(20))
+                memoryLink("豆豆的人格",path:"SOUL.md",icon:"person.crop.circle")
+                ForEach(Array((data["items"] as? [[String:Any]] ?? []).enumerated()),id:\.offset) { _,i in
+                    memoryLink(i["name"] as? String ?? "记忆",path:i["path"] as? String ?? "",icon:"doc.text")
                 }
-                memoryLink("健康 · 只读",path:data["health"] as? String ?? "data/health/days.json",icon:"heart")
+                memoryLink("健康 · 只读",path:"data/health/days.json",icon:"heart")
             }.card(radius:20,padding:22)
             if !error.isEmpty { Note(text:error) }
         }.padding(28) }.task(id:ChatClient.shared.filesVersion) { do { data=try await Api.json("/api/memory") } catch { self.error=error.localizedDescription } }
@@ -199,9 +190,6 @@ struct HealthMemoryPage:View {
                         metric("HRV",day["hrv"],unit:"毫秒")
                     }
                 }.card(radius:18,padding:20)
-            }
-            ForEach(Array((data["records"] as? [[String:Any]] ?? []).enumerated()),id:\.offset) { _,r in
-                if let p=r["path"] as? String { ListRow(icon:"doc.text",title:r["name"] as? String ?? "健康记忆",action:{Nav.shared.push(.memoryItem(title:"健康记忆",path:p))}) }
             }
             if !error.isEmpty { Note(text:error) }
         }).task { await load(sync:false) }

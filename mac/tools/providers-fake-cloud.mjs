@@ -16,10 +16,10 @@ const builtin = { id:'zenmux', name:'ZenMux', builtin:true, protocol:'anthropic'
   { id:'z-ai/glm-5.3-flashx', name:'GLM 5.3 FlashX', note:'输入约 3.75×，输出约 2.5×；缓存读约 7.5×' },
 ] };
 let providers = [builtin, { id:'example', name:'示例模型服务', builtin:false, protocol:'anthropic', baseUrl:'https://example.test', keyHint:'abcd', models:[{id:'claude-custom-demo',name:'示例 Claude',note:'适合日常聊天与资料整理'}] }];
-let model = {provider:'zenmux',id:builtin.models[0].id}, permissionMode = 'auto';
+let model = {provider:'zenmux',id:builtin.models[0].id};
 const events = [], requests = [];
-const settings = () => ({ model, permissionMode, providers, permissionModes:[{id:'auto',label:'豆豆判断',note:'需要时再请你确认'},{id:'default',label:'先确认',note:'操作前请你确认'}] });
-const state = () => ({version:'0.8.1',busy:false,chatEmpty:false,avatar:{state:'idle'},activities:[],devices:[]});
+const settings = () => ({model,kernel:'openclaw',providers});
+const state = () => ({version:'1.0.0',busy:false,chatEmpty:false,avatar:{state:'idle'},activities:[],devices:[]});
 const history = [{id:'hello-demo',role:'assistant',source:'say',text:'你好，模型服务可以在设置里添加。',ts:Date.now()}];
 const server = http.createServer(async (req, res) => {
   const p = new URL(req.url, 'http://127.0.0.1').pathname;
@@ -31,13 +31,17 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/settings') {
     if (req.method === 'PUT') {
       if (body.model && !providers.some(v => v.id === body.model.provider && v.models.some(m => m.id === body.model.id))) return send(400,{error:'没有这个模型'});
-      if (body.model) model = body.model; if (body.permissionMode) permissionMode = body.permissionMode; changed();
+      if (body.model) model = body.model; changed();
     }
     return send(200, settings());
   }
   if (p === '/api/state') return send(200,state());
   if (p === '/api/history') return send(200,{items:history});
   if (p === '/api/activities') return send(200,{running:[],recent:[],next:null});
+  if (p === '/api/memory') return send(200,{kernel:'openclaw',soul:{name:'豆豆',path:'SOUL.md'},items:[{name:'关于你',path:'USER.md'},{name:'长期记忆',path:'MEMORY.md'},{name:'今天',path:'memory/2026-10-19.md'}],health:'data/health/days.json'});
+  if (p === '/api/memory/item') return send(200,{path:'MEMORY.md',text:'# 长期记忆\n\n演示数据。来源：本地界面验收；2026-10-19。',readOnly:false});
+  if(p==='/api/goals')return send(200,{items:[],errors:[]});
+  if(p==='/api/ideas')return send(200,{revision:'fixture',groups:[{name:'最近可以试试',items:[{id:'idea',icon:'🌱',title:'用豆豆安排一次短途散步',description:'根据天气与空闲时间选路线。',reply:'帮我安排一次散步'}]}]});
   if (p === '/api/profile') return send(200,{name:'豆豆',userName:'演示用户'});
   if (p === '/api/providers' && req.method === 'POST' || p.startsWith('/api/providers/') && req.method === 'PATCH') {
     const old = req.method === 'PATCH' ? providers.find(v => v.id === decodeURIComponent(p.split('/').pop())) : undefined;

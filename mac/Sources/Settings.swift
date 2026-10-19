@@ -603,7 +603,7 @@ struct ServerAddressEditor:View {
         saving=true;Task {defer{saving=false};do {
             let address=address.trimmingCharacters(in:.whitespacesAndNewlines).trimmingCharacters(in:CharacterSet(charactersIn:"/"))
             let token=try await Api.authenticate(server:address,password:code)
-            ChatClient.shared.stop();CloudBrowserClient.shared.stop();ConnectorStore.shared.reset();ProfileStore.shared.reset();Api.clearCache()
+            ChatClient.shared.stop();ConnectorStore.shared.reset();ProfileStore.shared.reset();Api.clearCache()
             Prefs.server=address;Prefs.token=token;Session.shared.signedIn();dismiss()
         }catch{self.error=error.localizedDescription}}
     }

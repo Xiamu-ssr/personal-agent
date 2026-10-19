@@ -1,0 +1,74 @@
+{
+  "version": "1.0.0",
+  "date": "2026-10-19",
+  "kernel": "openclaw@2026.10.4",
+  "protocol": "1",
+  "automated": {
+    "cloudTests": { "passed": 105, "failed": 0 },
+    "androidDebugTests": { "passed": 158, "failed": 0 },
+    "androidReleaseTests": { "passed": 158, "failed": 0 },
+    "macAssertions": { "providers": 67, "contentAndConversation": 77, "interaction": 66 },
+    "nativeMacFixture": {
+      "modelRequests": 5,
+      "memoryIndexAndRecall": true,
+      "productToolRoundTrip": true,
+      "sameMainSession": true,
+      "restartContinuation": true,
+      "nativeAbort": true
+    },
+    "nativeLinuxSystemdFixture": {
+      "modelRequests": 4,
+      "productToolRoundTrip": true,
+      "sameMainSession": true,
+      "restartContinuation": true
+    }
+  },
+  "migration": {
+    "fullBackupVerifiedBeforeChanges": true,
+    "memoryFiles": 51,
+    "skills": 5,
+    "goals": 1,
+    "sessionsImported": 0,
+    "preservedContentHashesVerified": true,
+    "preservedFiles": {
+      "library": 38,
+      "feed": 130,
+      "ideas": 1,
+      "health": 1,
+      "uploads": 38,
+      "connectorConfiguration": 12,
+      "syncState": 2
+    }
+  },
+  "liveDeployment": {
+    "healthReportsOpenClawReady": true,
+    "oldProtocolStatus": 426,
+    "appWebSocket": true,
+    "contentEndpoints": true,
+    "nativeMemoryItems": 52,
+    "memoryGet": true,
+    "memorySearch": "native FTS, no embedding provider configured",
+    "cloudBrowserRouteStatus": 404,
+    "cloudBrowserUnitAndProfileRemoved": true,
+    "realModelToolRoundTrip": "not verified; fixture checks above do not establish paid-provider availability"
+  },
+  "artifacts": {
+    "android": {
+      "versionCode": 17,
+      "signed": true,
+      "signingCertificateMatches083": true,
+      "sha256": "5881a0b45b5b79e71643b70e008de421057af4d5a2d562c8679a1f2691e394c7"
+    },
+    "mac": {
+      "architectures": ["arm64", "x86_64"],
+      "codeSignatureVerified": true,
+      "mascotAssets": 15,
+      "sha256": "65af07ef10c1ea98ad067170f5b9c1169c5c11b0418ad75309dc91edb37a91f4"
+    }
+  },
+  "limits": [
+    "Native model-loop checks use an isolated HTTP model fixture.",
+    "Actual Android and Mac device permission chains were not verified on physical devices.",
+    "UI screenshots under docs/images/v1.0.0 use isolated loopback data."
+  ]
+}

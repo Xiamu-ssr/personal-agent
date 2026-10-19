@@ -5,7 +5,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import WebSocket from "ws";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { replyMedia, fileType } from "../src/media.mjs";
 import { Harness } from "../src/agent.mjs";
 import { TaskHistory } from "../src/task-history.mjs";
@@ -15,7 +14,6 @@ import { startServer } from "../src/server.mjs";
 import { config } from "../src/config.mjs";
 import { tailJsonl } from "../src/store.mjs";
 import { fakeAnthropic } from "./fake-anthropic.mjs";
-import { nativeHarness, hasInput, resultFor, textReply, toolReply } from "./native-fixture.mjs";
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(testRoot, "media-"));
@@ -36,7 +34,7 @@ async function serve(t, { harness = { busy: false, connectors: new ConnectorMana
   t.after(async () => { for (const socket of sockets) socket.destroy(); server.closeAllConnections(); await new Promise((r) => server.close(r)); });
   return "http://127.0.0.1:" + server.address().port;
 }
-const auth = { Authorization: "Bearer " + config.token };
+const auth = { "X-Doudou-Protocol":"1", Authorization: "Bearer " + config.token };
 const fileUrl = (rel) => "/files/" + rel.split("/").map(encodeURIComponent).join("/");
 
 test("reply media uses case-insensitive extensions, matching MIME, measured size, link names and filename fallback", (t) => {
@@ -179,88 +177,4 @@ test("files serve directory indexes and reject outside-data paths and symlink es
     [fileUrl("data/media-http-escape.txt"), 400], [fileUrl("data/missing.mp4"), 404], ["/files/data/%E0.mp4", 400]]) {
     const res = await request(route); assert.equal(res.status, status, route); await res.arrayBuffer();
   }
-});
-
-test("real SDK say keeps media in chat/hello while turn_end and prose never deliver it", { timeout: 45_000 }, async (t) => {
-  const rel = "data/library/media/native-media.png", text = `MEDIA_REPLY：![图片](${rel})`;
-  put(config.root, rel, "image fixture");
-  let contextFailed = false;
-  const api = await fakeAnthropic((body) => {
-    if (contextFailed) return { error: "Prompt is too long" };
-    if (hasInput(body, "MEDIA_PARTIAL")) {
-      if (!resultFor(body, "media-read")) return { stop_reason: "tool_use", content: [{ type: "text", text },
-        { type: "tool_use", id: "media-read", name: "Read", input: { file_path: rel } }] };
-      contextFailed = true;
-      return { error: "Prompt is too long" };
-    }
-    if (hasInput(body, "MEDIA_ERROR")) return { error: "fictional media fixture failure" };
-    if (hasInput(body, "MEDIA_EMPTY")) return resultFor(body, "media-empty-say") ? textReply("没有附件的回复") : toolReply("media-empty-say", "mcp__doudou__say", { text: "没有附件的回复" });
-    return resultFor(body, "media-say") ? textReply(text) : toolReply("media-say", "mcp__doudou__say", { text });
-  });
-  const runtime = nativeHarness(t, api), { harness, events, until } = runtime;
-  const base = await serve(t, runtime);
-  await harness.send("MEDIA_SUCCESS");
-  await until(() => events.some((e) => e.t === "say" && e.text === text) && !harness.busy);
-  const expected = replyMedia(config.root, text), event = events.find((e) => e.t === "say" && e.text === text);
-  assert.deepEqual(event.media, expected); assert.equal(event.error, undefined);
-  assert.deepEqual(tailJsonl(config.chatLog, 100).find((r) => r.role === "assistant" && r.text === text).media, expected);
-  assert.equal(events.some((e) => e.t === "delta"), false);
-  assert.ok(events.filter((e) => e.t === "turn_end").every((e) => !("media" in e)));
-  const ws = new WebSocket(base.replace("http:", "ws:") + "/ws", { headers: auth });
-  t.after(() => ws.terminate());
-  const received = [], helloPromise = new Promise((resolve) => ws.once("message", (raw) => resolve(JSON.parse(raw))));
-  ws.on("message", (raw) => received.push(JSON.parse(raw)));
-  const hello = await helloPromise;
-  assert.equal(hello.t, "hello"); assert.deepEqual(hello.history.find((r) => r.text === text).media, expected);
-  for (const [prompt, error] of [["MEDIA_EMPTY", false], ["MEDIA_ERROR", true], ["MEDIA_PARTIAL", true]]) {
-    const before = events.filter((e) => e.t === "turn_end").length;
-    await harness.send(prompt);
-    await until(() => events.filter((e) => e.t === "turn_end").length > before && !harness.busy);
-    const end = events.findLast((e) => e.t === "turn_end");
-    assert.equal(Boolean(end.error), error, prompt + ": " + JSON.stringify(end)); assert.equal("media" in end, false);
-    assert.equal("media" in tailJsonl(config.chatLog, 100).findLast((r) => r.role === "assistant"), false);
-  }
-  assert.equal(tailJsonl(config.chatLog, 100).filter((r) => r.role === "assistant" && r.text === text && r.media?.length).length, 1);
-  assert.equal(tailJsonl(config.chatLog, 100).some((r) => r.partial), false);
-  await until(() => received.filter((e) => e.t === "turn_end").length === 3);
-  assert.ok(received.filter((e) => e.t === "turn_end").every((e) => !("media" in e)));
-  await harness.inputChain;
-});
-
-test("completed task transcript results and latest-result fallback get media; running, failed and stopped tasks omit it", (t) => {
-  const root = fixture(t), rel = "data/library/media/task.mp3", text = `[录音](${rel})`, sessions = path.join(root, "system/sessions");
-  put(root, rel, "audio fixture");
-  const history = new TaskHistory({ root, sessions, redact: (s) => s });
-  history.put("media-task", { kind: "subagent", sessionId: "media-session", status: "done", title: "媒体任务", startedAt: 1 });
-  const file = path.join(sessions, "projects/fixture/media-session/subagents/agent-media-task.jsonl");
-  put(root, path.relative(root, file), [
-    { type: "user", uuid: "1", timestamp: "2026-10-13T00:00:00Z", message: { content: text } },
-    { type: "assistant", uuid: "2", timestamp: "2026-10-13T00:01:00Z", message: { content: [{ type: "text", text }] } },
-  ].map((r) => JSON.stringify(r)).join("\n"));
-  assert.deepEqual(history.history("media-task").items.findLast((i) => i.kind === "result").media, replyMedia(root, text));
-  assert.ok(history.history("media-task").items.filter((i) => i.kind === "prompt").every((i) => !("media" in i)));
-  for (const status of ["running", "error", "stopped"]) {
-    history.put("media-task", { status }); assert.ok(history.history("media-task").items.every((i) => !("media" in i)));
-  }
-  history.put("fallback-task", { kind: "isolated", title: "回退结果", status: "done", latestResult: text, startedAt: 1 });
-  assert.deepEqual(history.history("fallback-task").items.findLast((i) => i.kind === "result").media, replyMedia(root, text));
-});
-
-test("real isolated task and continuation expose their final media under the same task id", { timeout: 30_000 }, async (t) => {
-  const original = "data/library/media/isolated-original.pdf", continued = "data/library/media/isolated-continued.mp4";
-  put(config.root, original); put(config.root, continued);
-  const api = await fakeAnthropic((body) => textReply(hasInput(body, "MEDIA_CONTINUE") ? `[续聊视频](${continued})` : `[原文档](${original})`));
-  t.after(() => api.close());
-  const harness = new Harness({ hub: new DeviceHub(), bus: { emit() {} }, log() {},
-    queryFactory: ({ prompt, options }) => query({ prompt, options: { ...options, systemPrompt: "Local media fixture.",
-      settingSources: [], agentProgressSummaries: false, permissionMode: "bypassPermissions", allowDangerouslySkipPermissions: true,
-      env: { ...options.env, ANTHROPIC_BASE_URL: api.url, ANTHROPIC_API_KEY: "fake-local-media-only", ANTHROPIC_AUTH_TOKEN: "",
-        CLAUDE_CONFIG_DIR: config.sessions, CLAUDE_CODE_TMPDIR: path.join(config.root, "native-tmp"),
-        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1" } } }) });
-  await harness.runIsolated("媒体任务", "MEDIA_ORIGINAL", { id: "media-isolated" });
-  assert.deepEqual(harness.taskHistory("media-isolated").items.findLast((i) => i.kind === "result").media.map((m) => m.path), [original]);
-  await harness.sendTask("media-isolated", "MEDIA_CONTINUE"); await harness.jobChain;
-  const history = harness.taskHistory("media-isolated");
-  assert.equal(history.id, "media-isolated"); assert.equal(history.status, "done");
-  assert.deepEqual(history.items.findLast((i) => i.kind === "result").media.map((m) => m.path), [continued]);
 });

@@ -7,8 +7,8 @@ import { ConnectorManager } from "./connectors.mjs";
 import { startScheduler } from "./scheduler.mjs";
 import { startServer } from "./server.mjs";
 import { HealthSync } from "./health.mjs";
-import { migrateV08 } from "./migrate-v08.mjs";
-import { migrateV081 } from "./migrate-v081.mjs";
+import { initialize } from "./initialize.mjs";
+
 import { Content } from "./content.mjs";
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -21,8 +21,7 @@ if (!config.token) {
 const listeners = new Set();
 const bus = { on: (fn) => listeners.add(fn), emit: (ev) => listeners.forEach((fn) => fn(ev)) };
 
-migrateV081({ root: config.root });
-migrateV08({ root: config.root, seedDir: path.join(CODE, "seed") });
+initialize(config.root);
 const hub = new DeviceHub();
 const connectors = new ConnectorManager();
 for(const failure of await connectors.initialize())log(`connector skills unavailable: ${failure.name} ${failure.error}`);
@@ -38,7 +37,8 @@ hub.onReconnect = (info) => {
   harness.runIsolated(`补读 · ${info.name || info.id}`, `[补读] ${info.id}\n\n设备：${info.name || info.id}\n来源：${sources.join("、")}`);
 };
 
-harness.startMain();
+harness.runtime.onCrash=()=>process.kill(process.pid,"SIGTERM");
+await harness.startMain();
 const content = new Content({ root: config.root, bus, timezone: config.timezone });
 const schedules = startScheduler({ harness, log, health, content });
 const server = startServer({ harness, hub, bus, log, connectors, health, content, schedules });
@@ -48,8 +48,7 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   schedules.stop();
-  try { await harness.close(); } catch { log("shutdown: SDK cleanup did not finish"); }
-  try { await server.browserRoutes?.close(); } catch { log("shutdown: browser cleanup did not finish"); }
+  try { await harness.close(); } catch { log("shutdown: OpenClaw cleanup did not finish"); }
   server.closeSockets();
   server.closeAllConnections();
   server.close(() => process.exit(0));

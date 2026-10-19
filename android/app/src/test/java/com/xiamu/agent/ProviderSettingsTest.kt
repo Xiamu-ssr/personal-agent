@@ -4,7 +4,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
-internal val providerSettingsJson="""{"model":{"provider":"custom-demo","id":"shared-model"},"permissionMode":"auto","providers":[{"id":"zenmux","name":"ZenMux","builtin":true,"protocol":"anthropic","models":[{"id":"shared-model","name":"内置模型","note":"消耗约 1×"}]},{"id":"custom-demo","name":"演示服务","builtin":false,"protocol":"anthropic","baseUrl":"https://example.test","keyHint":"abcd","models":[{"id":"shared-model","name":"演示模型"}]}],"permissionModes":[{"id":"auto","label":"自动","note":"自动拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"完全放行"}]}"""
+internal val providerSettingsJson="""{"model":{"provider":"custom-demo","id":"shared-model"},"kernel":"openclaw","providers":[{"id":"zenmux","name":"ZenMux","builtin":true,"protocol":"anthropic","models":[{"id":"shared-model","name":"内置模型","note":"消耗约 1×"}]},{"id":"custom-demo","name":"演示服务","builtin":false,"protocol":"anthropic","baseUrl":"https://example.test","keyHint":"abcd","models":[{"id":"shared-model","name":"演示模型"}]}],"permissionModes":[{"id":"auto","label":"自动","note":"自动拦下危险操作"},{"id":"bypassPermissions","label":"完全放行","note":"完全放行"}]}"""
 
 class ProviderSettingsTest {
     private val key="sk-test-0000abcd"
@@ -92,10 +92,10 @@ class ProviderSettingsTest {
         assertFalse(draft(secret=" ").json(true).has("apiKey"))
         assertEquals(key,draft().json(true).getString("apiKey"))
     }
-    @Test fun savePayloadTrimsValuesAndDoesNotAllowProtocolChanges() {
+    @Test fun savePayloadIncludesSelectedProtocolAndTrimsValues() {
         val j=draft(url="https://example.test/",models=listOf(ProviderModel(" a "," 模型 "))).json(false)
         assertEquals("https://example.test",j.getString("baseUrl"));assertEquals("a",j.getJSONArray("models").getJSONObject(0).getString("id"))
-        assertFalse(j.has("protocol"));assertEquals(setOf("id","name"),j.getJSONArray("models").getJSONObject(0).keySet())
+        assertEquals("anthropic",j.getString("protocol"));assertEquals(setOf("id","name"),j.getJSONArray("models").getJSONObject(0).keySet())
     }
     @Test fun credentialAndDraftDiagnosticsNeverPrintKey() {
         assertFalse(ProviderKey(key).toString().contains(key));assertFalse(draft().toString().contains(key))

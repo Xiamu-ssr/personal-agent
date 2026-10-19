@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "../../src/product-tools.mjs";
 import { privateResult } from "../_shared/http.mjs";
 
 function tokenValues(values) {
@@ -66,18 +66,18 @@ export function createGithubConnector({ baseUrl = "https://api.github.com", fetc
       const list = async (endpoint, query, project) => ({ items: (await request(values, endpoint, query, true)).slice(0, query.per_page).map(project),
         page: query.page, per_page: query.per_page });
       return [
-        tool("repos", "列出可访问的仓库；visibility 为 all/public/private，affiliation 用逗号分隔 owner/collaborator/organization_member。per_page 默认 30、最多 100，page 从 1 开始。", {
+        defineTool("repos", "列出可访问的仓库；visibility 为 all/public/private，affiliation 用逗号分隔 owner/collaborator/organization_member。per_page 默认 30、最多 100，page 从 1 开始。", {
           visibility: z.enum(["all", "public", "private"]).optional(),
           affiliation: z.string().max(100).refine((s) => s.split(",").every((v) => ["owner", "collaborator", "organization_member"].includes(v)), "affiliation 格式不正确").optional(),
           sort: z.enum(["created", "updated", "pushed", "full_name"]).default("updated"), ...pagination,
         }, wrap((args) => list("/user/repos", args, repoResult))),
-        tool("repo", "查看一个仓库的名称、简介、stars 和 issue 数。", repository,
+        defineTool("repo", "查看一个仓库的名称、简介、stars 和 issue 数。", repository,
           wrap(async (args) => repoResult(await request(values, repoPath(args))))),
-        tool("issues", "列出仓库 issue，is_pull_request 标明 PR；正文最多 1000 字。labels 用逗号分隔，assignee 可用用户名、* 或 none，since 为 ISO 8601 时间。per_page 默认 30、最多 100，page 从 1 开始。", {
+        defineTool("issues", "列出仓库 issue，is_pull_request 标明 PR；正文最多 1000 字。labels 用逗号分隔，assignee 可用用户名、* 或 none，since 为 ISO 8601 时间。per_page 默认 30、最多 100，page 从 1 开始。", {
           ...repository, state: z.enum(["open", "closed", "all"]).default("open"), labels: z.string().max(1000).optional(),
           assignee: z.union([owner, z.enum(["*", "none"])]).optional(), since, ...pagination,
         }, wrap(({ owner, repo, ...query }) => list(repoPath({ owner, repo }) + "/issues", query, (i) => issueResult(i)))),
-        tool("issue", "查看单个 issue 和第一页评论；正文最多 6000 字、每条评论最多 2000 字。comments_limit 默认 20、最多 50，comments_truncated 表示还有评论未展示。", {
+        defineTool("issue", "查看单个 issue 和第一页评论；正文最多 6000 字、每条评论最多 2000 字。comments_limit 默认 20、最多 50，comments_truncated 表示还有评论未展示。", {
           ...repository, number: z.number().int().min(1), comments_limit: z.number().int().min(1).max(50).default(20),
         }, wrap(async ({ owner, repo, number, comments_limit }) => {
           const endpoint = repoPath({ owner, repo }) + `/issues/${number}`;
@@ -85,7 +85,7 @@ export function createGithubConnector({ baseUrl = "https://api.github.com", fetc
           const comments = (await request(values, endpoint + "/comments", { per_page: comments_limit, page: 1 }, true)).slice(0, comments_limit);
           return { issue: issueResult(issue, 6000), comments: comments.map(commentResult), comments_truncated: issue.comments > comments.length };
         })),
-        tool("notifications", "查看通知，只读、不标记已读；all 包含已读，participating 仅看参与或被提及，since 为 ISO 8601 时间。per_page 默认 30、最多 100，page 从 1 开始。", {
+        defineTool("notifications", "查看通知，只读、不标记已读；all 包含已读，participating 仅看参与或被提及，since 为 ISO 8601 时间。per_page 默认 30、最多 100，page 从 1 开始。", {
           all: z.boolean().default(false), participating: z.boolean().default(false), since, ...pagination,
         }, wrap((args) => list("/notifications", args, notificationResult))),
       ];

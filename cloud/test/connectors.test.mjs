@@ -37,7 +37,7 @@ test("validate before test/save, atomic private persistence, multiple accounts a
   assert.equal(manager.list().installed[0].accounts.length, 2);
   assert.equal(JSON.stringify(manager.list()).includes(credentials.password), false);
   assert.equal(manager.maskedValues("qq-mail", credentials).password, SECRET_MASK);
-  assert.equal(manager.mcpServers()["qq-mail"].type, "sdk");
+  assert.ok(manager.toolGroups()["qq-mail"].some(t=>t.name==="list_folders"));
 });
 
 test("masked or omitted secret survives update; failed test never saves; concurrent edits retain both changes", async () => {
@@ -82,7 +82,7 @@ test("test updates safe status, restart hardens permissions, removing last accou
   assert.equal(restarted.list().installed[0].accounts[0].status, "error");
   restarted.writeState("qq-mail", { accounts: { [account.id]: { uid: 123, validity: "100" } } });
   await restarted.removeAccount("qq-mail", account.id);
-  assert.equal("qq-mail" in restarted.mcpServers(), false);
+  assert.equal("qq-mail" in restarted.toolGroups(), false);
   assert.equal(restarted.list().catalog[0].fields.length > 0, true);
   assert.deepEqual(restarted.readState("qq-mail").accounts, {});
   await assert.rejects(restarted.removeAccount("qq-mail", account.id), (e) => e.status === 404);

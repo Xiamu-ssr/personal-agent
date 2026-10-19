@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "../../src/product-tools.mjs";
 import { requestJson, privateResult, apiKeyValues } from "../_shared/http.mjs";
 import { queryAccounts, QuotaExhaustedError, nextMonth, errorText, exhaustedCredits } from "../_shared/query-accounts.mjs";
 
@@ -31,13 +31,13 @@ export function createTavilyConnector({ baseUrl = "https://api.tavily.com", fetc
         catch (e) { return { content: [{ type: "text", text: JSON.stringify(privateResult({ error: e.message }, keys, ctx)) }], isError: true }; }
       };
       return [
-        tool("search", "深入调研时搜索网页。日常搜索请用内置网页搜索。", {
+        defineTool("search", "深入调研时搜索网页。日常搜索请用内置网页搜索。", {
           query: z.string().min(1).max(1000), depth: z.enum(["basic", "advanced"]).default("basic"),
           max_results: z.number().int().min(1).max(20).default(5), time_range: z.enum(["day", "week", "month", "year"]).optional(),
         }, wrap((values, { query, depth, max_results, time_range }) => request(values, "search", {
           query, search_depth: depth, max_results, ...(time_range && { time_range }),
         }))),
-        tool("extract", "提取完整网页正文，单次最多 20 个 URL。", {
+        defineTool("extract", "提取完整网页正文，单次最多 20 个 URL。", {
           urls: z.array(z.url().refine((s) => /^https?:\/\//.test(s), "仅支持 HTTP / HTTPS URL")).min(1).max(20),
         }, wrap((values, { urls }) => request(values, "extract", { urls }))),
       ];

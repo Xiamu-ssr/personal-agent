@@ -40,7 +40,7 @@ final class DeviceClient {
 
     private func register() {
         let device: [String: Any] = [
-            "id": Prefs.deviceId, "name": Prefs.deviceName, "kind": "mac",
+            "id": Prefs.deviceId, "name": Prefs.deviceName, "kind": "mac", "role": Prefs.deviceRole,
             "capabilities": Capabilities.tools.map(\.json),
         ]
         online = socket.send(["t": "register", "device": device])

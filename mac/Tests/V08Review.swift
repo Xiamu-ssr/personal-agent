@@ -106,21 +106,6 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         Nav.shared.go(.goals); Nav.shared.push(.goal("每周运动")); try await shot("20-goal-detail")
         Nav.shared.go(.library); try await pause(1800); try await shot("21-library-artifacts")
         try await press("pill-影音内容"); try await shot("22-library-media")
-        _ = try await control("browser",method:"POST")
-        CloudBrowserWindow.shared.show(); try await until("browser frames") { CloudBrowserClient.shared.image != nil }
-        guard let browserWindow=NSApp.windows.first(where:{$0.title == "豆豆 · 云端浏览器"}) else {throw ReviewFailure(description:"browser window")}
-        try await capture(browserWindow,"23-cloud-browser")
-        await CloudBrowserClient.shared.action("takeover"); try await pause(250)
-        try check(CloudBrowserClient.shared.control == "user","browser takeover granted")
-        guard let surface=find(browserWindow.contentView!,type:BrowserSurface.InputView.self) else {throw ReviewFailure(description:"browser input surface")}
-        try check(surface.bounds.width>600 && surface.bounds.height>350,"browser canvas retains full frame dimensions")
-        print("BROWSER_CANVAS: \(surface.bounds.size)");fflush(stdout)
-        surface.send?(["type":"click","frameId":surface.frameID,"x":surface.bounds.width*0.25,"y":surface.bounds.height*0.46,"width":surface.bounds.width,"height":surface.bounds.height,"button":"left"])
-        try await pause(150); surface.insertText("专注的一周",replacementRange:NSRange(location:0,length:0)); try await pause(350)
-        try check((try await control("browser-value"))["value"] as? String == "专注的一周","native committed Chinese input reaches real browser field")
-        try await capture(browserWindow,"24-browser-takeover")
-        await CloudBrowserClient.shared.action("return"); try check(CloudBrowserClient.shared.control == "agent","browser returned without retaining input ownership")
-        browserWindow.close(); window.makeKeyAndOrderFront(nil)
         Nav.shared.console=true; Nav.shared.consoleTab=2; try await shot("25-console-computer")
         Nav.shared.console=false; Nav.shared.go(.settings); try await shot("26-settings")
         Nav.shared.push(.agentSetting(.model)); try await shot("27-models")
@@ -145,7 +130,7 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         try check(CGPreflightScreenCaptureAccess() == false || shotCount>0,"capture completed using available permission")
         try check(!Prefs.supportDir.path.hasPrefix(NSHomeDirectory()+"/Library/Application Support/Doudou"),"acceptance never uses installed app data directory")
         if let recording { try await recording.value }
-        chat.stop(); CloudBrowserClient.shared.stop(); window.close()
+        chat.stop(); window.close()
         print("SCREENSHOTS: \(shotCount)"); fflush(stdout)
     }
     /// Sample only this owned window. macOS ignores -l when screencapture uses -v,

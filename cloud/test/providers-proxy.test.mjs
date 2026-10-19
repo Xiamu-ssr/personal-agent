@@ -28,7 +28,7 @@ test("small HTTPS Messages calls tunnel through HTTPS_PROXY, preserve TLS valida
   }); proxy.listen(0, "127.0.0.1"); await once(proxy, "listening");
   t.after(async () => { for (const socket of sockets) socket.destroy(); upstream.closeAllConnections(); await Promise.all([new Promise((r) => upstream.close(r)), new Promise((r) => proxy.close(r))]); });
   const module = new URL("../src/providers.mjs", import.meta.url).href;
-  const { stdout } = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `import {testProvider} from ${JSON.stringify(module)}; const r=await testProvider({baseUrl:"https://models.example.test",apiKey:"fake-tunnel-provider-key",model:"basic-tunnel"}); console.log(JSON.stringify({ok:r.ok}));`], {
+  const { stdout } = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `import {testProvider} from ${JSON.stringify(module)}; const r=await testProvider({baseUrl:"https://models.example.test",apiKey:"fake-tunnel-provider-key",model:"basic-tunnel",protocol:"anthropic"}); console.log(JSON.stringify({ok:r.ok}));`], {
     env: { PATH: process.env.PATH, NODE_EXTRA_CA_CERTS: cert, HTTPS_PROXY: "http://127.0.0.1:" + proxy.address().port }, timeout: 5000,
   });
   assert.equal(JSON.parse(stdout).ok, true); assert.equal(connected, "models.example.test:443");

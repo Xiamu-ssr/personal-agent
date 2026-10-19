@@ -11,7 +11,7 @@ const MODEL = process.env.AGENT_ASR_MODEL || "google/gemini-3.5-flash-lite";
 const FORMATS = new Set(["wav", "mp3", "aac", "ogg", "flac", "m4a"]);
 
 function endpoint() {
-  const base = (process.env.ANTHROPIC_BASE_URL || "https://zenmux.ai/api/anthropic").replace(/\/anthropic\/?$/, "");
+  const base = (process.env.MODEL_BASE_URL || "https://zenmux.ai/api/anthropic").replace(/\/anthropic\/?$/, "");
   return `${base}/v1/chat/completions`;
 }
 
@@ -43,7 +43,7 @@ export async function transcribe(buf, format) {
     const out = await new Promise((resolve, reject) => {
       execFile("curl", [
         "-sS", "-m", "90", endpoint(),
-        "-H", `Authorization: Bearer ${process.env.ANTHROPIC_AUTH_TOKEN || ""}`,
+        "-H", `Authorization: Bearer ${process.env.MODEL_API_KEY || ""}`,
         "-H", "content-type: application/json",
         "--data-binary", `@${tmp}`,
       ], { maxBuffer: 4 << 20 }, (err, stdout) => (err ? reject(err) : resolve(stdout)));

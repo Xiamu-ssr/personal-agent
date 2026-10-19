@@ -25,7 +25,7 @@ export async function fakeAnthropic(respond = () => ({})) {
       res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: reply.error } }));
       return;
     }
-    const content = reply.content || [{ type: "text", text: compactRequest(data) ? "<summary>用户目标：继续聊天。记忆在 data/memory/，待办在 data/todos.md。</summary>" : "OK" }];
+    const content = reply.content || [{ type: "text", text: compactRequest(data) ? "<summary>用户目标：继续聊天。用户资料在 USER.md，记忆在 memory/，目标在 data/goals/。</summary>" : "OK" }];
     const usage = { input_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 8, ...reply.usage };
     const message = { id: "msg_fake_" + requests.length, type: "message", role: "assistant", model: data.model,
       content, stop_reason: reply.stop_reason || "end_turn", stop_sequence: null, usage };

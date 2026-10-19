@@ -135,13 +135,13 @@ struct GoalsPage:View {
     @State private var domain:String?
     var body:some View {
         PageScaffold(title:"目标") {
-            SectionTitle(text:"追踪中")
+            SectionTitle(text:"正在跟进")
             if goals.isEmpty { Note(text:"还没有目标，聊聊你想改变的事") }
             ForEach(goals) { goal in Button { Nav.shared.push(.goal(goal.name)) } label: {
                 VStack(alignment:.leading,spacing:12) {
                     HStack { Text(goal.title).font(Theme.font(size:16,weight:.medium)); Spacer(); Text("\(goal.progress.formatted(.number.precision(.fractionLength(0...1))))%").font(Theme.font(size:12)) }
                     ProgressView(value:Double(goal.progress),total:100).tint(Theme.ink)
-                    Text(goal.nextCheckin.map { "下次跟进 · "+Fmt.when($0) } ?? (goal.status == "追踪中" ? "跟进已停用" : goal.status)).font(Theme.font(size:12)).foregroundStyle(Theme.sub)
+                    Text(goal.nextCheckin.map { "下次跟进 · "+Fmt.when($0) } ?? (goal.status == "正在跟进" ? "跟进已停用" : goal.status)).font(Theme.font(size:12)).foregroundStyle(Theme.sub)
                 }.card(radius:18,padding:20).contentShape(Rectangle())
             }.buttonStyle(.plain) }
             SectionTitle(text:"创建目标").padding(.top,8)

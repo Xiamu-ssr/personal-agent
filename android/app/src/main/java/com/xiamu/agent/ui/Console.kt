@@ -30,7 +30,7 @@ fun AvatarConsole() {
                 Spacer(Modifier.size(42.dp))
             }
             Spacer(Modifier.height(16.dp))
-            SegTabs(listOf("活动","权限","电脑","定时","记忆"),tab) { tab=it }
+            SegTabs(listOf("活动","设备归属","设备","定时","记忆"),tab) { tab=it }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when(tab) {
                     0 -> ActivitiesPanel()
@@ -95,33 +95,25 @@ private fun ActivityRow(title: String,summary: String,time: String,icon: ImageVe
     }
 }
 @Composable
-private fun PermissionsPanel() {
-    val (loaded,error)=load("settings",revision=Chat.settingsVersion.intValue) { Api.settings() }
-    var settings by remember(loaded) { mutableStateOf(loaded) }
-    var saving by remember { mutableStateOf(false) }
-    var note by remember { mutableStateOf("") }
-    val scope=rememberCoroutineScope()
+internal fun PermissionsPanel() {
+    val c=ctx()
+    var role by remember { mutableStateOf(Prefs.deviceRole) }
     Column(Modifier.padding(top=22.dp)) {
-        Text("权限",style=Type.title(20),color=Pal.Ink)
+        Text("这台手机属于谁",style=Type.title(20),color=Pal.Ink)
         Spacer(Modifier.height(12.dp))
-        settings?.let { current -> CardList { current.permissionModes.forEachIndexed { i,o ->
+        CardList { listOf("owner","agent").forEachIndexed { i,value ->
             if(i>0) Hairline()
-            ListRow(o.label,o.note,subLines=3,trailing={RadioButton(current.permissionMode==o.id,null,enabled=!saving)},onClick={
-                if(!saving && o.id!=current.permissionMode) { saving=true; scope.launch {
-                    try { settings=Api.saveSettings(permissionMode=o.id); invalidateCache("settings") }
-                    catch(e: CancellationException) { throw e } catch(e: Exception) { note=e.message ?: "保存失败" } finally { saving=false }
-                } }
+            ListRow(if(value=="agent") "豆豆的设备" else "我的设备",if(value=="agent") "可以操作应用、文件与系统" else "默认读取；按明确任务使用 Phone Use",subLines=3,trailing={RadioButton(role==value,null)},onClick={
+                role=value; Prefs.deviceRole=value; com.xiamu.agent.device.DeviceService.start(c,reregister=true)
             })
-        } } }
-        if(error.isNotBlank() || note.isNotBlank()) ErrorNote(error.ifBlank { note })
-        FooterNote("从下一轮主聊天生效。")
+        } }
+        FooterNote("具体能力在连接应用中授权，豆豆按任务和设备归属判断操作范围。")
     }
 }
 @Composable
 private fun ComputerPanel() {
     val (connections,error)=load("connectors") { com.xiamu.agent.connectors.CloudConnectors.list() }
     LazyColumn {
-        item { SectionTitle("云端浏览器"); BrowserPreview(true) }
         item { SectionTitle("在线设备") }
         connections?.others?.forEach { d -> item { CardList(Modifier.padding(bottom=8.dp)) { ListRow(d.name,if(d.online) "在线" else "离线",deviceIcon(d.kind),onClick={Nav.open(Route.Connectors(2,d.id))}) } } }
         if(error.isNotBlank()) item { ErrorNote(error) }

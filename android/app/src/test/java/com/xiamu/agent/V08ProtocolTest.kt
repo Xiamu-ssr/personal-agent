@@ -7,7 +7,7 @@ import org.junit.Test
 class V08ProtocolTest {
     private fun json(s: String)=JSONObject(s)
     private fun bubble(used: Boolean=false)=historyItem(json("""{"role":"assistant","id":"say-1","text":"选一个","ts":10,"optionsUsed":$used,"options":[{"id":"0","label":"豆豆"},{"id":"1","label":"小豆","reply":"就叫小豆"}]}""")) as ChatItem.Assistant
-    private fun goal()=json("""{"name":"运动","path":"data/goals/运动.md","title":"每周运动","domain":"健康","cadence":"0 8 * * 1","due":"2026-12-31","status":"追踪中","progress":25,"body":"## 计划\n运动三次\n## 步骤\n- [x] 计划\n## 记录\n已完成一次","nextCheckin":"2026-10-19T00:00:00.000Z"}""")
+    private fun goal()=json("""{"name":"运动","path":"data/goals/运动.md","title":"每周运动","domain":"健康","cadence":"0 8 * * 1","due":"2026-12-31","status":"进行中","progress":25,"body":"## 计划\n运动三次\n## 步骤\n- [x] 计划\n## 记录\n已完成一次","nextCheckin":"2026-10-19T00:00:00.000Z"}""")
     private fun post(date: String,name: String)=json("""{"path":"data/feed/$date/$name.md","date":"$date","title":"$name","source":"演示来源","url":"https://example.test/news","published":"$date 09:00","icon":"📰","image":"data/feed/$date/cover.jpg","body":"正文"}""")
     private fun page(posts: List<JSONObject>,next: String?=null)=FeedPage.from(JSONObject().put("days",JSONArray(posts.map { it.getString("date") }.distinct())).put("items",JSONArray(posts)).put("next",next ?: JSONObject.NULL))
 
@@ -17,13 +17,13 @@ class V08ProtocolTest {
         assertEquals(1,h.steps.size); assertEquals("Read",h.steps[0].tool); assertTrue(h.prompts[0].isUser)
     }
     @Test fun parsesEverySupportedSayCard() {
-        val cards=sayCards(json("""{"cards":[{"type":"connector","id":"qq-mail"},{"type":"goal","name":"运动"},{"type":"link","url":"https://example.test","title":"示例","description":"摘要","image":"https://example.test/image.png"},{"type":"image","path":"data/library/media/a.png"},{"type":"video","path":"data/library/media/a.mp4"},{"type":"audio","path":"data/library/media/a.aac"},{"type":"file","path":"data/library/artifacts/a/report.pdf"},{"type":"browser"},{"type":"device","capability":"health"}]}"""))
-        assertEquals(9,cards.size); assertEquals("health",(cards.last() as SayCard.Device).capability)
+        val cards=sayCards(json("""{"cards":[{"type":"connector","id":"qq-mail"},{"type":"goal","name":"运动"},{"type":"link","url":"https://example.test","title":"示例","description":"摘要","image":"https://example.test/image.png"},{"type":"image","path":"data/library/media/a.png"},{"type":"video","path":"data/library/media/a.mp4"},{"type":"audio","path":"data/library/media/a.aac"},{"type":"file","path":"data/library/artifacts/a/report.pdf"},{"type":"device","capability":"health"}]}"""))
+        assertEquals(8,cards.size); assertEquals("health",(cards.last() as SayCard.Device).capability)
         assertEquals(listOf("image","video","audio","file"),cards.filterIsInstance<SayCard.Media>().map { it.file.kind })
     }
     @Test fun invalidCardsDoNotHideValidNeighbors() {
-        val cards=sayCards(json("""{"cards":[{"type":"unrecognized"},{"type":"link","url":"javascript:alert(1)"},{"type":"file","path":"system/settings.json"},{"type":"image","path":"data/../../private.png"},{"type":"connector"},{"type":"goal","name":""},{"type":"browser"}]}"""))
-        assertEquals(listOf(SayCard.Browser),cards)
+        val cards=sayCards(json("""{"cards":[{"type":"unrecognized"},{"type":"link","url":"javascript:alert(1)"},{"type":"file","path":"system/settings.json"},{"type":"image","path":"data/../../private.png"},{"type":"connector"},{"type":"goal","name":""},{"type":"device","capability":"health"}]}"""))
+        assertEquals(listOf(SayCard.Device("health")),cards)
     }
     @Test fun absentLinkTitleUsesUrlAndUnsafeCoverIsRemoved() {
         val card=sayCards(json("""{"cards":[{"type":"link","url":"https://example.test","image":"file:///private/photo.png"}]}""" )).single() as SayCard.Link
@@ -74,10 +74,9 @@ class V08ProtocolTest {
     @Test fun feedSettingsAllowOvernightAndEnforceIntervalsAndTimes() { FeedSettings(true,30,"23:00","07:00","偏好").validate(); listOf(FeedSettings(true,20,"07:00","23:00",""),FeedSettings(true,30,"25:00","23:00",""),FeedSettings(true,30,"07:00","07:00","")).forEach { assertThrows(IllegalArgumentException::class.java) { it.validate() } } }
     @Test fun goalsPreservePlanStepsRecordsAndNextCheckin() { val g=Goal.from(goal()); assertEquals(25,g.progress); assertTrue(g.body.contains("## 记录")); assertEquals("2026-10-19T00:00:00.000Z",g.nextCheckin) }
     @Test fun pausedGoalNullNextCheckinIsNotAStringNull() { assertNull(Goal.from(goal().put("status","暂停").put("nextCheckin",JSONObject.NULL)).nextCheckin) }
-    @Test fun goalsRejectInvalidDomainsStatusAndProgress() { listOf(goal().put("domain","未知"),goal().put("status","started"),goal().put("progress",101),goal().put("progress",-1)).forEach { assertThrows(IllegalArgumentException::class.java) { Goal.from(it) } } }
+    @Test fun goalsRejectInvalidStatusAndProgress() { listOf(goal().put("status","started"),goal().put("progress",101),goal().put("progress",-1)).forEach { assertThrows(IllegalArgumentException::class.java) { Goal.from(it) } } }
     @Test fun goalPathCannotEscapeData() { assertThrows(IllegalArgumentException::class.java) { Goal.from(goal().put("path","data/../system/file")) } }
     @Test fun ideasKeepRevisionAndVerbatimReply() { val i=Ideas.from(json("""{"revision":"rev-2","groups":[{"name":"健康","items":[{"id":"idea-1","icon":"🌱","title":"散步","description":"每天十分钟","reply":"帮我安排饭后散步"}]}]}""")); assertEquals("rev-2",i.revision); assertEquals("帮我安排饭后散步",i.groups[0].items[0].reply) }
     @Test fun librarySortsNewestFirstAndKeepsDocuments() { val l=Library.from(json("""{"artifacts":[{"name":"文档","path":"data/library/artifacts/a/index.md","kind":"document","mtime":1,"files":[]},{"name":"页面","path":"data/library/artifacts/b/index.html","kind":"page","mtime":2,"thumbnail":"/api/library/thumbnail?path=test","files":[]}],"media":[{"path":"data/library/media/a.png","kind":"image","mtime":1},{"path":"data/library/media/b.png","kind":"image","mtime":2}]}""")); assertEquals("页面",l.artifacts[0].name); assertTrue(l.media[0].path.endsWith("b.png")) }
-    @Test fun browserCoordinatesUseDisplayedImageSizeWithFrameId() { val j=BrowserFrameInfo(21,1280,800).pointer("click",320f,200f,640,400); assertEquals(21L,j.getLong("frameId")); assertEquals(640,j.getInt("width")); assertEquals(320.0,j.getDouble("x"),.001); assertThrows(IllegalArgumentException::class.java) { BrowserFrameInfo(21,1280,800).pointer("click",-1f,0f,640,400) } }
     @Test fun healthNoLongerRequiresWeeklyAndMissingMetricsStayNull() { val h=HealthData.from(json("""{"days":[{"date":"2026-10-15","steps":1234}],"records":[],"note":"演示数据"}"""),java.time.LocalDate.of(2026,10,15)); assertEquals(7,h.days.size); assertNull(h.today.sleepMinutes); assertEquals(1234.0,h.today.steps!!,.001) }
 }

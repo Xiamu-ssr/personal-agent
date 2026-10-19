@@ -32,9 +32,9 @@ class V08R2Test {
     }
     @Test fun sideHistoryPreservesCardsAndPermanentOptions() {
         val m=sideMessage("side-a","a").put("optionsUsed",true).put("options",JSONArray("""[{"id":"0","label":"继续"}]"""))
-            .put("cards",JSONArray("""[{"type":"browser"}]"""))
+            .put("cards",JSONArray("""[{"type":"device","capability":"phone_use"}]"""))
         val bubble=SideChatHistory.from(sideHistory(listOf(m))).messages.single() as ChatItem.Assistant
-        assertTrue(bubble.optionsUsed); assertEquals(listOf(SayCard.Browser),bubble.cards)
+        assertTrue(bubble.optionsUsed); assertEquals(listOf(SayCard.Device("phone_use")),bubble.cards)
     }
     @Test fun anotherRoomCannotEnterSideHistory() {
         assertThrows(IllegalArgumentException::class.java) { SideChatHistory.from(sideHistory(listOf(sideMessage("side-b","wrong")))) }

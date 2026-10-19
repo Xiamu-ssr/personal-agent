@@ -12,7 +12,7 @@ import { writeJson, readJson } from "../src/store.mjs";
 const gate = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 const local = (time) => new Date(`2026-10-15T${time}:00+08:00`);
 const settings = { enabled: true, interval: 30, start: "07:00", end: "23:00" };
-const putGoal = (name, cadence = "* * * * *", status = "追踪中") => {
+const putGoal = (name, cadence = "* * * * *", status = "进行中") => {
   const dir = path.join(config.data, "goals"); fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, name + ".md"), `---\ntitle: ${name}\ndomain: 效率\ncadence: "${cadence}"\nstatus: ${status}\nprogress: 0\n---\n## 计划\n计划\n## 步骤\n- [ ] 下一步\n## 记录\n`);
 };
@@ -38,7 +38,7 @@ test("schedule prompts read current spec files, replace only placeholders and re
   assert.equal(schedulePrompt("feed", { lastSuccess: "2026-10-15T00:00:00Z" }), feed.replace("<YYYY-MM-DD HH:MM>", "2026-10-15 08:00"));
   assert.equal(schedulePrompt("feed").split("\n")[0], "[动态]");
   const goal = fs.readFileSync(path.join(CODE, "../spec/prompts/goal-checkin.md"), "utf8").trim();
-  assert.equal(schedulePrompt("goal", { goal: "运动" }), goal.replaceAll("<目标名>", "运动"));
+  assert.equal(schedulePrompt("goal", { goal: "运动" }), goal.replaceAll("<Goal ID>", "运动"));
   const tmp = path.join(config.root, "prompt-fixture"); fs.mkdirSync(tmp, { recursive: true });
   fs.writeFileSync(path.join(tmp, "feed.md"), "供人阅读的说明\n---\n[动态] 上次：<YYYY-MM-DD HH:MM>\n真正提示词");
   assert.equal(schedulePrompt("feed", { prompts: tmp }), "[动态]\n真正提示词");
@@ -65,25 +65,13 @@ test("tick scans goals into main runs while feed and Monday ideas remain isolate
   writeJson(config.scheduleFile, [{ id: "feed", name: "动态", kind: "feed" }, { id: "ideas", kind: "ideas", cron: "0 8 * * 1" }]);
   let now = new Date("2026-10-19T00:00:00Z"); const service = new Schedules({ harness, content, clock: () => now });
   putGoal("每分钟目标"); service.tick(); await tick();
-  assert.equal(calls.length, 3); assert.ok(calls.some((c) => c[0] === "主会话" && c[1].startsWith("[目标跟进] 每分钟目标"))); assert.ok(calls.some((c) => c[1].startsWith("[点子]")));
+  assert.equal(calls.length, 3); assert.ok(calls.some((c) => c[0] === "主会话" && c[1].startsWith("[Goal 推进] 每分钟目标"))); assert.ok(calls.some((c) => c[1].startsWith("[点子]")));
   service.tick(); await tick(); assert.equal(calls.length, 3);
-  putGoal("每分钟目标", "0 9 * * *"); putGoal("新目标"); now = new Date("2026-10-19T00:01:00Z"); service.tick(); await tick(); assert.equal(calls.length, 4); assert.ok(calls.at(-1)[1].startsWith("[目标跟进] 新目标"));
+  putGoal("每分钟目标", "0 9 * * *"); putGoal("新目标"); now = new Date("2026-10-19T00:01:00Z"); service.tick(); await tick(); assert.equal(calls.length, 4); assert.ok(calls.at(-1)[1].startsWith("[Goal 推进] 新目标"));
   fs.unlinkSync(path.join(config.data, "goals/新目标.md")); now = new Date("2026-10-19T00:02:00Z"); service.tick(); await tick(); assert.equal(calls.length, 4);
   service.setEnabled("goal:每分钟目标", false); assert.equal(service.list().find((j) => j.id === "goal:每分钟目标").nextRun, null);
   service.setEnabled("feed", false); assert.equal(content.feedSettings().enabled, false);
   content.putFeedSettings({ enabled: true }); assert.equal(service.jobs().find((j) => j.id === "feed").enabled, true);
-});
-
-test("night keeps its seed id; health and workspace cleanup run without a model and recent nested drafts survive", async () => {
-  const seed = readJson(path.join(CODE, "seed/system/schedule.json"), []); assert.equal(seed.find((j) => j.id === "night").cron, "30 22 * * *");
-  assert.equal(seed.find((j) => j.id === "health-sync").cron, "0 */3 * * *");
-  let health = 0; const calls = [], harness = { runIsolated: async (...args) => { calls.push(args); return { ok: true }; } };
-  const service = new Schedules({ harness, health: { sync: async () => { health++; } }, content: new Content({ root: config.root }) });
-  await service.run({ id: "health-sync", kind: "health-sync" }); await service.active.get("health-sync").done; assert.equal(health, 1); assert.equal(calls.length, 0);
-  const old = path.join(config.workspace, "stale"), recent = path.join(config.workspace, "recent"); fs.mkdirSync(old, { recursive: true }); fs.mkdirSync(recent, { recursive: true }); fs.writeFileSync(path.join(recent, "new.txt"), "new");
-  fs.utimesSync(old, new Date(0), new Date(0)); fs.utimesSync(recent, new Date(0), new Date(0));
-  await service.run({ id: "cleanup", kind: "cleanup" }); await service.active.get("cleanup").done; assert.equal(fs.existsSync(old), false); assert.equal(fs.existsSync(recent), true);
-  await service.run(seed.find((j) => j.id === "night")); await service.active.get("night").done; assert.match(calls[0][1], /^\[夜间整理\]/);
 });
 
 test("non-model health work appears as a running activity and retains the actual device-offline result", async () => {

@@ -66,14 +66,14 @@ private sealed class Block {
     data object Gap : Block()
 }
 
-/** Memory files end lines with `→ work/求职.md`-style pointers; pull those out so they render as chips. */
+/** Render explicit Markdown file references as chips. */
 private val pointerRe = Regex("""\s*→\s*(.+)$""")
 private val mdPath = Regex("""[^\s、，,；;（）()\[\]\x60]+\.md""")
 
 private fun splitPointers(line: String, pointers: Boolean): Pair<String, List<String>> {
     if (!pointers) return line to emptyList()
     val m = pointerRe.find(line) ?: return line to emptyList()
-    val paths = mdPath.findAll(m.groupValues[1]).map { it.value.removePrefix("data/memory/") }.toList()
+    val paths = mdPath.findAll(m.groupValues[1]).map { it.value }.toList()
     if (paths.isEmpty()) return line to emptyList()
     return line.substring(0, m.range.first).trimEnd() to paths
 }
@@ -131,7 +131,7 @@ private fun parse(src: String, pointers: Boolean): List<Block> {
 
 /**
  * Enough Markdown for chat and memory files: headings, lists, quotes, code, tables, **bold**, *italic*, `code`, links.
- * With [onPointer], trailing `→ x/y.md` pointers become tappable chips (paths relative to data/memory/).
+ * With [onPointer], trailing Markdown paths become tappable chips.
  */
 @Composable
 fun Markdown(src: String, modifier: Modifier = Modifier, color: Color = Pal.Ink, fontSize: Int = 15, onPointer: ((String) -> Unit)? = null, lineHeightMultiplier: Float = 1.45f) {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { z } from "zod";
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "./product-tools.mjs";
 import registry from "../connectors/index.mjs";
 import { writePrivateJson } from "./private-json.mjs";
 import { config, VERSION } from "./config.mjs";
@@ -282,25 +282,22 @@ export class ConnectorManager {
       catch (e) { return { ...text({ error: this.redact(e.message || "连接器操作失败") }), isError: true }; }
     };
     return [
-      tool("list", "列出预置连接器、账号状态和配置字段；密钥不会返回。", {}, wrap(() => this.list())),
-      tool("add_account", "添加并验证账号。若用户在聊天里提供授权码，成功后将 notice 提醒告诉用户。", { name: z.string(), values: VALUES }, wrap(async ({ name, values }) => ({
+      defineTool("list", "列出预置连接器、账号状态和配置字段；密钥不会返回。", {}, wrap(() => this.list())),
+      defineTool("add_account", "添加并验证账号。若用户在聊天里提供授权码，成功后将 notice 提醒告诉用户。", { name: z.string(), values: VALUES }, wrap(async ({ name, values }) => ({
         ...await this.addAccount(name, values),
         notice: "下次在 App 里点「连接」填表单更安全，聊天记录里会留下授权码",
       }))),
-      tool("update_account", "修改并验证账号。secret 省略或传 •••• 保持原值。", { name: z.string(), id: z.string(), values: VALUES }, wrap(({ name, id, values }) => this.updateAccount(name, id, values))),
-      tool("remove_account", "删除账号；最后一个账号删除后卸载连接器。", { name: z.string(), id: z.string() }, wrap(({ name, id }) => this.removeAccount(name, id))),
+      defineTool("update_account", "修改并验证账号。secret 省略或传 •••• 保持原值。", { name: z.string(), id: z.string(), values: VALUES }, wrap(({ name, id, values }) => this.updateAccount(name, id, values))),
+      defineTool("remove_account", "删除账号；最后一个账号删除后卸载连接器。", { name: z.string(), id: z.string() }, wrap(({ name, id }) => this.removeAccount(name, id))),
     ];
   }
 
-  // Instances belong to ONE query: sharing an SDK MCP transport across main/isolated queries is unsafe.
-  // Account mutations increment revision; the harness calls this again at the next turn boundary.
-  mcpServers() {
-    const servers = { connectors: createSdkMcpServer({ name: "connectors", version: VERSION, tools: this.managementTools() }) };
+  toolGroups() {
+    const groups = { connectors: this.managementTools() };
     for (const definition of this.definitions.values()) {
       const accounts = structuredClone(this.accounts.get(definition.name));
-      if (!accounts.length) continue;
-      servers[definition.name] = createSdkMcpServer({ name: definition.name, version: VERSION, tools: definition.tools(accounts, this.context(definition.name, accounts)) });
+      if (accounts.length) groups[definition.name] = definition.tools(accounts, this.context(definition.name, accounts));
     }
-    return servers;
+    return groups;
   }
 }

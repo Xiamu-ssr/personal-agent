@@ -1,0 +1,1 @@
+{"id":"doudou","name":"豆豆","description":"App、设备和连接器","categories":["other"],"contracts":{"tools":["doudou_catalog","doudou_call","doudou_say"]},"activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false}}

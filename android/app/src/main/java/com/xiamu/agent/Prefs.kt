@@ -37,6 +37,10 @@ object Prefs {
         get() = sp.getBoolean("notifyMessages", true)
         set(v) = sp.edit().putBoolean("notifyMessages", v).apply()
 
+    var deviceRole: String
+        get() = sp.getString("deviceRole", "owner") ?: "owner"
+        set(v) = sp.edit().putString("deviceRole", v).apply()
+
     val deviceId: String get() = sp.getString("deviceId", "android")!!
 
     val deviceName: String get() = sp.getString("deviceName", "${Build.MANUFACTURER} ${Build.MODEL}")!!

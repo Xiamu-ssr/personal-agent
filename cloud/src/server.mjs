@@ -4,7 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
-import { config, CODE, VERSION } from "./config.mjs";
+import { config, CODE, VERSION, PROTOCOL } from "./config.mjs";
 import { readJson, writeJson, tailJsonl, firstTs, dateIn } from "./store.mjs";
 import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
@@ -18,7 +18,6 @@ import { getAppSettings, putAppSettings, readAppSettings } from "./app-settings.
 import { Providers } from "./providers.mjs";
 import { fileType } from "./media.mjs";
 import { localFile, inside, resolvedPath } from "./local-paths.mjs";
-import { attachBrowserRoutes } from "./browser/index.mjs";
 import { ClientRequests } from "./client-requests.mjs";
 import { listedActivity } from "./task-history.mjs";
 
@@ -64,7 +63,7 @@ function readRaw(req, max) {
 }
 
 function skills() {
-  const dir = path.join(config.root, ".claude", "skills");
+  const dir = path.join(config.root, "skills");
   try {
     return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => {
       let text = "";
@@ -123,7 +122,12 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
     const p = url.pathname;
-    if (p === "/health") return json(res, 200, { ok: true });
+    if (p === "/health") return json(res, 200, {ok:true,ready:harness.runtime?.ready===true,kernel:"openclaw",version:VERSION,protocol:PROTOCOL});
+    if(p.startsWith("/internal/")) {
+      if(req.method!=="POST"||!authed(req)||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress)||Object.keys(req.headers).some(h=>h==='forwarded'||h==='x-real-ip'||h.startsWith('x-forwarded-')))return json(res,403,{error:"private endpoint"});
+      try {const args=JSON.parse((await readRaw(req,1024*1024)).toString('utf8'));return json(res,200,await harness.productTool(p.slice(10),args));}catch(e){return json(res,400,{error:connectors.redact(e.message)});}
+    }
+    if(p.startsWith("/api/")&&req.headers['x-doudou-protocol']!==PROTOCOL)return json(res,426,{error:"请升级豆豆 1.0，新版已更换 OpenClaw 内核",code:"update_required"});
     if (p === "/api/login" && req.method === "POST") {
       const { token } = await readBody(req);
       req.headers.authorization = `Bearer ${token || ""}`;
@@ -179,7 +183,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       if (p === "/api/memory" && req.method === "GET") return json(res, 200, content.memory());
       if (p === "/api/memory/item") {
         const rel = url.searchParams.get("path");
-        if (typeof rel !== "string" || /[\\\x00-\x1f]/.test(rel) || rel.split("/").includes("..") || !/^data\/(?:memory\/[^/]+\/[^/]+\.md|soul\/角色\.md|soul\/diary\/[^/]+\.md|health\/days\.json)$/.test(rel)) return json(res, 400, { error: "记忆路径不正确" });
+        if (typeof rel !== "string" || /[\\\x00-\x1f]/.test(rel) || rel.split("/").includes("..") || !/^(?:(?:SOUL|USER|MEMORY)\.md|memory\/(?:[^/]+\/)*[^/]+\.md|data\/health\/days\.json)$/.test(rel)) return json(res, 400, { error: "记忆路径不正确" });
         if (req.method === "GET") return json(res, 200, { path: rel, text: content.read(rel), readOnly: rel.startsWith("data/health/") });
         if (req.method === "PUT" && !rel.startsWith("data/health/")) {
           const { text } = JSON.parse((await readRaw(req, 160 * 1024)).toString("utf8"));
@@ -272,7 +276,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
     if (p === "/api/connectors") {
       return json(res, 200, {
-        cloud: { id: "cloud", name: "云电脑", kind: "cloud", online: true, ...connectors.list({ forApp: true }) },
+        cloud: { id: "cloud", name: "云端", kind: "cloud", online: true, ...connectors.list({ forApp: true }) },
         devices: hub.known(),
       });
     }
@@ -418,7 +422,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
 
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url, "http://x");
-    if (url.pathname !== "/ws" || !authed(req)) {
+    if (url.pathname !== "/ws" || !authed(req) || req.headers["x-doudou-protocol"] !== PROTOCOL) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       return socket.destroy();
     }
@@ -447,7 +451,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
           harness.send(message.text,"app",message.attachments).catch((e)=>{if(ws.readyState===1)ws.send(JSON.stringify({t:"error",error:connectors.redact(e.message)}));});
         }catch(e){if(ws.readyState===1)ws.send(JSON.stringify({t:"error",error:e.message}));}
       }
-      if (msg.t === "interrupt") harness.interrupt();
+      if (msg.t === "interrupt") harness.interrupt().catch(e=>ws.send(JSON.stringify({t:"error",error:connectors.redact(e.message)})));
       if (msg.t === "choose_option") Promise.resolve().then(() => harness.chooseOption(msg.messageId, msg.optionId, msg.activityId)).catch((e) => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ t: "error", error: e.message, status: e.status || 400 }));
       });
@@ -499,7 +503,6 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
   server.closeSockets = () => { for (const ws of wss.clients) ws.terminate(); };
   server.on("close", () => { clearInterval(heartbeat); server.closeSockets(); wss.close(); });
 
-  if (harness.browser) server.browserRoutes = attachBrowserRoutes(server, { browser: harness.browser, authenticate: authed });
   server.listen(listen.port, listen.host, () => log("listening on " + listen.host + ":" + server.address().port));
   return server;
 }

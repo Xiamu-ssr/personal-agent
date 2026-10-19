@@ -1,24 +1,26 @@
 {
   "name": "personal-agent-cloud",
-  "version": "0.8.3",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Personal Agent cloud body: Claude Agent SDK harness + scheduler + App/device gateway",
+  "description": "Doudou: one OpenClaw agent with shared apps, memory and device capabilities",
   "main": "src/main.mjs",
   "scripts": {
     "start": "node src/main.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node --test --test-concurrency=2 test/*.test.mjs"
+    "test": "node --test --test-concurrency=2 test/*.test.mjs",
+    "verify:kernel": "node scripts/verify-openclaw.mjs"
   },
   "engines": {
-    "node": ">=20.9"
+    "node": ">=24.16.0 <25 || >=26.1.0"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.295",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@openclaw/gateway-client": "2026.10.4",
     "chinese-days": "1.5.9",
     "html-to-text": "^9.0.5",
     "imapflow": "^1.7.8",
+    "openclaw": "2026.10.4",
     "playwright-core": "1.64.0",
     "sharp": "0.35.5",
     "tar": "7.5.22",

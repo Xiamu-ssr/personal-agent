@@ -35,7 +35,8 @@ function validate(value) {
   const models = value.models.map((m) => { fields(m, ["id", "name"]); return { id: text(m.id, 200, "模型 ID"), name: text(m.name, 40, "模型显示名") }; });
   if (new Set(models.map((m) => m.id)).size !== models.length) fail("服务内模型 ID 不能重复");
   if ([name, url, ...models.flatMap((m) => [m.id, m.name])].some((s) => s.includes(apiKey))) fail("服务资料不能包含 API Key");
-  return { name, baseUrl: url, apiKey, models };
+  if (!["anthropic", "openai"].includes(value.protocol)) fail("协议请选择 Anthropic 或 OpenAI");
+  return { name, baseUrl: url, apiKey, models, protocol: value.protocol };
 }
 
 export function readProviders(root) {
@@ -62,7 +63,7 @@ function mask(value, key) {
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mask(v, key)]));
 }
 export function publicProvider(p) {
-  return { id: p.id, builtin: false, protocol: "anthropic", ...mask({ name: p.name, baseUrl: p.baseUrl, models: p.models }, p.apiKey), keyHint: p.apiKey.length > 4 ? p.apiKey.slice(-4) : "••••" };
+  return { id: p.id, builtin: false, protocol: p.protocol, ...mask({ name: p.name, baseUrl: p.baseUrl, models: p.models }, p.apiKey), keyHint: p.apiKey.length > 4 ? p.apiKey.slice(-4) : "••••" };
 }
 export function listProviders(root) { return [structuredClone(ZENMUX), ...readProviders(root).map(publicProvider)]; }
 export function providerRecord(root, id) {
@@ -71,14 +72,15 @@ export function providerRecord(root, id) {
 }
 
 export async function testProvider(input, { env = process.env, request = messagesRequest, remember = () => {}, redact = (s) => s, timeout = 20_000 } = {}) {
-  fields(input, ["baseUrl", "apiKey", "model"]);
+  fields(input, ["baseUrl", "apiKey", "model", "protocol"]);
+  if(!["anthropic","openai"].includes(input.protocol))fail("请选择模型服务协议");
   const key = text(input.apiKey, 4096, "API Key"); remember(key);
   const url = baseUrl(input.baseUrl), model = text(input.model, 200, "模型 ID"), start = Date.now();
   let response;
   try {
-    response = await request(url + "/v1/messages", { method: "POST", signal: AbortSignal.timeout(timeout),
+    response = await request((input.protocol === "openai" ? url+"/chat/completions" : url.replace(/\/v1$/, "")+"/v1/messages"), { method: "POST", signal: AbortSignal.timeout(timeout),
       headers: { "content-type": "application/json", "anthropic-version": "2023-06-01", "x-api-key": key, authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, max_tokens: 8, messages: [{ role: "user", content: "Hi" }] }),
+      body: JSON.stringify({ model, max_tokens: 16, messages: [{ role: "user", content: "Hi" }] }),
     }, env);
   } catch { fail("模型服务连接失败或超时"); }
   let body; try { body = await response.json(); } catch {}
@@ -86,7 +88,7 @@ export async function testProvider(input, { env = process.env, request = message
     const message = typeof body?.error?.message === "string" ? redact(body.error.message.replaceAll(key, "••••")).replace(/\s+/g, " ").slice(0, 200) : "";
     fail(`HTTP ${response.status}` + (message ? "：" + message : ""));
   }
-  if (!Array.isArray(body?.content)) fail(`HTTP ${response.status}：返回的不是 Messages API 响应`);
+  if (!(input.protocol === "openai" ? Array.isArray(body?.choices) : Array.isArray(body?.content))) fail(`HTTP ${response.status}：模型服务返回格式不正确`);
   return { ok: true, ms: Date.now() - start };
 }
 
@@ -104,10 +106,10 @@ export class Providers {
   mutate(fn) { const p = this.chain.then(fn); this.chain = p.catch(() => {}); return p; }
   create(input) {
     return this.mutate(async () => {
-      fields(input, ["name", "baseUrl", "apiKey", "models"]); this.remember(input.apiKey);
+      fields(input, ["name", "baseUrl", "apiKey", "models", "protocol"]); this.remember(input.apiKey);
       const value = validate(input);
       this.validatePublic(value);
-      await this.test({ baseUrl: value.baseUrl, apiKey: value.apiKey, model: value.models[0].id });
+      await this.test({ baseUrl: value.baseUrl, apiKey: value.apiKey, model: value.models[0].id, protocol: value.protocol });
       const records = readProviders(this.root), record = { id: crypto.randomUUID(), ...value };
       records.push(record); writePrivateJson(path.join(this.root, "system/providers.json"), { providers: records });
       return publicProvider(record);
@@ -116,13 +118,13 @@ export class Providers {
   patch(id, input) {
     return this.mutate(async () => {
       if (id === "zenmux") fail("内置服务不能修改或删除");
-      fields(input, ["name", "baseUrl", "apiKey", "models"]); this.remember(input.apiKey);
+      fields(input, ["name", "baseUrl", "apiKey", "models", "protocol"]); this.remember(input.apiKey);
       const old = providerRecord(this.root, id), keepKey = input.apiKey === undefined || typeof input.apiKey === "string" && !input.apiKey.trim();
       const value = validate({ ...old, ...input, apiKey: keepKey ? old.apiKey : input.apiKey });
       this.validatePublic(value);
       const checkSelected = () => { const m = this.selected(); if (m.provider === id && !value.models.some((row) => row.id === m.id)) fail("先换到别的模型", 409); };
       checkSelected();
-      if (["baseUrl", "models"].some((key) => Object.hasOwn(input, key)) || !keepKey) await this.test({ baseUrl: value.baseUrl, apiKey: value.apiKey, model: value.models[0].id });
+      if (["baseUrl", "models", "protocol"].some((key) => Object.hasOwn(input, key)) || !keepKey) await this.test({ baseUrl: value.baseUrl, apiKey: value.apiKey, model: value.models[0].id, protocol: value.protocol });
       checkSelected();
       const records = readProviders(this.root), index = records.findIndex((p) => p.id === id), record = { id, ...value };
       records[index] = record; writePrivateJson(path.join(this.root, "system/providers.json"), { providers: records });

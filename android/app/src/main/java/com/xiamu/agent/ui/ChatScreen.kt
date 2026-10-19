@@ -176,7 +176,6 @@ private fun SayCardView(card: SayCard,active: Boolean) {
             card.image?.let { ContentImage(it,Modifier.fillMaxWidth().height(140.dp)) }
             Column(Modifier.padding(12.dp)) { Text(card.title,style=Type.title(15),color=Pal.Ink); if(card.description.isNotBlank()) Text(card.description,style=Type.body(13),color=Pal.Muted); Text(runCatching { java.net.URI(card.url).host }.getOrDefault(card.url),style=Type.body(12),color=Pal.Link,modifier=Modifier.padding(top=4.dp)) }
         }
-        SayCard.Browser -> BrowserPreview(active)
         is SayCard.Media -> Unit
     }
 }

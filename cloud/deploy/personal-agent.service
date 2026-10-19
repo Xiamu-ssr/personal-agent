@@ -1,7 +1,7 @@
 [Unit]
 Description=Personal Agent cloud body
-After=network-online.target mihomo.service personal-agent-browser.service
-Wants=network-online.target personal-agent-browser.service
+After=network-online.target mihomo.service
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -9,17 +9,18 @@ User=agent
 Group=agent
 WorkingDirectory=/srv/agent
 EnvironmentFile=/etc/personal-agent.env
-Environment=AGENT_BROWSER_SERVICE=personal-agent-browser.service
-Environment=PATH=/opt/personal-agent/cloud/deploy/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/node /opt/personal-agent/cloud/src/main.mjs
+Environment=NODE_USE_ENV_PROXY=1
+Environment=NO_PROXY=localhost,127.0.0.1,::1
+Environment=PATH=/opt/doudou-runtimes/node-v26.5.0-linux-x64/bin:/opt/personal-agent/cloud/deploy/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node /opt/personal-agent/cloud/src/main.mjs
 Restart=always
 RestartSec=5
 # The agent may write anywhere it owns (/srv/agent, /home/agent, /tmp); the rest of the OS is read-only to it.
 ProtectSystem=full
 NoNewPrivileges=true
 MemoryAccounting=true
-MemoryLimit=900M
-MemoryMax=900M
+MemoryLimit=1400M
+MemoryMax=1400M
 
 [Install]
 WantedBy=multi-user.target

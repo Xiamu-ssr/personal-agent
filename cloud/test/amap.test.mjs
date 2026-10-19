@@ -37,7 +37,7 @@ test("AMap starts disconnected; key is private, verified with a public landmark 
   await assert.rejects(manager.addAccount("amap", { apiKey: KEY }), /只支持一个账号/);
   const stale = tools(), count = api.requests.length;
   await manager.removeAccount("amap", account.id);
-  assert.equal("amap" in manager.mcpServers(), false);
+  assert.equal("amap" in manager.toolGroups(), false);
   assert.match((await toolResult(stale, "geocode", { address: "天安门" })).data.error, /配置已变更/);
   assert.equal(api.requests.length, count);
 });

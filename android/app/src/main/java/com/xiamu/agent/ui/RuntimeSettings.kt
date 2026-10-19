@@ -24,6 +24,7 @@ internal fun runtimeSettingsChanged() {
 
 @Composable
 fun RuntimeSettingsScreen(permissions: Boolean) {
+    if(permissions) { SubPage("设备归属") { item { PermissionsPanel() } }; return }
     val scope=rememberCoroutineScope()
     var revision by remember { mutableIntStateOf(0) }
     val (loaded,loadError)=load("settings",revision=revision+Chat.settingsVersion.intValue) { Api.settings() }
@@ -32,11 +33,11 @@ fun RuntimeSettingsScreen(permissions: Boolean) {
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf("") }
     val settings=saved ?: loaded
-    fun select(model: ModelSelection? = null,permission: String? = null) {
+    fun select(model: ModelSelection) {
         if(saving) return
         saving=true; saveError=""
         scope.launch {
-            try { saved=Api.saveSettings(model,permission); runtimeSettingsChanged() }
+            try { saved=Api.saveSettings(model); runtimeSettingsChanged() }
             catch(e: CancellationException) { throw e }
             catch(e: Exception) { saveError=e.message ?: "保存失败，请重试" }
             finally { saving=false }
@@ -46,16 +47,7 @@ fun RuntimeSettingsScreen(permissions: Boolean) {
         item { BigTitle(if(permissions) "权限" else "模型") }
         if(settings==null && loadError.isBlank()) item { Loading() }
         settings?.let { current ->
-            if(permissions) item {
-                Column(Modifier.fillMaxWidth().padding(top=12.dp).card().selectableGroup().padding(horizontal=18.dp)) {
-                    current.permissionModes.forEachIndexed { index,option ->
-                        if(index>0) Hairline()
-                        ModelOptionRow(option.label,option.note,current.permissionMode==option.id,!saving,"permission:${option.id}") {
-                            if(current.permissionMode!=option.id) select(permission=option.id)
-                        }
-                    }
-                }
-            } else {
+            run {
                 current.providers.forEach { provider ->
                     item(key="provider:${provider.id}") {
                         Row(Modifier.fillMaxWidth().padding(top=20.dp,bottom=10.dp),verticalAlignment=Alignment.CenterVertically) {

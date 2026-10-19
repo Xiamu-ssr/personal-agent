@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "../../src/product-tools.mjs";
 import { privateResult } from "../_shared/http.mjs";
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -97,32 +97,32 @@ export function createAmapConnector({ baseUrl = "https://restapi.amap.com", fetc
       };
       const get = (endpoint, params) => request(account.values, endpoint, params);
       return [
-        tool("geocode", "把中文地址转换成高德 GCJ-02 经纬度。尽量带城市防止同名；空数组表示没有找到，不能猜坐标。", {
+        defineTool("geocode", "把中文地址转换成高德 GCJ-02 经纬度。尽量带城市防止同名；空数组表示没有找到，不能猜坐标。", {
           address: text, city: optionalCity,
         }, wrap((args) => get("/v3/geocode/geo", args))),
-        tool("reverse_geocode", "把高德 GCJ-02 坐标转换成地址。手机定位是 GPS/WGS84 时先 convert_coordinates，不能直接混用。", {
+        defineTool("reverse_geocode", "把高德 GCJ-02 坐标转换成地址。手机定位是 GPS/WGS84 时先 convert_coordinates，不能直接混用。", {
           location: point,
         }, wrap((args) => get("/v3/geocode/regeo", { ...args, extensions: "base" }))),
-        tool("search_places", "按关键词搜索高德地点/商家，建议指定城市；返回地址、坐标等。仅查询，不预订、不下单。", {
+        defineTool("search_places", "按关键词搜索高德地点/商家，建议指定城市；返回地址、坐标等。仅查询，不预订、不下单。", {
           keywords: text, city: optionalCity, page: z.number().int().min(1).max(10).default(1), limit: z.number().int().min(1).max(20).default(10),
         }, wrap(({ keywords, city, page, limit }) => get("/v3/place/text", { keywords, city, page, offset: limit, extensions: "base", citylimit: city ? "true" : "false" }))),
-        tool("search_nearby", "搜索某坐标附近的地点，以距离排序。location 必须是高德 GCJ-02；radius 单位米。查询只覆盖给定范围，不代表商家营业状态。", {
+        defineTool("search_nearby", "搜索某坐标附近的地点，以距离排序。location 必须是高德 GCJ-02；radius 单位米。查询只覆盖给定范围，不代表商家营业状态。", {
           location: point, keywords: text, radius: z.number().int().min(100).max(50000).default(3000), limit: z.number().int().min(1).max(20).default(10),
         }, wrap(({ limit, ...args }) => get("/v3/place/around", { ...args, offset: limit, page: 1, sortrule: "distance", extensions: "base" }))),
-        tool("route", "查询步行、驾车、公交或骑行路线。起终点是高德 GCJ-02，距离米、耗时秒，仅为估计，不是实时导航或订票。公交必须给 city，跨城还须 destination_city。返回最多三条方案，省略折线。", {
+        defineTool("route", "查询步行、驾车、公交或骑行路线。起终点是高德 GCJ-02，距离米、耗时秒，仅为估计，不是实时导航或订票。公交必须给 city，跨城还须 destination_city。返回最多三条方案，省略折线。", {
           origin: point, destination: point, mode: z.enum(["walking", "driving", "transit", "bicycling"]).default("walking"), city: optionalCity, destination_city: optionalCity,
         }, wrap(({ origin, destination, mode, city, destination_city }) => {
           if (mode === "transit" && !city) throw new Error("查询公交路线需要填写出发城市 city；跨城还需 destination_city");
           const endpoint = mode === "bicycling" ? "/v4/direction/bicycling" : `/v3/direction/${mode === "transit" ? "transit/integrated" : mode}`;
           return get(endpoint, { origin, destination, ...(mode === "transit" && { city, cityd: destination_city }), extensions: "base" });
         })),
-        tool("distance", "测量最多十个起点到一个终点的距离，坐标为高德 GCJ-02。straight 是直线，driving 是道路距离，walking 仅支持五公里内；距离米、耗时秒，不能把直线当出行距离。", {
+        defineTool("distance", "测量最多十个起点到一个终点的距离，坐标为高德 GCJ-02。straight 是直线，driving 是道路距离，walking 仅支持五公里内；距离米、耗时秒，不能把直线当出行距离。", {
           origins: z.array(point).min(1).max(10), destination: point, mode: z.enum(["straight", "driving", "walking"]).default("driving"),
         }, wrap(({ origins, destination, mode }) => get("/v3/distance", { origins: origins.join("|"), destination, type: { straight: 0, driving: 1, walking: 3 }[mode] }))),
-        tool("convert_coordinates", "将手机 GPS/WGS84（gps）、百度或图吧坐标转换为高德 GCJ-02。输入和输出顺序都是经度,纬度。已经是 GCJ-02 不要重复转换。", {
+        defineTool("convert_coordinates", "将手机 GPS/WGS84（gps）、百度或图吧坐标转换为高德 GCJ-02。输入和输出顺序都是经度,纬度。已经是 GCJ-02 不要重复转换。", {
           locations: z.array(rawPoint).min(1).max(10).describe("待转换的原始坐标，经度,纬度；输入坐标系由 from 指定"), from: z.enum(["gps", "baidu", "mapbar"]).default("gps"),
         }, wrap(({ locations, from }) => get("/v3/assistant/coordinate/convert", { locations: locations.join("|"), coordsys: from }))),
-        tool("weather", "用地理编码结果中的六位 adcode 查天气实况或预报。以 reporttime 为天气发布时间，不把抓取时间当发布时间。", {
+        defineTool("weather", "用地理编码结果中的六位 adcode 查天气实况或预报。以 reporttime 为天气发布时间，不把抓取时间当发布时间。", {
           city: z.string().regex(/^\d{6}$/).describe("城市/区县 adcode，如 110101"), forecast: z.boolean().default(false),
         }, wrap(({ city, forecast }) => get("/v3/weather/weatherInfo", { city, extensions: forecast ? "all" : "base" }))),
       ];

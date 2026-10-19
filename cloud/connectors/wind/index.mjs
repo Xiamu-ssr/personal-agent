@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { z } from "zod";
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "../../src/product-tools.mjs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { apiKeyValues, privateResult } from "../_shared/http.mjs";
@@ -92,7 +92,7 @@ export function createWindConnector({baseUrl="https://mcp.wind.com.cn",fetchImpl
       };
       const accountField=z.string().min(1).max(100).optional().describe("通常留空自动选择；带会话或游标的请求须沿用上次返回的 connector_account，指定后不会切换账号");
       return [
-        tool("call","转发一个 Wind 工具调用。先用 list_tools 查指定服务的工具名与参数；结果过长会明确截断。带游标或会话参数时必须指定上次返回的 connector_account。",{server:SERVER,tool:z.string().min(1).max(200),args:z.record(z.string(),z.any()).default({}),account:accountField},
+        defineTool("call","转发一个 Wind 工具调用。先用 list_tools 查指定服务的工具名与参数；结果过长会明确截断。带游标或会话参数时必须指定上次返回的 connector_account。",{server:SERVER,tool:z.string().min(1).max(200),args:z.record(z.string(),z.any()).default({}),account:accountField},
           wrap(async(values,{server,tool:name,args,account})=> {
             if(requiresAccount(args)&&!account)throw new Error("带会话或游标参数的查询请指定上次返回的 connector_account，避免切换账号后丢失上下文");
             const result=await withClient(values,server,(client)=>client.callTool({name,arguments:args},undefined,{timeout:timeoutMs}));
@@ -102,15 +102,15 @@ export function createWindConnector({baseUrl="https://mcp.wind.com.cn",fetchImpl
             }
             return result;
           })),
-        tool("list_tools","只查询一个 Wind 服务的工具名、说明和参数结构，不把全部远程工具常驻模型上下文。",{server:SERVER,account:accountField},wrap(async(values,{server})=>withClient(values,server,async(client)=> {
+        defineTool("list_tools","只查询一个 Wind 服务的工具名、说明和参数结构，不把全部远程工具常驻模型上下文。",{server:SERVER,account:accountField},wrap(async(values,{server})=>withClient(values,server,async(client)=> {
           const tools=[];let cursor;
           do {const page=await client.listTools(cursor?{cursor}:{},{timeout:timeoutMs});tools.push(...page.tools.map(({name,description,inputSchema})=>({name,description,inputSchema})));cursor=page.nextCursor;
             if(tools.length>500)throw new Error("Wind 工具清单过长，请联系管理员检查");}while(cursor);
           return {server,tools};
         }))),
-        tool("list_skills","列出已缓存的 Wind 官方技能名和一句话描述，按需选择。",{},wrap(()=>({skills:cache.list()}),{local:true})),
-        tool("install_skill","从连接器缓存安装一个 Wind 官方技能，自动改走连接器取数。只安装到当前豆豆，不需要配置 Key。",{name:z.string().min(1).max(101)},wrap((_,{name})=>cache.installSkill(name),{local:true})),
-        tool("ask_alice","把用户问题原文交给 Wind Alice。可能需要数分钟、消耗积分；返回原始分析正文。只在任务尚未接受且明确额度不足时尝试备用账号，开始后不会重复提交。",{question:z.string().trim().min(1).max(10_000),account:accountField},wrap((values,{question})=>alice(values,question))),
+        defineTool("list_skills","列出已缓存的 Wind 官方技能名和一句话描述，按需选择。",{},wrap(()=>({skills:cache.list()}),{local:true})),
+        defineTool("install_skill","从连接器缓存安装一个 Wind 官方技能，自动改走连接器取数。只安装到当前豆豆，不需要配置 Key。",{name:z.string().min(1).max(101)},wrap((_,{name})=>cache.installSkill(name),{local:true})),
+        defineTool("ask_alice","把用户问题原文交给 Wind Alice。可能需要数分钟、消耗积分；返回原始分析正文。只在任务尚未接受且明确额度不足时尝试备用账号，开始后不会重复提交。",{question:z.string().trim().min(1).max(10_000),account:accountField},wrap((values,{question})=>alice(values,question))),
       ];
     },
   };

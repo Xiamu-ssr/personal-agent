@@ -1,0 +1,86 @@
+import {testRoot} from './environment.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {once,EventEmitter} from 'node:events';
+import {execFileSync} from 'node:child_process';
+import {migrateV1} from '../scripts/migrate-v1.mjs';
+import {initialize} from '../src/initialize.mjs';
+import {Content} from '../src/content.mjs';
+import {Harness} from '../src/agent.mjs';
+import {DeviceHub} from '../src/devices.mjs';
+import {ConnectorManager} from '../src/connectors.mjs';
+import {startServer} from '../src/server.mjs';
+import {config} from '../src/config.mjs';
+import {testProvider} from '../src/providers.mjs';
+import {readJson} from '../src/store.mjs';
+const put=(r,f,s)=>{fs.mkdirSync(path.dirname(path.join(r,f)),{recursive:true});fs.writeFileSync(path.join(r,f),s);};
+test('offline migration verifies full backup, preserves private config and content, flattens native memory, never imports sessions',()=>{
+ const root=fs.mkdtempSync(path.join(testRoot,'migration-')),backup=path.join(testRoot,'full-v1-backup.tar.gz');
+ put(root,'data/memory/profile/总档.md','用户偏好 · 原件');put(root,'data/memory/life/住房.md','事实 · 来源时间');put(root,'data/soul/角色.md','名字：豆豆');
+ put(root,'.claude/skills/example/SKILL.md','原有方法');put(root,'data/library/artifacts/result/index.html','已交付');
+ put(root,'system/browser/profile/Cookies','旧浏览器身份');put(root,'system/sessions/history.jsonl','旧会话');put(root,'system/chat.jsonl','旧聊天');put(root,'system/connectors/private/accounts.json','{"accounts":[]}');
+ put(root,'system/app-settings.json',JSON.stringify({model:{provider:'zenmux',id:'anthropic/claude-haiku-5.5'},permissionMode:'auto'}));
+ put(root,'data/goals/运动.md','---\ntitle: 运动\nstatus: 追踪中\nprogress: 40\ncadence: "0 8 * * *"\n---\n下一步');
+ const result=migrateV1({root,backup});assert.equal(fs.existsSync(path.join(root,'system/browser')),false);assert.ok(execFileSync('tar',['-tzf',backup]).toString().includes('./system/browser/profile/Cookies'));assert.equal(result.sessionsImported,0);assert.equal(result.memoryFiles,2);assert.equal(result.goals,1);assert.equal(result.skills,1);
+ assert.ok(fs.readFileSync(path.join(root,'USER.md'),'utf8').includes('用户偏好 · 原件'));
+ assert.ok(fs.readFileSync(path.join(root,'memory/memory-life-住房.md'),'utf8').includes('事实 · 来源时间'));
+ assert.equal(new Content({root}).goal('运动').status,'进行中');
+ assert.equal(fs.readFileSync(path.join(root,'skills/example/SKILL.md'),'utf8'),'原有方法');
+ assert.equal(fs.readFileSync(path.join(root,'data/library/artifacts/result/index.html'),'utf8'),'已交付');
+ assert.equal(fs.existsSync(path.join(root,'system/sessions')),false);assert.equal(fs.existsSync(path.join(root,'system/chat.jsonl')),false);assert.equal(fs.existsSync(path.join(root,'data/memory')),false);
+ assert.ok(execFileSync('tar',['-tzf',backup]).toString().includes('./system/sessions/history.jsonl'));
+ assert.equal(readJson(path.join(root,'system/app-settings.json')).permissionMode,undefined);
+ assert.equal(fs.statSync(backup).mode&0o777,0o600);assert.throws(()=>migrateV1({root,backup:path.join(testRoot,'again.tgz')}),/已迁移/);
+});
+test('initialization refuses an unmigrated legacy root',()=>{
+ const r=fs.mkdtempSync(path.join(testRoot,'legacy-'));fs.mkdirSync(path.join(r,'data/memory'),{recursive:true});assert.throws(()=>initialize(r),/先停服/);
+});
+test('native memory API has no predefined categories, updates current files and rejects escaped paths',()=>{
+ const r=fs.mkdtempSync(path.join(testRoot,'memory-'));initialize(r);const c=new Content({root:r});
+ c.write('memory/2026-10-19.md','现状与来源');assert.equal(c.memory().categories,undefined);assert.ok(c.memory().items.some(i=>i.path==='memory/2026-10-19.md'));
+ c.write('USER.md','当前偏好');assert.equal(c.read('USER.md'),'当前偏好');for(const p of ['../outside','system/openclaw.json','memory/../system/token'])assert.throws(()=>c.write(p,'x'));
+ fs.symlinkSync('/tmp',path.join(r,'memory/escape'));assert.throws(()=>c.write('memory/escape/secret.md','x'));
+});
+test('goal delivery and acceptance remain separate states',()=>{
+ const r=fs.mkdtempSync(path.join(testRoot,'goals-'));initialize(r);const c=new Content({root:r});
+ for(const status of ['未开始','进行中','等待条件','待用户反馈','已完成','暂停','取消'])assert.equal(c.putGoal({name:'测试',title:'测试',status,progress:30,body:'进展与下一步'}).status,status);
+ assert.throws(()=>c.putGoal({name:'../escape',title:'x'}));assert.throws(()=>c.putGoal({name:'测试',title:'x',status:'完成'}));
+});
+function product(t,runtime){initialize(config.root);fs.rmSync(config.chatLog,{force:true});const events=[],bus={emit:e=>events.push(e),on(){}};const connectors=new ConnectorManager({root:config.root,definitions:[]}),h=new Harness({hub:new DeviceHub(),bus,connectors,runtime});t.after(()=>h.close());return {h,events,bus,connectors};}
+test('one main session serializes busy input, suppresses quiet heartbeat, brings background work back into context',async t=>{
+ const calls=[],runtime={ready:true,respond:async(input,opts)=>{calls.push({input,...opts});await new Promise(r=>setTimeout(r,5));return {text:input.includes('静默')?'HEARTBEAT_OK':'执行完成'};},close:async()=>{},reload:async()=>{}};
+ const {h}=product(t,runtime);await h.send('第一条');await h.send('补充一条');await h.mainChain;
+ assert.equal(calls.length,2);assert.ok(calls.every(c=>c.sessionKey==='agent:main:main'));assert.equal(h.busy,false);
+ const count=h.speech.history().length;await h.runMain('静默');assert.equal(h.speech.history().length,count);
+ await h.runIsolated('独立检索','检索结果');await h.runMain('继续');assert.ok(calls.at(-1).input.includes('[已完成的后台工作'));assert.equal(h.pending.length,0);
+});
+test('device ownership stays a role; task GUI capability is not blocked by a hard read/write classifier',async t=>{
+ const {h}=product(t,{close:async()=>{}});const ws=new EventEmitter();ws.close=()=>{};ws.send=()=>{};
+ h.hub.register(ws,{id:'fixture-phone',name:'测试手机',kind:'android',role:'owner',capabilities:[{name:'phone_use',enabled:true}]});
+ assert.equal(h.hub.known()[0].role,'owner');assert.ok(h.hub.tools().some(t=>t.name==='call_device'));
+ const id='owned-run';h.sessionRuns.set('agent:main:main',{id});h.history.put(id,{status:'running'});
+ const catalog=await h.productTool('catalog',{sessionKey:'agent:main:main',group:'devices'});assert.ok(catalog.content[0].text.includes('call_device'));
+});
+test('failed scheduled checks stay in activities while a failed user request reports the failure in chat',async t=>{
+ const {h}=product(t,{respond:async()=>{throw new Error('HTTP 402');},close:async()=>{}});
+ const checked=await h.runMain('定时检查',{id:'scheduled-error',reportError:false});assert.equal(checked.ok,false);assert.equal(h.history.get('scheduled-error').status,'error');assert.equal(h.speech.history().length,0);
+ await h.send('用户发来的请求');await h.mainChain;assert.equal(h.speech.history().filter(m=>m.error).length,1);
+});
+test('new HTTP protocol is mandatory and internal tools cannot be reached through proxy headers',async t=>{
+ const {h,bus,connectors}=product(t,{ready:true,close:async()=>{}});
+ const server=startServer({harness:h,hub:h.hub,bus,connectors,log(){},listen:{host:'127.0.0.1',port:0}});await once(server,'listening');t.after(async()=>{server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));});
+ const base='http://127.0.0.1:'+server.address().port,headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'1'};
+ assert.equal((await fetch(base+'/api/state',{headers:{authorization:headers.authorization}})).status,426);
+ const state=await fetch(base+'/api/state',{headers});assert.equal(state.status,200);
+ assert.equal((await fetch(base+'/health')).status,200);
+ assert.equal((await fetch(base+'/internal/call',{method:'POST',headers:{...headers,'X-Real-IP':'203.0.113.9'},body:'{}'})).status,403);
+ const memory=await (await fetch(base+'/api/memory',{headers})).json();assert.equal(memory.kernel,'openclaw');assert.equal(memory.categories,undefined);
+});
+test('both provider protocols probe their own endpoints without exposing the submitted credential',async()=>{
+ for(const protocol of ['anthropic','openai']){
+  let endpoint;const value=await testProvider({protocol,baseUrl:'https://example.test/v1',apiKey:'fixture-test-key',model:'fixture-model'},{request:async(url)=>{endpoint=url;return Response.json(protocol==='openai'?{choices:[]}:{content:[]});}});
+  assert.equal(value.ok,true);assert.ok(endpoint.endsWith(protocol==='openai'?'/v1/chat/completions':'/v1/messages'));
+ }
+});

@@ -1,10 +1,10 @@
 // Device gateway: phones and Macs connect over WebSocket and register a capability list.
-// The agent reaches them through one in-process MCP server ("devices").
+// OpenClaw reaches them through the Doudou product capability plugin.
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { z } from "zod";
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "./product-tools.mjs";
 import { config } from "./config.mjs";
 import { readJson, writeJson } from "./store.mjs";
 
@@ -17,7 +17,7 @@ const callTimeout = (args) => {
 const REGISTRY = () => path.join(config.system, "devices.json");
 
 // Devices send every capability they have, each with `enabled` (what the user switched on there).
-// Older clients only sent the enabled ones, without the flag.
+// The manifest is supplied by v1 clients.
 const enabledCaps = (info) => (info.capabilities || []).filter((c) => c.enabled !== false);
 
 export const DEVICE_IMAGE_LIMIT = 5 * 1024 * 1024;
@@ -51,6 +51,7 @@ export class DeviceHub {
 
   register(ws, info) {
     const reg = readJson(REGISTRY(), {});
+    info = { ...info, role: info.role === "agent" ? "agent" : "owner" };
     reg[info.id] = { ...info, lastSeen: Date.now() };
     writeJson(REGISTRY(), reg);
     const prev = this.devices.get(info.id);
@@ -86,7 +87,7 @@ export class DeviceHub {
     return [...this.devices.values()].map(({ info }) => ({
       id: info.id,
       name: info.name,
-      kind: info.kind,
+      kind: info.kind, role: info.role,
       capabilities: enabledCaps(info).map((c) => c.name),
     }));
   }
@@ -95,7 +96,7 @@ export class DeviceHub {
   known() {
     return Object.values(readJson(REGISTRY(), {}))
       .map((info) => ({
-        id: info.id, name: info.name, kind: info.kind, online: this.devices.has(info.id), lastSeen: info.lastSeen,
+        id: info.id, name: info.name, kind: info.kind, role: info.role, online: this.devices.has(info.id), lastSeen: info.lastSeen,
         capabilities: (info.capabilities || []).map((c) => ({
           name: c.name, title: c.title || c.name, description: c.hint || c.description || "", enabled: c.enabled !== false,
         })),
@@ -188,17 +189,13 @@ export class DeviceHub {
     writeJson(file, state);
   }
 
-  mcpServer() {
+  tools() {
     const text = (v) => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] });
     const fail = (e) => ({ content: [{ type: "text", text: String(e.message || e) }], isError: true });
-    return createSdkMcpServer({
-      name: "devices",
-      version: "0.1.0",
-      instructions: "用户的手机和电脑。先 list_devices 看谁在线、有哪些能力，再 call_device。",
-      tools: [
-        tool("list_devices", "列出在线设备和每台设备的能力清单（含参数说明）。", {}, async () =>
+    return [
+        defineTool("list_devices", "列出在线设备和每台设备的能力清单（含参数说明）。", {}, async () =>
           text([...this.devices.values()].map(({ info }) => ({ ...info, capabilities: enabledCaps(info) })))),
-        tool(
+        defineTool(
           "call_device",
           "调用某台设备的一个能力。args 按能力清单里的说明传。设备离线会直接返回错误。",
           { device: z.string(), capability: z.string(), args: z.record(z.string(), z.any()).optional() },
@@ -210,7 +207,7 @@ export class DeviceHub {
             }
           },
         ),
-        tool(
+        defineTool(
           "read_since",
           "补读：从设备上取上次提交之后的一批新数据（最多 limit 条）。处理完记忆后必须 sync_commit 这个 batch。",
           { device: z.string(), source: z.string(), limit: z.number().int().max(50).optional() },
@@ -222,7 +219,7 @@ export class DeviceHub {
             }
           },
         ),
-        tool("sync_commit", "提交一批已经处理完的补读数据，游标前移。", { batch: z.string() }, async ({ batch }) => {
+        defineTool("sync_commit", "提交一批已经处理完的补读数据，游标前移。", { batch: z.string() }, async ({ batch }) => {
           try {
             this.commit(batch);
             return text("已提交");
@@ -230,7 +227,6 @@ export class DeviceHub {
             return fail(e);
           }
         }),
-      ],
-    });
+    ];
   }
 }

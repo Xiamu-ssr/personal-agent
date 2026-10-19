@@ -32,6 +32,7 @@ fun ProviderFormScreen(id: String?) {
     val focus=LocalFocusManager.current
     var name by remember { mutableStateOf("") }
     var baseUrl by remember { mutableStateOf("") }
+    var protocol by remember { mutableStateOf("anthropic") }
     var apiKey by remember { mutableStateOf("") }
     var shown by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf("") }
@@ -48,7 +49,7 @@ fun ProviderFormScreen(id: String?) {
             loading=true
             try {
                 val provider=Api.settings().providers.firstOrNull { it.id==id && !it.builtin } ?: kotlin.error("找不到这个模型服务")
-                name=provider.name; baseUrl=provider.baseUrl.orEmpty(); hint=provider.maskedKey
+                name=provider.name; protocol=provider.protocol; baseUrl=provider.baseUrl.orEmpty(); hint=provider.maskedKey
                 models.clear(); models.addAll(provider.models); ready=true; error=""
             } catch(e: CancellationException) { throw e }
             catch(e: Exception) { error=e.message ?: "加载失败" }
@@ -73,7 +74,7 @@ fun ProviderFormScreen(id: String?) {
                         if(editing && hint.isNotBlank()) Text("当前 Key：$hint · 留空保持不变",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(top=6.dp,start=4.dp))
                     }
                     item { Row(Modifier.fillMaxWidth().card().padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Text("协议",style=Type.body(13),color=Pal.Muted,modifier=Modifier.weight(1f)); Text("Anthropic",style=Type.body(15),color=Pal.Ink)
+                        Text("协议",style=Type.body(13),color=Pal.Muted,modifier=Modifier.weight(1f)); TextButton(onClick={protocol=if(protocol=="anthropic") "openai" else "anthropic"}) { Text(if(protocol=="anthropic") "Anthropic" else "OpenAI",color=Pal.Ink) }
                     } }
                     models.forEachIndexed { index,model -> item(key="model:$index") {
                         Column(Modifier.fillMaxWidth().card().padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -99,7 +100,7 @@ fun ProviderFormScreen(id: String?) {
                 }
                 GoldButton(if(saving) progress else "测试并保存",Modifier.fillMaxWidth(),enabled=ready && !saving) {
                     if(saving || !ready) return@GoldButton
-                    val draft=ProviderDraft(name,baseUrl,models.toList(),ProviderKey(apiKey))
+                    val draft=ProviderDraft(name,baseUrl,models.toList(),ProviderKey(apiKey),protocol)
                     val invalid=draft.validate(editing)
                     if(invalid!=null) error=invalid else {
                         focus.clearFocus(); saving=true; error=""

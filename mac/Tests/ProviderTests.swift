@@ -7,7 +7,7 @@ import AppKit
     static let builtin: [String: Any] = ["id":"zenmux", "name":"ZenMux", "builtin":true, "protocol":"anthropic", "models":[["id":"claude-demo", "name":"Claude 演示", "note":"日常使用"]]]
     static let custom: [String: Any] = ["id":"example", "name":"示例服务", "builtin":false, "protocol":"anthropic", "baseUrl":"https://example.test", "keyHint":"••••abcd", "models":[["id":"claude-demo", "name":"自定义 Claude"]]]
     static func settings(_ selection: [String: Any] = ["provider":"zenmux", "id":"claude-demo"], providers: [[String: Any]] = [builtin,custom]) -> [String: Any] {
-        ["model":selection, "providers":providers, "permissionMode":"default", "permissionModes":[["id":"default", "label":"先确认", "note":"涉及操作时确认"], ["id":"acceptEdits", "label":"允许修改", "note":"自动处理修改"]]]
+        ["model":selection, "providers":providers, "kernel":"openclaw"]
     }
     static func parses(_ row: [String: Any]) -> Bool { (try? AgentSettingsSnapshot.parse(row)) != nil }
     static func validDraft() -> ProviderDraft {
@@ -23,7 +23,7 @@ import AppKit
         check(snapshot.model == ModelSelection(provider:"zenmux", id:"claude-demo"), "structured model parses")
         check(snapshot.providers.count == 2 && snapshot.providers[1].models[0].note.isEmpty, "providers parse optional model description")
         check(snapshot.providers[1].keyHint == "••••abcd" && snapshot.providers[0].keyHint == nil && snapshot.providers[0].baseURL == nil, "public key hint and builtin metadata")
-        check(snapshot.label(.model) == "Claude 演示" && snapshot.label(.permissionMode) == "先确认", "settings labels resolve structured selection")
+        check(snapshot.label(.model) == "Claude 演示", "settings labels resolve structured selection")
         check(parses(settings(["provider":"example", "id":"claude-demo"])), "same model ID may exist in different providers")
         var invalid = settings(); invalid["model"] = "claude-demo"
         check(!parses(invalid), "old flat model format is rejected")
@@ -33,7 +33,7 @@ import AppKit
         var bad = custom; bad["models"] = [["id":"same", "name":"一"], ["id":"same", "name":"二"]]
         check(ModelProvider(bad) == nil, "duplicate model IDs within provider are rejected")
         bad = custom; bad["protocol"] = "openai"
-        check(ModelProvider(bad) == nil, "provider protocol is Anthropic only")
+        check(ModelProvider(bad) != nil, "OpenAI protocol is supported")
         bad = custom; bad["baseUrl"] = "https://example.test/?key=oops"
         check(ModelProvider(bad) == nil, "public provider URL is validated")
         bad = custom; bad["models"] = []
@@ -44,7 +44,7 @@ import AppKit
 
         let d = validDraft(), payload = try d.payload(editing:false)
         check(payload["baseUrl"] as? String == "https://example.test", "base URL trailing slash is removed")
-        check(payload["protocol"] == nil && payload["apiKey"] as? String == d.apiKey, "create body contains key and uses fixed protocol without an editable field")
+        check(payload["protocol"] as? String == "anthropic" && payload["apiKey"] as? String == d.apiKey, "create body contains key and uses fixed protocol without an editable field")
         var draft = d; draft.name = "  演示服务  "; draft.baseURL = " https://example.test/// "; draft.models[0].modelID = "  demo  "; draft.models[0].name = " 演示 "
         let trimmed = try draft.payload(editing:false)
         check(trimmed["name"] as? String == "演示服务" && trimmed["baseUrl"] as? String == "https://example.test", "form trims text and URL")
@@ -94,11 +94,9 @@ import AppKit
         let store = AgentSettingsStore(); await store.load()
         await store.selectModel(ModelSelection(provider:"example",id:"claude-demo"))
         check(writes.count == 1 && (writes[0]["model"] as? [String:Any])?["provider"] as? String == "example", "model selection PUT contains provider and model ID")
-        check(store.snapshot?.model.provider == "example" && store.snapshot?.permissionMode == "default", "model save preserves permission mode")
+        check(store.snapshot?.model.provider == "example", "model save preserves permission mode")
         await store.selectModel(ModelSelection(provider:"example",id:"claude-demo")); await store.selectModel(ModelSelection(provider:"missing",id:"claude-demo"))
         check(writes.count == 1, "unchanged and unavailable model selections do not send")
-        await store.selectPermission("acceptEdits")
-        check(writes.count == 2 && writes[1]["permissionMode"] as? String == "acceptEdits" && writes[1]["model"] == nil, "permission selection retains its independent request")
         MockTransport.respond = { _ in (400,["error":"模型暂时不可用"]) }
         await store.selectModel(ModelSelection(provider:"zenmux",id:"claude-demo"))
         check(store.snapshot?.model.provider == "example" && store.error == "模型暂时不可用", "failed selection leaves previous model selected")

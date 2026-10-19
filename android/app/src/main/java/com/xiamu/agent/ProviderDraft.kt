@@ -11,8 +11,9 @@ class ProviderKey(private val value: String = "") {
     override fun toString() = "[redacted]"
 }
 
-data class ProviderDraft(val name: String,val baseUrl: String,val models: List<ProviderModel>,val apiKey: ProviderKey = ProviderKey()) {
+data class ProviderDraft(val name: String,val baseUrl: String,val models: List<ProviderModel>,val apiKey: ProviderKey = ProviderKey(),val protocol: String = "anthropic") {
     fun validate(editing: Boolean): String? = when {
+        protocol !in listOf("anthropic","openai") -> "请选择模型服务协议"
         !name.validProviderText(40) -> "名称请填 1–40 字，不含换行"
         normalizedBaseUrl(baseUrl)==null -> "Base URL 请填 http 或 https 地址，不带 query、hash 或账号密码"
         !editing && apiKey.value().isBlank() -> "请填写 API Key"
@@ -25,7 +26,7 @@ data class ProviderDraft(val name: String,val baseUrl: String,val models: List<P
     }
     fun json(editing: Boolean): JSONObject {
         require(validate(editing)==null) { validate(editing).orEmpty() }
-        return JSONObject().put("name",name.trim()).put("baseUrl",normalizedBaseUrl(baseUrl))
+        return JSONObject().put("protocol",protocol).put("name",name.trim()).put("baseUrl",normalizedBaseUrl(baseUrl))
             .put("models",JSONArray().apply { models.forEach { put(JSONObject().put("id",it.id.trim()).put("name",it.name.trim())) } })
             .apply { apiKey.value().takeIf { it.isNotBlank() }?.let { put("apiKey",it) } }
     }

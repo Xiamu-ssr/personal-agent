@@ -63,7 +63,7 @@ test("Tencent connects without credentials, decodes actual GBK bytes and disconn
   await assert.rejects(manager.addAccount("tencent-quotes", { apiKey: "not-required" }), /不支持的配置字段/);
   assert.equal(fs.statSync(path.join(root, "system/connectors/tencent-quotes/accounts.json")).mode & 0o777, 0o600);
   await manager.removeAccount("tencent-quotes", account.id);
-  assert.equal("tencent-quotes" in manager.mcpServers(), false);
+  assert.equal("tencent-quotes" in manager.toolGroups(), false);
   const before = api.requests.length;
   assert.match((await toolResult(tools, "quotes", { symbols: ["sh000001"] })).data.error, /配置已变更/);
   assert.equal(api.requests.length, before);

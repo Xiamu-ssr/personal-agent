@@ -29,6 +29,7 @@ struct ProviderModel: Identifiable, Equatable {
 struct ModelProvider: Identifiable, Equatable {
     let id: String
     let name: String
+    let protocolName: String
     let builtin: Bool
     let baseURL: String?
     let keyHint: String?
@@ -36,7 +37,7 @@ struct ModelProvider: Identifiable, Equatable {
     init?(_ row: [String: Any]) {
         guard let id = row["id"] as? String, !id.isEmpty,
               let name = row["name"] as? String, !name.isEmpty,
-              let builtin = row["builtin"] as? Bool, row["protocol"] as? String == "anthropic",
+              let builtin = row["builtin"] as? Bool, let protocolName=row["protocol"] as? String, ["anthropic","openai"].contains(protocolName),
               let raw = row["models"] as? [[String: Any]], !raw.isEmpty else { return nil }
         let models = raw.compactMap(ProviderModel.init)
         guard models.count == raw.count, Set(models.map(\.id)).count == models.count else { return nil }
@@ -44,7 +45,7 @@ struct ModelProvider: Identifiable, Equatable {
             guard let url = row["baseUrl"] as? String, Api.serverURL(url) != nil,
                   row["keyHint"] == nil || row["keyHint"] is String else { return nil }
         }
-        self.id = id; self.name = name; self.builtin = builtin; self.models = models
+        self.protocolName=protocolName; self.id = id; self.name = name; self.builtin = builtin; self.models = models
         baseURL = builtin ? nil : row["baseUrl"] as? String
         if !builtin, let hint = row["keyHint"] as? String, !hint.isEmpty { keyHint = "••••" + hint.suffix(4) }
         else { keyHint = nil }
@@ -62,10 +63,11 @@ struct ProviderDraft: CustomStringConvertible, CustomDebugStringConvertible {
     var name = ""
     var baseURL = ""
     var apiKey = ""
+    var protocolName = "anthropic"
     var models = [ProviderModelDraft()]
     init(provider: ModelProvider? = nil) {
         if let provider {
-            name = provider.name; baseURL = provider.baseURL ?? ""
+            protocolName=provider.protocolName; name = provider.name; baseURL = provider.baseURL ?? ""
             models = provider.models.map { ProviderModelDraft(modelID: $0.id, name: $0.name) }
         }
     }
@@ -90,7 +92,7 @@ struct ProviderDraft: CustomStringConvertible, CustomDebugStringConvertible {
         }
         var normalized = url
         while normalized.hasSuffix("/") { normalized.removeLast() }
-        var body: [String: Any] = ["name": name, "baseUrl": normalized, "models": rows]
+        var body: [String: Any] = ["protocol":protocolName,"name": name, "baseUrl": normalized, "models": rows]
         if !key.isEmpty { body["apiKey"] = key }
         return body
     }
@@ -246,7 +248,7 @@ struct ModelProviderFormPage: View {
                         }.padding(.horizontal, 12).frame(height: 42).background(Theme.field, in: RoundedRectangle(cornerRadius: 12))
                         if form.provider != nil { Text("已保存 \(form.provider?.keyHint ?? "••••") · 留空表示不改").font(Theme.font(size: 12)).foregroundStyle(Theme.sub) }
                     }
-                    HStack { Text("协议").font(Theme.font(size: 13, weight: .medium)); Spacer(); Label("Anthropic", systemImage: "lock").font(Theme.font(size: 13)).foregroundStyle(Theme.sub) }.padding(.vertical, 5)
+                    HStack { Text("协议").font(Theme.font(size: 13, weight: .medium)); Spacer(); Picker("协议",selection:$form.draft.protocolName) { Text("Anthropic").tag("anthropic"); Text("OpenAI").tag("openai") }.labelsHidden().frame(width:140) }.padding(.vertical, 5)
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {

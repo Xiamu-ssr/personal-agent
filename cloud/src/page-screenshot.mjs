@@ -4,9 +4,8 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import sharp from "sharp";
 import { z } from "zod";
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "./product-tools.mjs";
 import { localFile, inside } from "./local-paths.mjs";
-import { screenshotService } from "./screenshot-service.mjs";
 
 const WIDTH=390,SCREEN=844,MAX_BYTES=300*1024;
 let active=false; // Shared by all queries and instances: one browser for this entire process.
@@ -20,21 +19,16 @@ export function screenshotTarget(root,rel) {
 }
 
 export function browserExecutable() {
-  const candidates=[process.env.AGENT_SCREENSHOT_BROWSER,"/opt/personal-agent-browser/chrome-headless-shell-linux64/chrome-headless-shell","/usr/bin/google-chrome-stable","/usr/bin/google-chrome","/usr/bin/chromium","/usr/bin/chromium-browser"];
+  const candidates=[process.env.AGENT_SCREENSHOT_BROWSER,"/opt/doudou-screenshot/chrome-headless-shell-linux64/chrome-headless-shell","/usr/bin/google-chrome-stable","/usr/bin/google-chrome","/usr/bin/chromium","/usr/bin/chromium-browser"];
   if(process.platform==="darwin")candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",chromium.executablePath());
   return candidates.find((p)=>p&&fs.existsSync(p));
 }
 const TYPES={".html":"text/html; charset=utf-8",".css":"text/css",".js":"text/javascript",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".woff2":"font/woff2",".woff":"font/woff"};
 export class PageScreenshot {
-  constructor({root,executablePath,timeoutMs=30_000,service=!!process.env.AGENT_BROWSER_SERVICE,browserProvider,terminateBrowser}={}) {Object.assign(this,{root,executablePath,timeoutMs,service,browserProvider,terminateBrowser});}
+  constructor({root,executablePath,timeoutMs=30_000,browserProvider,terminateBrowser}={}) {Object.assign(this,{root,executablePath,timeoutMs,browserProvider,terminateBrowser});}
   async screenshot({path:rel}) {
     const target=screenshotTarget(this.root,rel);
     if(active)throw new Error("已有页面正在截图，请等它结束后再试");
-    if(this.service) {
-      active=true;
-      try {return await screenshotService({root:this.root,path:target.rel,timeoutMs:this.timeoutMs});}
-      finally {active=false;}
-    }
     const executablePath=this.executablePath??browserExecutable();
     if(!this.browserProvider&&(!executablePath||!fs.existsSync(executablePath)))throw new Error("页面截图暂不可用：浏览器尚未安装，请管理员运行 install-screenshot.sh");
     active=true;
@@ -131,12 +125,11 @@ export class PageScreenshot {
     }
   }
   tools() {
-    return [tool("screenshot","按 390px 手机宽度检查资源库里的页面。仅本地构件，禁止联网，最多三屏。",{
+    return [defineTool("screenshot","按 390px 手机宽度检查资源库里的页面。仅本地构件，禁止联网，最多三屏。",{
       path:z.string().max(1024),
     },async(args)=> {
       try {const result=await this.screenshot(args);return {content:[{type:"image",mimeType:"image/jpeg",data:result.data.toString("base64")},{type:"text",text:JSON.stringify({path:result.path,width:result.width,height:result.height})}]};}
       catch(e){return {isError:true,content:[{type:"text",text:e.message}]};}
     })];
   }
-  mcpServer(){return createSdkMcpServer({name:"page",version:"0.8.0",tools:this.tools()});}
 }

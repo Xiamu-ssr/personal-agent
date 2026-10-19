@@ -5,9 +5,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3"><img src="https://img.shields.io/badge/Release-v0.8.3-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v0.8.3"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.0.0"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=101612" alt="Android · macOS · Cloud">
-  <a href="https://github.com/anthropics/claude-agent-sdk-typescript"><img src="https://img.shields.io/badge/Built%20with-Claude%20Agent%20SDK-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with Claude Agent SDK"></a>
+  <a href="https://github.com/openclaw/openclaw"><img src="https://img.shields.io/badge/Built%20with-OpenClaw-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with OpenClaw"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=101612" alt="MIT License"></a>
 </p>
 
@@ -27,19 +27,17 @@
 
 ## 开始使用
 
-**当前版本：[v0.8.3 · 高德地图与统一图标](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
+**当前版本：[v1.0.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.0.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
-| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.3/doudou-0.8.3.apk) | Android 9 或更新版本 |
-| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v0.8.3/doudou-0.8.3.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
-| 云端 | [部署指南](docs/deployment.md) | Linux、Node.js ≥ 20.9、systemd、Nginx、HTTPS |
+| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.0.0/doudou-1.0.0.apk) | Android 9 或更新版本 |
+| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.0.0/doudou-1.0.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
+| 云端 | [部署指南](docs/deployment.md) | Linux、Node.js 24.16+ 或 26.1+、systemd、Nginx、HTTPS |
 
 先[部署云端](#部署)，生成一次性配对码，再在 App 填入自己的服务器地址。第一次聊天，豆豆会问怎么称呼你、自己叫什么，再推荐需要连接的应用和本机能力。
 
-**从 0.8.1 / 0.8.2 升级：更新云端和 App，原有配对继续使用。** 本版新增高德地图连接器，Android 启动图标与 Mac 统一为芽豆；动态配图、免费腾讯行情、Tavily / Wind 多账号额度切换和密钥首尾显示沿用上版。
-
-**从 0.7 升级：云端与客户端都需要更新到 0.8。** 旧版 App 不再兼容；首次启动云端会迁移旧数据，升级前请备份。详见[升级说明](docs/deployment.md#从-07-升级到-08)。
+**1.0 是不兼容升级，云端与 App 必须一起更新。** 原有配对可继续使用；停服备份并迁移持久化数据，旧聊天与 Session 不导入。Claude Code / Agent SDK 和云端交互浏览器已删除。详见[迁移说明](docs/deployment.md#从-08-升级)。
 
 ## 功能
 
@@ -88,9 +86,9 @@
 
 </details>
 
-### 浏览器在云端，决定权在你手里
+### 手机和电脑，按需授权
 
-云主机上运行一个真正的 Chrome。豆豆可以打开网页、点击、输入；你能在 App 里看到画面，需要登录、验证码或付款时接管，完成后交还给它继续。登录状态保存在自己的云主机上。
+你的设备提供上下文，豆豆自己的设备负责执行。每台设备分别标记归属；你的设备默认读取，明确任务可使用 Computer Use / Phone Use。
 
 **13 个内置云端连接器**，需要哪个再连接，接入方式见[连接器规格](spec/connectors.md)：
 
@@ -110,9 +108,16 @@ Tavily、Wind 只在上游明确报告额度耗尽时切换备用账号；网络
 
 ### 同一个豆豆，在更大的屏幕上
 
-手机用悬浮底栏，Mac 用侧边栏，启动图标都使用同一只芽豆。黑白外观跟随系统切换，蓝色留给链接。记忆、活动、权限、定时和云端浏览器统一收在头像控制台里。
+手机用悬浮底栏，Mac 用侧边栏，启动图标都使用同一只芽豆。黑白外观跟随系统切换，蓝色留给链接。记忆、活动、设备和定时统一收在头像控制台里。
 
-<p align="center"><sub>本页全部界面截图来自作者真实账号的 Mac App，私人区域已遮挡。首图由代码排版，将实际截图放入背景与相框；没有 AI 重绘界面。截图中的回答和动态是模型输出，不代表其中事实已逐项核验。<a href="docs/images/v0.8.3/README.md">素材来源与隐私处理</a></sub></p>
+<p align="center"><sub>上方截图来自 0.8.3 真实账号的 Mac App，私人区域已遮挡。首图由代码排版，将实际截图放入背景与相框；没有 AI 重绘界面。截图中的回答和动态是模型输出，不代表其中事实已逐项核验。<a href="docs/images/v0.8.3/README.md">素材来源与隐私处理</a></sub></p>
+
+1.0 的设备归属与原生记忆页面（隔离测试数据）：
+
+<p align="center">
+  <img src="docs/images/v1.0.0/mac-device-role.png" alt="1.0 Mac 设备归属：我的设备与豆豆的设备" width="540">
+  <img src="docs/images/v1.0.0/mac-native-memory.png" alt="1.0 Mac 原生记忆列表" width="540">
+</p>
 
 ## 架构
 
@@ -123,40 +128,41 @@ flowchart TB
 
   subgraph Cloud["你自己的 Linux 云主机"]
     Gateway["App / 设备网关"]
-    Core["Claude Agent SDK · 会话与后台工作"]
+    Core["OpenClaw · 会话与后台工作"]
     Content["灵魂与记忆 · 动态 · 目标 · 资源库"]
     Schedule["定时触发"]
-    Browser["独立浏览器服务 · Chrome + Xvfb"]
     Connectors["按需连接的云端服务"]
     Gateway <--> Core
     Core <--> Content
     Schedule --> Core
-    Core <--> Browser
     Core <--> Connectors
-    Gateway <--> Browser
   end
 
-  Model["你配置的 Anthropic 兼容模型端点"]
+  Model["你配置的 Anthropic 或 OpenAI 兼容模型端点"]
   Services["邮箱 · 搜索 · 阅读 · 数据 · GitHub"]
-  Websites["网站"]
   Android <-->|"HTTPS / WebSocket"| Gateway
   Mac <-->|"HTTPS / WebSocket"| Gateway
   Core <--> Model
   Connectors <--> Services
-  Browser <--> Websites
 
   classDef gold fill:#F3E3B5,stroke:#C9A45C,color:#172033
   class Core gold
   style Cloud fill:#F8F8F5,stroke:#C9A45C,color:#172033
 ```
 
-**云端是本体，手机和电脑是手脚。** 关掉 App 后，云端定时工作仍能继续；调用本机能力时，那台设备必须在线。浏览器有独立服务与资源限制，按需启动 Chrome。
+**云端是本体，手机和电脑是手脚。** 关掉 App 后，云端定时工作仍能继续；调用本机能力时，那台设备必须在线。网页和应用操作使用在线手机或电脑的能力。
 
-个人内容保存在云主机的 `data/`，任务草稿在 `workspace/`，会话、连接配置和浏览器登录状态在 `system/`。推理时会将本轮需要的对话、记忆和工具结果发给你配置的模型端点。具体目录和备份方式见[部署指南](docs/deployment.md#数据与维护)。
+原生记忆保存在 `USER.md`、`MEMORY.md` 和 `memory/`，会话由 `.openclaw/` 管理；内容在 `data/`，草稿在 `workspace/`，连接配置在 `system/`。推理时会将本轮需要的对话、记忆和工具结果发给你配置的模型端点。具体目录和备份方式见[部署指南](docs/deployment.md#数据与维护)。
+
+## 1.0 不兼容升级
+
+已移除 Claude Code / Agent SDK，切换到 OpenClaw 2026.10.4。各端共享一个主 Session，持续 compact；Idea 保留独立栏目，Goal 区分待用户反馈与已完成。记忆采用原生文件和检索，不预设生活分类。
+
+升级前需停服、完整备份并执行一次持久化迁移；旧聊天与 Session 不导入。详见[部署和迁移指南](docs/deployment.md)。
 
 ## 部署
 
-准备自己的 **Linux 云主机、Node.js ≥ 20.9、Git、curl、OpenSSL、Nginx、systemd 与 HTTPS 域名**，以及兼容 Anthropic Messages API 的模型端点。启用云端浏览器还需要 Chrome / Chromium、Xvfb 和中文字体，建议为整机预留至少 4GB 内存。
+准备自己的 **Linux 云主机、Node.js 24.16+ 或 26.1+、Git、curl、OpenSSL、Nginx、systemd 与 HTTPS 域名**，以及兼容 Anthropic Messages 或 OpenAI Chat Completions 的模型端点。
 
 ```bash
 sudo git clone https://github.com/Xiamu-ssr/personal-agent.git /opt/personal-agent
@@ -168,8 +174,8 @@ sudoedit /etc/personal-agent.env
 填写自己的模型端点：
 
 ```dotenv
-ANTHROPIC_BASE_URL=https://api.example.com/anthropic
-ANTHROPIC_AUTH_TOKEN=replace-with-your-api-key
+MODEL_BASE_URL=https://api.example.com/anthropic
+MODEL_API_KEY=replace-with-your-api-key
 AGENT_TZ=Asia/Shanghai
 ```
 
@@ -179,25 +185,24 @@ AGENT_TZ=Asia/Shanghai
 include /etc/nginx/agent-location.inc;
 ```
 
-安装云端。下面的浏览器准备脚本适用于 **Alibaba Cloud Linux 3 / RHEL 8 的 `dnf` 环境**；其他发行版请按[完整指南](docs/deployment.md#云端浏览器)准备对应依赖。
+安装脚本适用于 **Alibaba Cloud Linux 3 / RHEL 8 的 `dnf` 环境**；其他发行版准备对应依赖后安装 systemd unit。
 
 ```bash
 cd /opt/personal-agent/cloud
-sudo bash deploy/browser-setup.sh
 sudo bash deploy/install.sh
 
 # 只检查服务与 HTTPS 路由是否可达
 curl --fail https://agent.example.com/agent/health
 
 # 为一台 App 生成一次性六位配对码
-sudo -u agent /usr/bin/node /opt/personal-agent/cloud/src/pair.mjs
+sudo -u agent /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node /opt/personal-agent/cloud/src/pair.mjs
 ```
 
-安装脚本会准备 `agent` 用户与 `/srv/agent`，按需生成 `AGENT_TOKEN`，安装本体、独立浏览器服务和 Nginx 路由。它不安装 Node、不申请 HTTPS 证书。
+安装脚本会准备 `agent` 用户与 `/srv/agent`，按需生成 `AGENT_TOKEN`，安装本体和 Nginx 路由。它不安装 Node、不申请 HTTPS 证书。
 
 App 填写自己的地址，例如 `https://agent.example.com/agent`，以及配对码。配对码 24 小时有效、用后作废；另一台设备重新生成。配对后发一条消息，确认模型真正回复，再按需连接应用和本机能力。
 
-模型和权限模式在 App 设置里选择。内置 ZenMux 服务可选 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash / FlashX、MiMo-V2.6-Pro，也可添加自己的 Anthropic 兼容服务及模型 ID。聊天、动态和摘要沿用当前选择；切换正在工作的服务会等到合适的空闲边界。模型 ID、上下文配置和维护命令见[完整部署指南](docs/deployment.md)。
+模型在 App 设置里选择，设备归属在各端设置。内置 ZenMux 服务可选 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash / FlashX、MiMo-V2.6-Pro，也可添加自己的 Anthropic 或 OpenAI 兼容服务及模型 ID。聊天、动态和摘要沿用当前选择；切换正在工作的服务会等到合适的空闲边界。模型 ID、上下文配置和维护命令见[完整部署指南](docs/deployment.md)。
 
 ## Spec
 
@@ -217,13 +222,12 @@ node spec/build.mjs
 
 ## 验证与已知限制
 
-[v0.8.3 发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)记录本版检查：云端 **272 项**测试、Android **160 项**单元测试、Android 签名包及 Mac 双架构构建。高德以隔离模拟服务测试真实 MCP 调用、Key 验证、坐标与模式参数、错误脱敏和断开后失效；尚未使用个人高德 Key 做真实查询。上一版已完成线上 **10 张**既有动态图片的下载解码，以及 Mac 腾讯行情开关、股票 / ETF / 指数查询验证。
+1.0 的验收记录见[发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.0.0)。检查包含持久化迁移、原生 OpenClaw 工具循环、主会话连续性和重启续接、两端协议与签名构建。
 
 - 本版 Android 已构建签名安装包，尚未进行真机验收；健康数据和手机权限仍需要真机验证。
-- MiMo-V2.6-Pro 与内置模型约 272K 输入压缩线已配置；超长上下文仅做本地 SDK / CLI 验证，未作付费模型压力测试。
-- 网页登录、验证码和网站自身限制可能需要用户接管；模型、搜索和第三方服务的费用另计。
+- 手机和电脑的应用操作需要实际设备在线、授权；模型、搜索和第三方服务的费用另计。
 - 动态刷新时间受搜索与模型响应影响，不保证在每个检查时点立即生成内容。
-- 云端浏览器占用额外内存；服务模板限制本体 900MB、浏览器 800MB，小内存机器需留意系统与其他服务的余量。
+- 云端交互浏览器和接管界面已移除。资源库本地 HTML 缩略图使用短时渲染。
 
 ## 从源码构建
 
@@ -242,7 +246,7 @@ cd android
 ```bash
 # 首次构建创建自己的本地签名身份，可能弹出钥匙串授权
 bash mac/tools/make-signing-identity.sh
-VERSION=0.8.3 bash mac/build.sh
+VERSION=1.0.0 bash mac/build.sh
 # 产物：mac/build/doudou-0.8.3.dmg；Apple 芯片 + Intel 通用
 ```
 
@@ -252,6 +256,6 @@ Mac 安装包采用本地签名，未做 Apple 公证；首次安装的打开方
 
 以 [MIT License](LICENSE) 开源，Copyright © 2026 Xiamu-ssr。第三方依赖与素材遵循各自许可证。
 
-感谢 [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript)、[Model Context Protocol](https://github.com/modelcontextprotocol/typescript-sdk)、[Jetpack Compose](https://developer.android.com/compose)、[SwiftUI](https://developer.apple.com/xcode/swiftui/)、[Playwright](https://github.com/microsoft/playwright) 与所有依赖项目。0.8 的会话与动态交互参考了 Meta Muse。
+感谢 [OpenClaw](https://github.com/openclaw/openclaw)、[Model Context Protocol](https://github.com/modelcontextprotocol/typescript-sdk)、[Jetpack Compose](https://developer.android.com/compose)、[SwiftUI](https://developer.apple.com/xcode/swiftui/)、[Playwright](https://github.com/microsoft/playwright) 与所有依赖项目。0.8 的会话与动态交互参考了 Meta Muse。
 
 <p align="center"><strong>让你的助手，住在你自己的云里。</strong><br><sub>如果豆豆对你有用，欢迎 Star、反馈和一起改进。</sub></p>

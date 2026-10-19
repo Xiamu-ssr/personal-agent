@@ -1,733 +1,295 @@
-# 豆豆 0.8 产品规格（重构草案）；提示词正文与触发时间在构建时读取最新源文件。
 meta:
-  version: "0.8"
-  title: 豆豆 · 产品规格
-  subtitle: Spec 0.8 草案 · 会话即入口，动态替代简报
+  version: '1.0'
+  title: 豆豆 · Spec
+  subtitle: OpenClaw
 layout:
-  width: 1080
-  height: 860
+  width: 1100
+  height: 720
   padding: 16
 ui:
   overview: |-
-    # 豆豆 0.8 重构草案
-    - 点节点看产品决定，点提示词读全文。
-    - 「待对齐」里是这次重构还没定的事。
-    - 场景演示已删除，只保留架构图。
+    点节点查看业务、行为与实现约定。
 
-    ## 这次变了什么
-    - 聊天是一切入口：首次使用、定目标、调动态口味，都在聊天里完成。
-    - 豆豆只用「说话」回复你，不展示工具过程；头像告诉你它在忙。
-    - 豆豆忙的时候也能接着说，消息直接进当前这一轮。
-    - 撤掉「今日」和简报，换成「动态」：按你的口味刷事实。
-    - 新增「点子」「目标」；站点和文件归进「资源库」。
-    - 任务、定时、记忆、权限收进头像控制台。
-
-    ## 连线
-    - 蓝色：指令。
-    - 金色：个人数据。
-    - 绿色：结果。
-    - 紫色：进度或上线。
+    一个长期 Agent，同一主会话，OpenClaw 内核。
 zones:
-  dev:
-    label: 你的设备
-    color: "#2faa7a"
-  cloud:
-    label: 你的云
-    color: "#3b82f6"
+  app:
+    label: 产品
+    color: '#2faa7a'
+  core:
+    label: 运行
+    color: '#3b82f6'
+  device:
+    label: 设备
+    color: '#9466cf'
   third:
-    label: 第三方
-    color: "#f08a3c"
+    label: 服务
+    color: '#f08a3c'
 kinds:
   cmd:
     label: 指令
-    color: "#3b82f6"
+    color: '#3b82f6'
   data:
     label: 个人数据
-    color: "#f59e0b"
+    color: '#f59e0b'
   result:
     label: 结果
-    color: "#10b981"
+    color: '#10b981'
   event:
     label: 进度/上线
-    color: "#8b5cf6"
+    color: '#8b5cf6'
 domains:
   - id: app
     name: 豆豆 App
-    icon: 📱
-    zone: dev
+    icon: 🧸
+    zone: app
     rect:
       - 1
-      - 15
-      - 22
-      - 41
-    qs:
-      - q_tabs
-      - q_skin
-    role: 安卓与 Mac 是同一个产品的两种布局。
-    can:
-      - 聊天 / 动态 / 点子 / 目标 / 资源库五个栏目，图标放在悬浮的底栏里
-      - 顶部头像显示豆豆在不在忙，点开是控制台
-      - 黑白两色，浅色深色跟随系统，蓝色只给链接
-      - 一切配置都能在聊天里完成，页面只是快捷入口
-    cannot:
-      - 设备能力由用户在那台设备上授权；云端维护记忆
-    holds:
-      - 聊天和内容的本地缓存
+      - 21
+      - 27
+      - 56
+    role: Android 与 Mac 使用同一份对话和内容。
     chips:
-      - id: app_avatar
-        name: 头像
-        icon: 🧸
-        desc: 空闲时看着你 · 忙时在干活
-        q: q_mascot
-        doc: |-
-          - 聊天顶部居中一个 3D 的可爱形象，名字写在下面；名字由用户在第一次聊天时起。
-          - 五种状态：空闲（看着你）、工作中（戴耳机敲电脑）、等你回复、完成（开心一下）、出错（流汗）。
-          - 忙的时候名字下面多一行状态，如「努力工作中」「在看你的邮件」。
-          - 点头像打开控制台。
       - id: app_chat
         name: 聊天
         icon: 💬
-        desc: 会话即入口
-        q: q_say
+        desc: 持续对话
         doc: |-
-          - 豆豆的回复是一条条气泡，一轮里可以说好几次；看不到工具调用和步骤。
-          - 回复里可以带能点的卡片：选项（点一下就当你回复了）、连接应用、目标、网页预览、图片、音视频、文件、浏览器实时画面。
-          - 豆豆忙时输入框照常可用，发出去的消息直接进当前这一轮，豆豆在下一步之前就能看到。没有排队，也没有撤回。
-          - 想让它停：点头像，再点停止。
-          - 左上角抽屉里可以另开旁聊，不打扰主聊天。
-          - 加了图片或文件，输入框上方排一行缩略图，可以逐个删掉；输入框本身不变形。
-          - 文字、图片、文件、拍照、按住说话、语音笔记照旧。
-      - id: app_onboard
-        name: 第一次聊天
-        icon: 👋
-        desc: 不填表，聊着开始
+          - 同一个主 Session，跨端继续；忙时可插话、纠正或停止。
+          - 支持文字、图片、附件、语音和结果卡片。
+          - 讨论内容先进入输入框引用，编辑后再发送。
+      - id: app_goals
+        name: Goal
+        icon: 🎯
+        desc: 推进到用户认可
         doc: |-
-          - 登录（云端地址 + 配对码）之后直接进聊天，豆豆先开口：介绍自己，问怎么称呼你。
-          - 再请你给它起名：三个选项卡，「豆豆」排第一，也可以自己打。
-          - 说清它能做什么：住在你自己的云主机上，你不在也能办事；连上应用、手机和电脑就能替你管。
-          - 按这台设备推荐两三个连接卡片：安卓先给「一键开启本机能力」，再给邮箱等常用服务。点卡片进连接页或系统授权。
-          - 聊天中了解到你的兴趣，就顺手写好动态说明，告诉你第一批动态去哪看。
+          - 未开始 → 进行中 → 待用户反馈 → 已完成；修改意见返回进行中。
+          - 等待外部条件时记下条件与下次检查时间；用户认可成果才完成。
+          - 每项保留进展、下一步与结果。完成、暂停或取消后停止对应唤醒。
       - id: app_feed
         name: 动态
         icon: 📰
-        desc: 像刷推特一样刷事实
-        q: q_feed_when
+        desc: 按兴趣更新事实
         doc: |-
-          - 一条条帖子：来源图标、一句话标题、两三句正文带原文链接、配图或小表格、多久以前。
-          - 每条可以赞、踩、讨论。点「讨论」不会马上发出：跳到主聊天，这条动态作为引用挂在输入框上方，你接着打字再发；聊天里显示你的话和一张小引用卡，豆豆拿到的是整条动态。
-          - 顶部输入框直接说想看什么，如「多给我看点 AI 产品」；右上角的调节按钮打开「动态说明」全文和更新频率，可以直接改，保存后从下一次起生效。
-          - 在聊天里说想看什么、丢一批渠道给豆豆，也都改进动态说明，调节面板里马上看得到。
-          - 白天随时冒出新帖，最新的在最上面，讲的是刚发生的事；有新帖时底栏图标上有红点。
-          - 只发事实：每条点名来源、附原文链接；没新东西就不发，不凑数。
+          - 按用户配置的来源与频率更新，附原文，无新内容不发。
+          - 支持赞、踩、讨论；反馈影响后续内容。
       - id: app_ideas
-        name: 点子
+        name: Idea
         icon: 💡
-        desc: 点一下就开聊
+        desc: 发现可以帮忙的事
         doc: |-
-          - 豆豆根据记忆、目标和最近聊的事想出来的事，每条一个图标、一句标题、一段说明，按领域分组。
-          - 点一条，就以你的口吻发到聊天里开始做。
-          - 其中有推荐连接应用的点子，如「连上 GitHub，我每天帮你看通知」。
-          - 每周一换一批，也可以点「换一批」。
-      - id: app_goals
-        name: 目标
-        icon: 🎯
-        desc: 在聊天里定，豆豆来盯
-        doc: |-
-          - 上面是「追踪中」：每个目标一行，带进度和下次跟进时间。
-          - 下面是「创建目标」：健康、人际、金融、事业、兴趣、效率、其他。点一个会弹出说明，点「开始吧」进聊天，豆豆问几个问题把目标定下来。
-          - 定好后按约定的频率跟进：到点发一条短消息问进展、给下一小步；能替你做的步骤先在后台做完再汇报。
-          - 豆豆说「建好了」，追踪中就一定有它：目标卡只能指向已经写好的目标，没写好卡片发不出去。
-          - 点进目标看计划和步骤；要改目标也去聊天里说。
+          - 从近期处境发现机会，不凑数量、不强制推荐连接应用。
+          - 保留独立栏目；采纳后进入对话或 Goal。
       - id: app_library
         name: 资源库
         icon: 🗃
-        desc: 构件 · 影音内容
+        desc: 页面 · 文件 · 影音
         doc: |-
-          - 构件：豆豆做的页面（原来的站点）和文档，两列缩略图，点开在 App 里用。
-          - 影音内容：豆豆生成或交付的图片、视频和音频。
-          - 新的排在前面。
-      - id: app_console
-        name: 头像控制台
+          - 展示交付成果，可打开、下载、继续修改。
+          - 草稿与成品分开，已有成果原地更新。
+      - id: app_activity
+        name: 头像与活动
         icon: 🎛
-        desc: 活动 · 权限 · 电脑 · 定时 · 记忆
+        desc: 正在做什么 / 等什么
         doc: |-
-          - 活动：豆豆做过的事，像 Muse 一样一件一条——主聊天里干了活的那几轮、目标跟进、委派出去的任务、旁聊、发了帖的动态。每条一个话题标题、一句做了什么和时间；点开看完整轨迹、接着聊。纯聊天不算活动，没发帖的动态也不列。
-          - 权限：自动（默认）或完全放行。
-          - 电脑：云端浏览器和在线设备的实时画面，可以接管。
-          - 定时：所有定时安排，可以立即运行或停用。
-          - 记忆：灵魂（豆豆的名字、性格、日记）和记忆（总档、各分类、健康）两张卡。
-      - id: app_set
+          - 头像表现工作状态，活动优先展示进行中和等待的事。
+          - 轨迹按需展开，可以停止或继续。
+      - id: app_settings
         name: 设置
         icon: ⚙️
-        desc: 模型 · 连接应用 · 设备
+        desc: 模型 · 连接器 · 设备
         doc: |-
-          - 从左上角抽屉底部进入。
-          - 模型：内置 ZenMux 的 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash、GLM 5.3 FlashX，每项一行消耗说明；也可以添加自己的模型服务（名称、Base URL、API Key，下面挂模型 ID 和显示名，协议固定 Anthropic）。从下一轮起生效。
-          - 连接应用：精选、按类别分组、来自这台设备；一服务一连接器，统一详情页添加、验证、修改、删除。
-          - 连接应用和本机能力各用自己的彩色图标（品牌色，或一眼能认的颜色）；开着的一眼看得出是开着的。
-          - 设备、通知、外观（跟随系统 / 浅色 / 深色）、云端地址、退出登录、版本。
-  - id: mac_app
-    name: Mac
-    icon: 💻
-    zone: dev
+          - 管理模型、账号和设备能力；各端同步。
+          - 保留黑白主题、通知设置与芽豆形象。
+      - id: app_onboard
+        name: 首次使用
+        icon: 👋
+        desc: 聊着开始
+        doc: |-
+          - 设置称呼与名字，了解兴趣，连接实际需要的信息源。
+          - 设备配对时选择只读或读写。
+  - id: core
+    name: 豆豆 · OpenClaw
+    icon: ⚙️
+    zone: core
     rect:
-      - 1
-      - 60
-      - 22
-      - 11
-    compact: true
-    role: 相同页面的桌面布局：底栏换成侧边栏，保留菜单栏快捷聊天。
-    chips: []
-  - id: cloud
-    name: 云端本体
-    icon: ☁️
-    zone: cloud
-    rect:
-      - 27
-      - 15
-      - 46
-      - 56
-    free: true
-    qs:
-      - q_kernel
-      - q_inject
-    role: 持续在线，负责对话、后台工作和内容维护。
-    can:
-      - 主聊天只管陪你说话和分派，多步的事交给后台任务
-      - 只用「说话」回复，一轮可以说好几次；关键一步之前发选项卡问你
-      - 写动态和点子，按时跟进目标
-      - 使用已连接服务、已授权设备和云端浏览器
-    cannot:
-      - 没有轮询式的模型心跳：动态、目标跟进、点子都是定时安排
-      - 不全量搬走设备数据，不把原始短信当记忆
-    holds:
-      - 个人内容、账号配置与会话记录
-    chips:
-      - id: cl_sched
-        name: 调度器
-        icon: ⏰
-        at:
-          - 4
-          - 3
-          - 35
-          - 25
-        desc: 到点做事
-        doc: |-
-          - 动态：白天（默认 7:00–23:00）每 30 分钟看一次，只发上次之后出现的新消息，一次 0 到 2 条，没有就不发；间隔和时段可以改，也可以关掉；点「刷新」马上看一次。
-          - 目标按各自约定的频率跟进；点子每周一换一批；夜间整理每天 22:30。
-          - 每 3 小时从在线的手机同步一次健康数据，不经过模型、不花 token。
-          - 会对你说话的定时任务在主会话里跑，你回它时上下文是全的：目前只有目标跟进；主会话正忙就等这一轮说完再来。
-          - 只产出内容或做整理的在后台各开一个新会话，不占住聊天、也不对你说话：动态、点子、夜间整理、补读；健康同步不经过模型。
-      - id: cl_appgw
-        name: App 网关
-        icon: 🚪
-        at:
-          - 4
-          - 37
-          - 35
-          - 23
-        desc: 让两端看到同一进展
-        doc: |-
-          - 用户消息直接送进当前这一轮。同一条消息因为连点或网络重发到了两次，只算一次。
-          - 把豆豆说的话、卡片、头像状态和后台活动推到两端；App 关闭不影响云端工作。
-          - 赞踩、动态说明、目标和设置的修改都从这里进来。
-      - id: cl_harness
-        name: Claude Harness
-        icon: ⚙️
-        at:
-          - 47
-          - 3
-          - 49
-          - 25
-        desc: 说话 · 模型 · 上下文
-        doc: |-
-          - 内核不变，仍是 Claude Agent SDK。
-          - 系统提示词是一整份，两段拼成：前面是通用工作守则（Claude Code 自带的那份，删掉了和豆豆冲突的句子，比如「正文就是给用户看的」「动手前先说一句」「结尾写总结」「主要做软件工程」）；后面是豆豆的业务提示词，完整保留，开头写明以上是什么、以下是什么，不一致时以下面为准。
-          - 主聊天是一条连续的会话，不会每条消息另开一个。你说的每句话、豆豆说的每句话都在同一份上下文里；上下文满了自动压缩。
-          - 独立会话（全新上下文，带系统提示词，第一条消息就是任务）只用在不需要和你对话的事上：动态、点子、夜间整理、补读、委派出去的重活；旁聊是你自己另开的独立会话。委派的重活做完，结果交回主会话。
-          - 新增「说话」：豆豆对你说话的唯一出口，带文字和卡片；工具过程和正文只进轨迹，不进聊天。一轮快结束时如果写了正文却没用「说话」，云端提醒它一次：要说给你听的用「说话」发，只是旁白就直接结束。后台会话不能说话。
-          - 忙时收到的新消息在下一步之前交给模型；这一轮是系统发起的（比如交还浏览器后接着干），你的消息也进这一轮。
-          - 工具环境：Python 默认 3.11，预装 PDF、Word、Excel 解析库和 PDF 转文字工具。
-          - 不设工具审批。走到关键一步之前（下单付款、发出消息或邮件、提交表单、删除、替你答应别人），先用「说话」发选项卡问你，你点了才继续。
-          - 模型在 App 里切换，从下一轮起全部用新模型；推理强度 max；内置模型预计下一次输入约 272K 时内置压缩，自定义模型约 100K。
-          - 权限：自动（默认）拦下危险操作，完全放行什么都不拦；两种都不向 App 弹请求。
-      - id: cl_devgw
-        name: 设备网关
-        icon: 🔗
-        at:
-          - 4
-          - 70
-          - 35
-          - 23
-        desc: 在线设备 · 已授权能力
-        doc: |-
-          - 只调用用户已开启的设备能力；离线、未授权或失败都返回具体原因。
-          - 按需读取这一次需要的数据，也可以让豆豆看到设备截图。
-      - id: cl_fs
-        name: 内容库
-        icon: 💾
-        at:
-          - 47
-          - 37
-          - 49
-          - 23
-        desc: 约定好的目录
-        q: q_dirs
-        doc: |-
-          - 按 App 的栏目分区，打开哪个栏目就展示哪一块：动态、点子、目标、资源库（构件、影音）。
-          - 控制台里的三块：记忆（总档和各分类）、灵魂（名字、性格、日记）、健康（从手机同步，豆豆只读）。
-          - 你上传的文件单独一块，豆豆只读不动；还没收尾的事记在跟进清单里。
-          - 上传的文件和健康数据怎么读都行，包括用命令行；只拦写入、改名、移动和删除。
-          - 草稿区放过程文件，7 天没动自动清理；用熟的做法整理成技能，下次直接用。
-          - 系统区放设置、连接账号、会话记录、定时安排和云端浏览器的登录状态，豆豆不直接改。
-          - 不再有简报：旧简报移进备份，旧站点并进构件，日记和角色并进灵魂。
-      - id: cl_feed
-        name: 动态
-        icon: 📰
-        at:
-          - 47
-          - 70
-          - 49
-          - 23
-        desc: 一条帖子一个文件
-        q: q_feed_src
-        doc: |-
-          - 每次只找上次之后发布的新消息，时效第一；同一件事发过就不再发，有实质新进展才发续篇。
-          - 从哪找：动态说明里点名的渠道（新闻站、博客、RSS、X 等公开页面）和网页搜索；你在云端浏览器里登录过的网站（比如 X 的时间线）也能去看。公众号、小红书这类封闭平台先不接。
-          - 帖子带标题、来源、原文链接、发布时间，可选配图和小表格。
-          - 写之前读动态说明、总档、近两周的赞踩，以及近三天已发的帖子。
-          - 配图用原文自己的图，下载到本地；没有就不配，不生成图。
-          - 赞、踩、讨论记进反馈记录，下一批参考。
-  - id: cloudpc
-    name: 云端浏览器
-    icon: 🌐
-    zone: cloud
-    rect:
-      - 78
-      - 45
+      - 36
       - 21
-      - 24
-    qs:
-      - q_cloudpc
-    role: 云主机上一个带界面的 Chrome，跑在虚拟显示器里，不另开虚拟机；完整的云电脑以后再说。
-    can:
-      - 打开网页、点击、填写，像人一样用网站
-      - 保留登录状态
-      - App 里看实时画面，随时接管
-    cannot:
-      - 不碰你的设备
-      - 登录和验证码交给你在 App 里接管
-    holds:
-      - 豆豆的浏览器登录状态和下载的文件
-    chips: []
+      - 28
+      - 56
+    role: 一个长期 Agent，统一对话、记忆和任务。
+    chips:
+      - id: cl_session
+        name: 主会话
+        icon: 💬
+        desc: 一个 Session，持续 compact
+        doc: |-
+          - 不自动 new/reset；压缩前保存重要信息，之后继续原会话。
+          - 后台任务可用同一 Agent 的隔离 Session，结果交回主会话。
+          - 彻底移除 Claude Code SDK 与旧执行路径，不做兼容。
+      - id: cl_memory
+        name: Memory
+        icon: 🗂️
+        desc: 原生写入、整理与检索
+        doc: |-
+          - 使用 OpenClaw Memory Core：日常记录、压缩前 flush、Dreaming 整理、按需检索。
+          - 不预设领域目录，不另建总档或第二套记忆。
+          - App 展示同一套记忆，支持查看、纠正与删除。
+      - id: cl_skills
+        name: Skill
+        icon: 🛠
+        desc: 复用做事的方法
+        doc: |-
+          - 采用 OpenClaw Skill Workshop 的生成、修正与整理机制。
+          - 用户事实留在记忆；可复用方法进入 Skill。
+      - id: cl_wake
+        name: 主动推进
+        icon: ⏰
+        desc: 事件 + 定时 + 心跳
+        doc: |-
+          - 检查新事件与未完成 Goal，能推进就做下一步。
+          - 等待时记录触发条件；无变化保持安静。
+          - 有结果、重要变化或需要用户决定时通知。
   - id: model
-    name: 模型服务
+    name: 模型
     icon: 🧠
     zone: third
     rect:
-      - 27
-      - 0
+      - 36
+      - 1
       - 28
       - 12
-    role: 提供推理；内置 ZenMux，也可以自己添加服务；在 App 设置里选择，下一轮起生效。
-    can:
-      - 内置 ZenMux 的五种模型，以及你自己添加的任何 Anthropic 协议服务
-      - 推理强度均为 max
-      - 内置模型预计下一次输入约 272K 时压缩（CLI 策略窗口 305K），自定义模型约 100K
-    cannot:
-      - 不负责个人内容的长期保存
-    holds:
-      - 本轮对话，以及用到的记忆与设备、服务结果
-    chips:
-      - id: md_main
-        name: Haiku 5.5
-        icon: 🧠
-        desc: 默认模型
-      - id: md_opus
-        name: Opus 5.5
-        icon: 🧠
-        desc: 消耗约 40×；缓存读约 20×
-      - id: md_glm_flash
-        name: GLM 5.3 Flash
-        icon: 🧠
-        desc: 可在设置中切换
-      - id: md_glm
-        name: GLM 5.3 FlashX
-        icon: 🧠
-        desc: 可在设置中切换
-      - id: md_mimo
-        name: MiMo-V2.6-Pro
-        icon: 🧠
-        desc: 可在设置中切换
-      - id: md_custom
-        name: 自己添加的服务
-        icon: ➕
-        desc: Base URL + 模型 ID
-        doc: |-
-          - 设置 → 模型 → 添加模型服务：填名称、Base URL、API Key；协议固定 Anthropic，显示但不能改。
-          - 一个服务下可以加多个模型，每个填模型 ID 和显示名。
-          - 保存前先测一次连接，通了才能保存；Key 存在云端，App 里只显示末四位。
-          - 选中后，聊天、动态、点子、目标跟进、夜间整理、活动标题都用它，和内置模型一样。
+    role: 个人使用 ZenMux；可通过 OpenClaw 切换模型服务。
+    chips: []
+    compact: true
+    doc: '- 模型供应与产品设计分开，未来可直接接 DeepSeek API。'
   - id: conn
-    name: 云端连接器
+    name: 连接器
     icon: 🧩
     zone: third
     rect:
-      - 59
-      - 0
-      - 34
-      - 10
-    compact: true
-    role: 已经支持的在线服务，一服务一连接器。
-    can:
-      - 只读邮箱、深入调研与网页正文、微信读书、Wind 金融数据、腾讯行情、GitHub
-      - 同一邮箱服务可连多个账号；Tavily 与 Wind 可在明确额度耗尽后切换备用账号
-    cannot:
-      - 未支持的服务暂时接不了，内置能力不展示
-    holds:
-      - 第三方账号数据
-    doc: "- 在 App 自己填写参数，或请豆豆引导、代填；账号验证成功才保存。密钥在 App 中显示首尾提示以便区分。腾讯行情无需账号与 Key，直接开关，默认关闭。"
-    chips: []
-    catalog: connectors
+      - 72
+      - 1
+      - 27
+      - 26
+    role: 按服务接入，使用相应账号授权。
+    chips:
+      - id: conn_services
+        name: 信息与服务
+        icon: 🔗
+        desc: 邮箱 · 阅读 · 搜索等
+        doc: |-
+          - 沿用现有服务目录，通过 OpenClaw 工具接入。
+          - 每个服务管理自己的账号和可用能力。
+        catalog: connectors
+      - id: conn_pay
+        name: 支付 · 待接入
+        icon: 💳
+        desc: 付款 · 回执 · 退款
+        doc: |-
+          - 作为连接器接入支付服务，按通道完成授权与付款，回写订单结果。
+          - 支付成功与 Goal 完成分开；商户覆盖和自主付款范围随通道确定。
   - id: dev
-    name: 端侧连接器
+    name: 设备
     icon: 🔌
-    zone: dev
+    zone: device
     rect:
-      - 78
-      - 15
-      - 21
-      - 24
-    role: 手机与电脑是豆豆的手脚，需要授权，也可能离线。
-    can:
-      - 执行已经开启的本机能力
-    cannot:
-      - 不整盘上传；离线或未授权时不执行
-    holds:
-      - 原始短信、日历、运动健康与电脑文件
+      - 72
+      - 37
+      - 27
+      - 40
+    role: 我的设备只读；豆豆的设备读写。
     chips:
       - id: dev_android
-        name: 安卓
-        icon: 🤖
-        desc: 通知 · 位置 · 日历 · 短信 · 健康
+        name: Android
+        icon: 📱
+        desc: 短信 · 位置 · 健康 · App
         doc: |-
-          - 在线且授权后，可读电量、位置、日历、短信，发通知、写剪贴板。
-          - 运动健康优先读 Health Connect 的步数、睡眠、心率与心率变异性；不可读时仅可用系统计步。
-          - 链接通过通知交给用户点击，不自动打开页面。被系统关闭后台时显示离线。
+          - 只读：读取已授权的短信、通知、位置、电量、日历与健康。
+          - 读写：豆豆专用手机可操作 App、安装软件、改动系统。
+        pills:
+          - 只读
+          - 读写
       - id: dev_mac
         name: Mac
         icon: 💻
-        desc: 命令行 · 操作电脑 · 浏览器 · 日历
+        desc: 文件 · 屏幕 · 命令
         doc: |-
-          - 在线且授权后，可执行命令、操作电脑、访问文件，发通知、读取日历；睡眠或断线时显示离线。
-          - 自带多标签「豆豆浏览器」，保留登录状态，与 Safari、Chrome 隔离，用户可随时接手。
-          - 需要你已经登录过的网站时用它；其他网页优先交给云端浏览器。
+          - 只读：读取授权文件夹及允许观察的上下文。
+          - 读写：豆豆专用电脑可写文件、执行命令、操作 GUI 和浏览器。
+        pills:
+          - 只读
+          - 读写
+    doc: |-
+      - 设备归属由提示词约束；用户设备允许当前明确任务的 Computer Use / Phone Use。
+      - 豆豆设备全权限，可接受改坏系统；账号身份与支付能力由实际接入决定。
   - id: prompts
     name: 提示词
     icon: 📝
-    zone: cloud
+    zone: core
     rect:
       - 1
-      - 75
+      - 84
       - 98
-      - 16
-    role: 名字、触发条件、提示词全文。
+      - 13
+    role: 业务约定；通用执行与记忆机制沿用 OpenClaw。
     chips:
-      - id: p_base
-        name: 通用工作守则
-        icon: 📐
-        prompt: p_base
       - id: p_system
-        name: 系统提示词
+        name: 业务提示词
         icon: 📝
         prompt: p_system
+      - id: p_heartbeat
+        name: 主动推进
+        icon: 📝
+        prompt: p_heartbeat
+      - id: p_goal
+        name: Goal 推进
+        icon: 📝
+        prompt: p_goal
       - id: p_feed
         name: 动态
         icon: 📝
         prompt: p_feed
-      - id: p_goal
-        name: 目标跟进
-        icon: 📝
-        prompt: p_goal
       - id: p_ideas
-        name: 点子
+        name: Idea
         icon: 📝
         prompt: p_ideas
-      - id: p_night
-        name: 夜间整理
-        icon: 📝
-        prompt: p_night
 edges:
-  - id: e_msg
+  - id: e_chat
     from: app
-    to: cloud
-    label: 消息
-    kind: cmd
-    "off": -45
-    desc: 你在聊天、旁聊或活动记录里说的话，以及点的选项
-    trigger: 你发消息或点卡片
-    trust: 豆豆忙时也直接进当前这一轮
-  - id: e_evt
-    from: cloud
-    to: app
-    label: 说话
+    to: core
+    label: 交流
     kind: event
-    "off": -15
-    desc: 豆豆说的话、头像状态、后台活动
-    trigger: 豆豆开口或状态变化
-    trust: 工具过程不进聊天，只进活动记录
-  - id: e_card
-    from: cloud
-    to: app
-    label: 内容
-    kind: result
-    "off": 15
-    desc: 动态、点子、目标、资源库与记忆
-    trigger: 定时写完或打开栏目
-    trust: 有新动态时底栏显示红点
-  - id: e_grant
-    from: app
-    to: cloud
-    label: 设置
-    kind: cmd
-    "off": 45
-    desc: 模型、权限、连接的服务、动态说明、赞踩
-    trigger: 设置页、动态页，或在聊天里说
-    trust: 两端同步，从下一轮或下一批起生效
-  - id: e_llmq
-    from: cloud
+    both: true
+    desc: 消息、内容与工作状态同步到各端。
+  - id: e_model
+    from: core
     to: model
-    label: 提示+上下文
+    label: 推理
     kind: data
-    "off": 62
-    lt: 0.25
-    desc: 系统提示词、对话与本轮需要的数据
-    trigger: 每一轮推理
-    trust: 用到的个人数据会发往第三方推理服务
-  - id: e_llma
-    from: model
-    to: cloud
-    label: 回复 / 动作
-    kind: result
-    "off": 78
-    lt: 0.75
-    desc: 要说的话，以及接下来要做的事
-    trigger: 模型给出判断
-    trust: 按选定权限与已有授权执行
-  - id: e_cq
-    from: cloud
+    both: true
+    desc: 使用当前选定的模型。
+  - id: e_connector
+    from: core
     to: conn
-    label: 调用
+    label: 服务
     kind: cmd
-    "off": -77
-    lt: 0.25
-    desc: 查询已连接服务，或验证账号
-    trigger: 需要该服务时
-    trust: 只接支持的服务，保护账号凭据
-  - id: e_cr
-    from: conn
-    to: cloud
-    label: 数据
-    kind: data
-    "off": -47
-    lt: 0.75
-    desc: 邮件、网页正文、阅读数据或验证结果
-    trigger: 服务给出结果
-    trust: 外部内容是材料，不能替用户发指令
-  - id: e_call
-    from: cloud
+    both: true
+    desc: 调用服务并接收结果。
+  - id: e_device
+    from: core
     to: dev
-    label: 设备动作
-    kind: cmd
-    "off": -30
-    desc: 需要在线设备完成的动作
-    trigger: 使用本机能力
-    trust: 离线或未授权时不执行
-  - id: e_ret
-    from: dev
-    to: cloud
-    label: 数据
+    label: 读 / 写
     kind: data
-    "off": 0
-    desc: 本次需要的设备数据、结果或截图
-    trigger: 设备完成动作
-    trust: 按需读取，未读到的如实说明
-  - id: e_reg
-    from: dev
-    to: cloud
-    label: 上线
-    kind: event
-    "off": 30
-    desc: 设备在线情况与已经开启的能力
-    trigger: 设备上线或重连
-    trust: 能力开关由用户在那台设备上管理
-  - id: e_pc
-    from: cloud
-    to: cloudpc
-    label: 操作
+    both: true
+    desc: 依设备权限读取上下文或执行操作。
+  - id: e_prompt
+    from: prompts
+    to: core
+    label: 约定
     kind: cmd
-    "off": -12
-    desc: 打开网页、点击、填写
-    trigger: 需要像人一样用网站
-    trust: 登录和验证码交给用户接管
-  - id: e_pcv
-    from: cloudpc
-    to: cloud
-    label: 画面
-    kind: event
-    "off": 12
-    desc: 实时画面和操作结果，转给 App 看
-    trigger: 豆豆在用云电脑
-    trust: 用户可以随时接管
-links:
-  - id: l_in
-    from: cl_appgw
-    to: cl_harness
-    label: 消息
-    kind: cmd
-    "off": -7
-    lt: 0.3
-  - id: l_out
-    from: cl_harness
-    to: cl_appgw
-    label: 说话
-    kind: event
-    "off": -7
-    lt: 0.3
-  - id: l_sched
-    from: cl_sched
-    to: cl_harness
-    label: 定时安排
-    kind: cmd
-    "off": -6
-    lt: 0.3
-    desc: 到点开始做事：目标跟进进主会话，其余各开新会话。
-  - id: l_cron
-    from: cl_harness
-    to: cl_sched
-    label: 定时配置
-    kind: cmd
-    "off": -6
-    lt: 0.3
-    desc: 目标定好后登记跟进时间；用户在聊天里说的定时安排也在这里登记。
-  - id: l_dev
-    from: cl_harness
-    to: cl_devgw
-    label: 设备动作
-    kind: cmd
-    "off": -7
-    lt: 0.3
-  - id: l_wake
-    from: cl_devgw
-    to: cl_harness
-    label: 上线事件
-    kind: event
-    "off": -7
-    lt: 0.3
-  - id: l_fs
-    from: cl_harness
-    to: cl_fs
-    label: 内容维护
-    kind: data
-    tx: 0.5
-  - id: l_feed
-    from: cl_harness
-    to: cl_feed
-    label: 写帖子
-    kind: result
-    tx: 0.8
-  - id: l_serve
-    from: cl_fs
-    to: cl_appgw
-    label: 展示内容
-    kind: result
-    fx: 0.13
-questions:
-  - id: q_tabs
-    title: 五个栏目
-    decided: 照搬 Muse：聊天、动态、点子、目标、资源库。站点归进资源库的构件；任务、定时、记忆、日记、权限收进头像控制台。
-  - id: q_say
-    title: 只用「说话」回复
-    decided: 这样做：豆豆说的每句话都通过「说话」发出，可以带选项和卡片，一轮里能说好几次；工具调用和步骤不进聊天，头像显示它在忙，控制台的活动里查得到。正文一律不进聊天，长段总结也不会刷屏。为了不吞答案，一轮结束前如果写了正文却没用「说话」，云端提醒它一次：要说给你听的用「说话」发，只是旁白就直接结束。
-  - id: q_inject
-    title: 忙的时候插话
-    decided: 直接进当前这一轮，豆豆在下一步之前就能看到；排队、撤回都去掉。动手前先做一个小实验，确认 SDK 能在两次工具调用之间收到新消息。
-  - id: q_feed_when
-    title: 动态多久来一批
-    decided: 跟 Muse 走：白天每 30 分钟看一次（默认 7:00–23:00），只发上次之后的新消息，一次 0 到 2 条，没有就不发；间隔、时段可以改，也可以关掉，随时能手动刷新。动态和其他事一样用你选的模型；跑一周看账单再调间隔。
-  - id: q_feed_src
-    title: 动态从哪来
-    decided: 照 Muse 的做法：动态说明里点名的渠道加网页搜索，你在云端浏览器里登录过的网站（如 X）也能看；每条打开原文读过再写，配原文的图。公众号、小红书这类封闭平台先不接。
-  - id: q_mascot
-    title: 头像形象
-    decided: 跟 Muse 走 3D 毛绒风格，三个候选里用户选了「芽豆」：开心果绿的豆子，头顶两片叶子。五种状态各一张图加一段短循环视频，浅色深色各一份，打包进 App；原来的轮廓和配色选择撤掉。
-  - id: q_skin
-    title: 外观
-    decided: 撤掉银蓝、纸墨、夜幕三套皮肤，只留黑白两套，蓝色只给链接；头像、连接应用和本机能力的图标保留各自的颜色，不然一片灰像都没打开；跟随系统深浅色，也可以固定一种。界面向 Muse 靠，不向 nanoMuse 靠。
-  - id: q_cloudpc
-    title: 云端浏览器
-    decided: 先在现有云主机上做：虚拟显示器里开一个真 Chrome，同时只开一个窗口，画面传到 App，可以接管；不另开虚拟机，完整的云电脑以后再说。跑几天看内存，不够再升 4G，升级前先给报价。
-  - id: q_kernel
-    title: 内核要不要换
-    decided: 不换，继续用 Claude Agent SDK。nanoMuse 自己就用了两个内核：手机上是 OpenMinis 改出来的自研循环，电脑上是 DeepSeek Harness，不是 OpenClaw 也不是 Hermes。两个内核做出同一个产品，说明体验来自产品层，不来自内核。
-  - id: q_fork
-    title: 要不要在 nanoMuse 上二次开发
-    decided: 不 fork，也不参考它的内核。它的大脑跑在每台设备上（手机里装一个 Linux），我们要的是一个大脑住在自己的云主机上；代码是 GPL。界面可以参考，但优先贴 Muse。
-  - id: q_ours
-    title: 和 Muse 比，豆豆独有的
-    decided: 产品形态都跟 Muse 走。豆豆独有的只有两样：一是连上手机和电脑后，能申请带个人信息的权限，如短信、通知、健康数据、Mac 上的文件和操作；二是贴着国内外生态的连接应用，现在有国内邮箱、Gmail、微信读书、Wind、GitHub。健康和日记收进控制台，不单独占栏目。
-  - id: q_briefs
-    title: 简报
-    decided: 晨报、晚报、健康周报和「今日」栏目撤掉。想要的事实进动态；日程提醒和健康变化做成目标或定时安排。
-  - id: q_dirs
-    title: 内容怎么分区
-    decided: 按 App 的栏目重组：动态、点子、目标、资源库（构件、影音）各一块；记忆、灵魂（名字、性格、日记）、健康收在控制台下；上传的文件、跟进清单单列。过程文件进草稿区，7 天清理；设置、账号、会话、定时和浏览器登录状态进系统区。旧简报移进备份，旧站点并进构件，旧日记和角色并进灵魂，迁移一次做完，不留兼容。
-  - id: q_prompt
-    title: 系统提示词
-    decided: 一整份系统提示词 = 通用工作守则 + 豆豆业务提示词。守则取自 Claude Code 自带的那份，只删不改：和业务提示词冲突的句子删掉；业务提示词完整保留，开头一句写明分界。规格里两份都展示全文。
-  - id: q_boundary
-    title: 对外动作
-    decided: 不设工具审批，也不弹授权页，靠提示词约定：意图明确就直接做；走到关键一步之前停下，用「说话」发选项卡问你，比如下单付款、发出消息或邮件、提交表单、删除、替你答应别人。你点了才继续，没回就等着。只在已支持且已授权的能力内执行。
-  - id: q_heartbeat
-    title: 主动性
-    decided: 没有模型心跳。主动都靠定时安排：动态、目标跟进、点子。跟进清单保留，在目标跟进或聊到相关话题时带上；一条回复最多带一件没问的事。
-  - id: q_conn
-    title: 连接器与设备
-    decided: 云端一服务一连接器，只连接已支持的服务；豆豆在第一次聊天和点子里主动推荐，也可以引导、代填。设备能力需要在本机授权，可能离线。
-  - id: q_memory
-    title: 记忆库
-    decided: 总档概括全部主题，分类下按主题整理。只记来源明确、稳定、值得留存的事实；事实变了原地更新。健康数据由云端定时从手机同步，豆豆只读不改。
-  - id: q_task
-    title: 后台活动
-    decided: 原来的任务改名为活动，收进头像控制台，照 Muse：豆豆每干一件事记一条，主聊天里干了活的轮次也算（忙时插的话归进正在跑的那一条），后台的事也算；纯聊天不算。标题是概括出的话题，下面一句写做了什么。进行中和已完成的都能看轨迹、接着聊，云端重启后也能续聊。
-  - id: q_main
-    title: 主会话即入口
-    decided: 主聊天是一条连续的会话，不会每条消息另开一个。会对你说话的事都进主会话，包括目标跟进，回它时上下文是全的。不需要和你对话的事（动态、点子、夜间整理、补读、委派的重活）各开新会话，免得每半小时一次的动态把主会话的上下文和账单撑爆；委派的结果交回主会话，动态要聊就点「讨论」带进来。
-  - id: q_session
-    title: 上下文与压缩
-    decided: 内置模型预计下一次输入约 272K 时使用 Claude Code 内置压缩，CLI 策略窗口为 305K（预留 20K 输出与 13K 摘要）；自定义模型约 100K，不附加自定义压缩要求。
-  - id: q_model
-    title: 模型
-    decided: 内置 ZenMux 的 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash、GLM 5.3 FlashX、MiMo-V2.6-Pro，另可自己添加 Anthropic 协议的模型服务（Base URL + 模型 ID + 显示名）；App 内切换，两端同步，下一轮起全部使用新模型，推理强度 max。所有用到模型的事都用选中的这一个：聊天、活动标题和摘要、动态、点子、目标跟进、夜间整理、旁聊；只有语音转文字另用一个能听音频的模型。
-  - id: q_permission
-    title: 权限
-    decided: 自动（默认）拦下危险操作，完全放行什么都不拦；在控制台切换，两种都不会向 App 弹请求。
-  - id: q_proto
-    title: 设备离线
-    decided: 立即说明「设备离线」，读不到的内容不编造、不反复重试。
-  - id: q_push
-    title: App 不在前台时如何联系
-    decided: 设备仍在线时，豆豆说话、目标跟进可发系统通知，用户可关闭。独立离线推送后放。
-  - id: q_secret
-    title: 账号代填
-    decided: 允许豆豆引导并代填，提醒授权码会留在聊天记录中；用户也可直接在 App 表单填写。
-  - id: q_host
-    title: 云主机
-    decided: 豆豆住在用户自己的云主机上，App 关闭后仍能工作；连的是用户自己的手机和电脑。对话、记忆和文件都不经过别人的服务器，模型请求只发给你选的模型服务（默认 ZenMux）。
-  - id: q_health
-    title: 厂商健康数据能否接入？
-    body: Health Connect 支持的指标已定，但荣耀等厂商健康 App 是否向它同步，需要真机验证；计步传感器兜底只有步数。
-    rec: 用真机确认数据来源、可用指标和授权效果，再决定是否需要补充来源。没有数据时显示 -- / 暂不可读，不编造。
+    desc: 豆豆的业务提示词。
+links: []
+questions: []
 connectors:
   items:
     - id: qq-mail
@@ -824,33 +386,28 @@ connectors:
       setup:
         - 个人访问令牌（classic PAT）：公开仓库和通知勾选 notifications；私有仓库还需 repo
 prompts:
-  - id: p_base
-    name: 通用工作守则
-    when: 每次对话，排在系统提示词最前面
-    source:
-      file: prompts/base.md
   - id: p_system
-    name: 系统提示词
-    when: 每次对话，拼在通用工作守则后面
+    name: 业务提示词
+    when: 豆豆的工作约定
     source:
       file: prompts/system-prompt.md
-  - id: p_feed
-    name: 动态
-    when: 白天每 30 分钟一次（默认 7:00–23:00，可改），以及点「刷新」
+  - id: p_heartbeat
+    name: 主动推进
+    when: 心跳、事件或任务结果到达
     source:
-      file: prompts/feed.md
+      file: prompts/heartbeat.md
   - id: p_goal
-    name: 目标跟进
-    when: 按每个目标约定的频率
+    name: Goal 推进
+    when: 下一步可执行、条件满足或用户反馈
     source:
       file: prompts/goal-checkin.md
+  - id: p_feed
+    name: 动态
+    when: 配置的时段与频率，或用户刷新
+    source:
+      file: prompts/feed.md
   - id: p_ideas
-    name: 点子
-    when: 每周一 8:00，以及点「换一批」
+    name: Idea
+    when: 每日检查或手动刷新，允许不产出
     source:
       file: prompts/ideas.md
-  - id: p_night
-    name: 夜间整理
-    source:
-      file: ../cloud/seed/system/schedule.json
-      item: night

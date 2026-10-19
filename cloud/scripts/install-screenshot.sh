@@ -3,7 +3,7 @@
 set -euo pipefail
 [[ ${EUID} -eq 0 ]] || { echo '请用 sudo 运行本脚本'; exit 1; }
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || { echo '仅支持 Linux x86_64'; exit 1; }
-browser_root=/opt/personal-agent-browser
+browser_root=/opt/doudou-screenshot
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 dnf install -y curl unzip fontconfig python3 nss nspr atk at-spi2-atk at-spi2-core \
   cups-libs libdrm libX11 libXcomposite libXdamage libXext libXfixes libXrandr libXcursor libXi libXtst \
@@ -18,7 +18,7 @@ PY
 [[ $browser_version =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '浏览器版本号不正确'; exit 1; }
 
 install -d -o root -g root -m 755 "$browser_root"
-work_dir=$(mktemp -d /tmp/personal-agent-browser-install.XXXXXX)
+work_dir=$(mktemp -d /tmp/doudou-screenshot-install.XXXXXX)
 trap 'rm -rf -- "$work_dir"' EXIT
 if [[ ! -x $browser_root/chrome-headless-shell-linux64/chrome-headless-shell || ! -f $browser_root/version || $(cat "$browser_root/version") != "$browser_version" ]]; then
   curl --fail --location --retry 3 --connect-timeout 20 --max-time 300 \

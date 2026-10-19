@@ -3,7 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { x as untar } from "tar";
-import { MANAGED_SKILL_MARKER, managedSkillDirs } from "../../src/data-guard.mjs";
+export const MANAGED_SKILL_MARKER=".connector-managed.json";
+export function managedSkillDirs(root) {
+  const dir=path.join(root,"skills");
+  try{return fs.readdirSync(dir,{withFileTypes:true}).filter(e=>e.isDirectory()&&fs.existsSync(path.join(dir,e.name,MANAGED_SKILL_MARKER))).map(e=>path.join(dir,e.name));}catch{return [];}
+}
 import { writePrivateJson } from "../../src/private-json.mjs";
 import { readJson } from "../../src/store.mjs";
 
@@ -11,7 +15,7 @@ export const SKILLS_URL="https://codeload.github.com/Wind-Information-Co-Ltd/win
 export const CORE_SKILLS=["wind-mcp-skill","wind-find-finance-skill","wind-alice"];
 const nameOk=(s)=>typeof s==="string"&&/^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$/.test(s);
 export const installedName=(name)=>name.startsWith("wind-")?name:"wind-"+name;
-const DIR_NOTE=`## 本环境的调用方式\n本环境用 mcp__wind__call 工具代替 node scripts/cli.mjs call <server_type> <tool> '<json>'：server 对应 server_type，tool 对应 tool，args 对应 JSON 对象。用 mcp__wind__list_tools(server) 查询参数。账号由连接器管理，不需要也不要配置 API Key；不要读取密钥或配置文件。技能更新由连接器负责，不运行技能自己的安装或更新脚本。\n`;
+const DIR_NOTE=`## 本环境的调用方式\n本环境用 wind.call 工具代替 node scripts/cli.mjs call <server_type> <tool> '<json>'：server 对应 server_type，tool 对应 tool，args 对应 JSON 对象。用 wind.list_tools(server) 查询参数。账号由连接器管理，不需要也不要配置 API Key；不要读取密钥或配置文件。技能更新由连接器负责，不运行技能自己的安装或更新脚本。\n`;
 const section=(text,heading,replacement)=>text.replace(new RegExp(`^#{1,3} [^\\n]*${heading}[^\\n]*\\n[\\s\\S]*?(?=^#{1,3} |$(?![\\s\\S]))`,"gm"),replacement);
 
 export function rewriteSkillMarkdown(text,{name}) {
@@ -21,32 +25,32 @@ export function rewriteSkillMarkdown(text,{name}) {
   if(name==="wind-find-finance-skill") {
     // Keep the domain routing rules; discovery/installation now stays within the connector's cache.
     const route=body.indexOf("## 路由规则");
-    body=`## 发现与安装\n1. 调用 mcp__wind__list_skills()，按名称和一句话描述选需要的数据或分析技能。\n2. 在 .claude/skills/wind-<原名>/SKILL.md 查看已经安装的技能；原名带 wind- 时不重复前缀。\n3. 缺少匹配的技能时调用 mcp__wind__install_skill(name)，安装完成后读取返回的 SKILL.md 路径，继续用户任务。只安装到当前豆豆，不安装到其他 agent。\n4. 不读取外部 catalog，不执行 npx、更新检查或配置脚本。\n\n`+(route>=0?body.slice(route):"");
-    body=body.replace(/`references\/skills-catalog\.md`/g,"mcp__wind__list_skills() 的结果").replace(/第 [345] 步/g,"上面的发现步骤").replace(/询问安装范围/g,"调用 mcp__wind__install_skill(name)");
+    body=`## 发现与安装\n1. 调用 wind.list_skills()，按名称和一句话描述选需要的数据或分析技能。\n2. 在 skills/wind-<原名>/SKILL.md 查看已经安装的技能；原名带 wind- 时不重复前缀。\n3. 缺少匹配的技能时调用 wind.install_skill(name)，安装完成后读取返回的 SKILL.md 路径，继续用户任务。只安装到当前豆豆，不安装到其他 agent。\n4. 不读取外部 catalog，不执行 npx、更新检查或配置脚本。\n\n`+(route>=0?body.slice(route):"");
+    body=body.replace(/`references\/skills-catalog\.md`/g,"wind.list_skills() 的结果").replace(/第 [345] 步/g,"上面的发现步骤").replace(/询问安装范围/g,"调用 wind.install_skill(name)");
     body=section(body,"边界","## 边界\n本技能不直接取数。可用技能以连接器缓存为准，安装和升级只通过连接器工具完成。\n");
   }
   body=section(body,"一次性配置","");
   body=section(body,"更新检查(?:处理)?","");
   body=body.replace(/```(?:bash|powershell|shell)?\n([\s\S]*?)```/gi,(whole,code)=> {
-    if(/npx\s+skills\s+(?:add|update)/i.test(code))return "使用 mcp__wind__install_skill(name) 安装所需技能。";
+    if(/npx\s+skills\s+(?:add|update)/i.test(code))return "使用 wind.install_skill(name) 安装所需技能。";
     if(/node\s+[^\n]*scripts\/cli\.mjs\s+call/.test(code)) {
       const m=code.match(/scripts\/cli\.mjs\s+call\s+([\w<>]+)\s+([\w<>]+)\s+['"]([\s\S]*?)['"]/);
-      if(m&&!m[1].startsWith("<")){try{return "```json\n"+JSON.stringify({server:m[1],tool:m[2],args:JSON.parse(m[3])},null,2)+"\n```\n将以上参数传给 mcp__wind__call。";}catch{}}
-      return "调用 mcp__wind__call(server=<server_type>, tool=<tool_name>, args=<params_json>)，直接传 JSON 对象，不经过 shell。";
+      if(m&&!m[1].startsWith("<")){try{return "```json\n"+JSON.stringify({server:m[1],tool:m[2],args:JSON.parse(m[3])},null,2)+"\n```\n将以上参数传给 wind.call。";}catch{}}
+      return "调用 wind.call(server=<server_type>, tool=<tool_name>, args=<params_json>)，直接传 JSON 对象，不经过 shell。";
     }
-    if(/wind-alice\.mjs/.test(code))return "调用 mcp__wind__ask_alice(question)，question 保留用户问题原文。";
+    if(/wind-alice\.mjs/.test(code))return "调用 wind.ask_alice(question)，question 保留用户问题原文。";
     if(/WIND_API_KEY|wind_api_key|\.wind-aifinmarket|config\.json/.test(code))return "";
     return whole;
   });
   // Remove paragraphs that instruct credential access; references/contracts remain verbatim otherwise.
   body=body.split(/\n\s*\n/).filter((p)=>!/WIND_API_KEY|wind_api_key|\.wind-aifinmarket|config\.json|\*\*Key\*\*|(?:node\s+.*cli\.mjs\s+open-portal)/i.test(p)).join("\n\n");
-  body=body.replace(/`npx skills add [^`]+`/g,"mcp__wind__install_skill(name)");
-  body=body.replace(/node\s+(?:scripts\/cli\.mjs|<[^>]+>\/scripts\/cli\.mjs)\s+call\s+[^\n`]+/g,"mcp__wind__call(server, tool, args)");
+  body=body.replace(/`npx skills add [^`]+`/g,"wind.install_skill(name)");
+  body=body.replace(/node\s+(?:scripts\/cli\.mjs|<[^>]+>\/scripts\/cli\.mjs)\s+call\s+[^\n`]+/g,"wind.call(server, tool, args)");
   body=body.replace(/`?scripts\/(?:update-check\.[\w]+|cli\.mjs|wind-alice\.mjs)`?/g,"连接器工具");
   if(name==="wind-alice") {
     body=section(body,"文件下载处理","## 附件\n本环境工具返回 Alice 的原始正文与附件引用；不自动下载附件，也不读取本地配置。\n");
   }
-  return front+(name?"\n"+DIR_NOTE:"")+(name==="wind-alice"?"\nAlice 用 mcp__wind__ask_alice(question) 调用，同一连接器账号鉴权。保留用户问题原文；CLI 的 --skill 和自动下载不适用于本环境。\n":"")+"\n"+body.trim()+"\n";
+  return front+(name?"\n"+DIR_NOTE:"")+(name==="wind-alice"?"\nAlice 用 wind.ask_alice(question) 调用，同一连接器账号鉴权。保留用户问题原文；CLI 的 --skill 和自动下载不适用于本环境。\n":"")+"\n"+body.trim()+"\n";
 }
 function description(text) {
   const fm=text.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1]||"";
@@ -93,7 +97,7 @@ export class WindSkills {
   installSkill(name) {
     if(!nameOk(name))throw new Error("技能名格式不正确");
     const source=path.join(this.skills,name);if(!fs.existsSync(path.join(source,"SKILL.md")))throw new Error("Wind 缓存里没有这个技能，请先 list_skills");
-    const destination=path.join(this.ctx.root,".claude/skills",installedName(name)),manifest=readJson(path.join(this.cache,"manifest.json"),{});
+    const destination=path.join(this.ctx.root,"skills",installedName(name)),manifest=readJson(path.join(this.cache,"manifest.json"),{});
     const marker=path.join(destination,MANAGED_SKILL_MARKER);
     if(fs.existsSync(destination)&&(!fs.existsSync(marker)||readJson(marker,{}).connector!=="wind"))throw new Error("同名技能已经存在且不归连接器管理，未覆盖");
     const parent=path.dirname(destination);fs.mkdirSync(parent,{recursive:true});const temp=fs.mkdtempSync(path.join(parent,".wind-install-"));
@@ -125,8 +129,8 @@ export class WindSkills {
     const manifest=readJson(path.join(this.cache,"manifest.json"),{});
     for(const name of new Set([...CORE_SKILLS,...selected])) {
       if(!nameOk(name)||!fs.existsSync(path.join(this.skills,name,"SKILL.md")))continue;
-      const marker=readJson(path.join(this.ctx.root,".claude/skills",installedName(name),MANAGED_SKILL_MARKER),{});
-      if(marker.version!==manifest.sha256||marker.appVersion!==(this.ctx.version||"0.6.0")||!fs.existsSync(path.join(this.ctx.root,".claude/skills",installedName(name),"SKILL.md")))this.installSkill(name);
+      const marker=readJson(path.join(this.ctx.root,"skills",installedName(name),MANAGED_SKILL_MARKER),{});
+      if(marker.version!==manifest.sha256||marker.appVersion!==(this.ctx.version||"0.6.0")||!fs.existsSync(path.join(this.ctx.root,"skills",installedName(name),"SKILL.md")))this.installSkill(name);
     }
   }
   uninstall() {

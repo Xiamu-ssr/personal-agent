@@ -13,4 +13,4 @@ export function issuePairCode() {
   return code;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) console.log(issuePairCode());
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) console.log(issuePairCode());

@@ -1,7 +1,7 @@
 import path from "node:path";
 import crypto from "node:crypto";
 import { z } from "zod";
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "./product-tools.mjs";
 import { appendJsonl, readJson, tailJsonl } from "./store.mjs";
 import { writePrivateJson } from "./private-json.mjs";
 import { localFile } from "./local-paths.mjs";
@@ -16,7 +16,6 @@ export const cardSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("goal"), name }),
   z.object({ type: z.literal("link"), url: z.url().refine((s) => /^https?:/.test(s)), title: name.optional(), description: z.string().max(2000).optional(), image: z.url().refine((s) => /^https?:/.test(s)).optional() }),
   ...["image", "video", "audio", "file"].map((type) => z.object({ type: z.literal(type), path: z.string().min(1).max(1024), name: name.optional() })),
-  z.object({ type: z.literal("browser") }),
   z.object({ type: z.literal("device"), capability: name.optional() }),
 ]);
 export const saySchema = {
@@ -84,10 +83,9 @@ export class Speech {
     return { ok: true, id, messageId, optionId, ...(this.activityId && { activityId: this.activityId, chatType: "side" }) };
   }
   tools(context = () => ({})) {
-    return [tool("say", "对用户说话的唯一出口，每次发一条短句气泡，可分多次说。主聊天在主聊天说，旁聊只在当前旁聊说；后台运行不能对用户说话。卡片用途：connector：连接应用；goal：展示一个已经写好的目标（data/goals/<name>.md），卡片本身不会创建目标；link：网页预览；image/video/audio/file：展示 data/ 下已交付的影音或文件；browser：打开当前云端浏览器实时画面与接管；device：打开本机能力授权。options 是一次性回复按钮。", saySchema, async (args, extra) => {
+    return [defineTool("say", "发送气泡、选项和卡片，每次发一条短句气泡，可分多次说。主聊天在主聊天说，旁聊只在当前旁聊说；后台运行不能对用户说话。卡片用途：connector：连接应用；goal：展示一个已经写好的目标（data/goals/<name>.md），卡片本身不会创建目标；link：网页预览；image/video/audio/file：展示 data/ 下已交付的影音或文件；device：打开本机能力授权。options 是一次性回复按钮。", saySchema, async (args, extra) => {
       try { return { content: [{ type: "text", text: JSON.stringify({ id: this.emit(args, context(extra)).id }) }] }; }
       catch (e) { return { isError: true, content: [{ type: "text", text: e.message }] }; }
     })];
   }
-  mcpServer(context) { return createSdkMcpServer({ name: "doudou", version: VERSION, tools: this.tools(context) }); }
 }

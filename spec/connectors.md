@@ -1,4 +1,6 @@
-# 云端连接器（v0.4）
+# 云端连接器（OpenClaw 目标规格）
+
+> 服务目录与账号交互保留；工具注册和执行接入 OpenClaw 公开插件 / Gateway。以下是重构目标，不代表现有运行实现已经迁移。
 
 一句话：**连接器的代码由我们随版本发布，豆豆和 App 只负责填配置。** 豆豆不写连接器代码，只引导用户提供必要的参数（地址、授权码、API Key），替用户填进去；用户也可以自己在 App 里填。
 
@@ -17,9 +19,9 @@
    - 模型使用的 `connectors.list()` 不带这些片段。App 编辑表单仍以空白密码框或原有完整遮罩表示「保持不变」，不把展示片段当作新密钥提交。
 4. **豆豆能改配置，改不了代码。**
    - 豆豆用 `connectors` 工具加账号、改备注、删账号。
-   - `system/connectors/` 下的文件不允许 Read / Write / Edit 直接读写，也不允许 Bash 访问。PreToolUse 钩子负责拦截，理由写清楚，让豆豆改用工具。
+   - `system/connectors/` 下的文件不允许 Read / Write / Edit 直接读写，也不允许 Bash 访问。由 OpenClaw 接入层与凭据隔离落实，理由写清楚，让豆豆改用配置工具；不保留旧内核 PreToolUse 钩子。
 5. **不做自建连接器。** 目录里没有的服务，豆豆如实告诉用户「暂时还接不了」，不自己写代码。`system/custom-connectors/` 和相关代码删掉。
-6. **云端内置能力不展示。** 网页搜索、网页读取、命令行、文件、定时、语音转写都是 SDK 或本体自带的，App 里不列出来。
+6. **云端内置能力不展示。** 网页搜索、网页读取、命令行、文件、定时、语音转写由 OpenClaw 或豆豆产品适配提供，App 里不列出来。
 
 ## 二、连接器的形状
 
@@ -27,7 +29,7 @@
 
 ```js
 export default {
-  name: "qq-mail",               // 稳定 id，也是 MCP server 名：mcp__qq-mail__*
+  name: "qq-mail",               // 稳定服务 id，不绑定旧 MCP server 命名
   title: "QQ 邮箱",
   description: "读取 QQ 邮箱里的邮件（只读）",
   icon: "icon.png",              // 同目录下的官方图标文件，App 通过接口取
@@ -39,14 +41,14 @@ export default {
   ],
   label: (a) => a.address,       // 账号在列表里显示的名字
   async test(account) {},        // 真实登录一次；失败就 throw，并给出中文原因（例如「授权码不对」「没开 IMAP」）
-  tools(accounts, ctx) {},       // 返回 SDK tool() 数组；ctx 提供 state 读写，用于游标
+  tools(accounts, ctx) {},       // 产品侧工具描述与处理器，由 OpenClaw 插件适配；ctx 提供游标状态
 };
 ```
 
 - 字段类型只有四种：`text`、`secret`、`number`、`select`。`showIf` 只支持「某个字段等于某个值」。
 - **图标**：用服务的官方图标（从官网取 apple-touch-icon 或 favicon 的高清版），放在连接器目录里随代码发布。不要自己画。
-- 注册表 `cloud/connectors/index.mjs` 列出全部连接器。启动时，harness 为**至少有一个账号**的连接器各建一个 `createSdkMcpServer`，和 `devices` 一样挂进 `mcpServers`。
-- 账号变化后（不管来自 App 还是工具），重建 MCP server，并在下一轮让主会话 reload。
+- 注册表列出全部连接器。为已连接的服务通过 OpenClaw 公开插件注册工具、参数 schema 与执行处理器；用户设备只读工具和豆豆设备执行工具按角色分开注册。不保留 `createSdkMcpServer` 或旧 SDK 的 `mcpServers` 桥接。
+- 账号变化后更新同一 Gateway 的工具可用性与账号配置；下一执行边界生效，不 new 主 Session。
 
 ### accounts.json
 
@@ -66,7 +68,7 @@ export default {
 | `GET /api/connectors/<name>/icon` | 官方图标文件，带长缓存头 |
 | `POST /api/connectors/<name>/accounts {values}` | 校验必填项 → `test()` → 成功就保存并返回 `{id,label,status:"ok"}`；失败返回 400 `{error}`，不保存。 |
 | `PUT /api/connectors/<name>/accounts/<id> {values}` | 修改账号；secret 字段传 `"••••"` 或不传，表示保持原值。同样要先 test。 |
-| `DELETE /api/connectors/<name>/accounts/<id>` | 删除账号；删到 0 个账号就卸掉这个 MCP server。 |
+| `DELETE /api/connectors/<name>/accounts/<id>` | 删除账号；删到 0 个账号就停用该服务工具。 |
 | `POST /api/connectors/<name>/accounts/<id>/test` | 重新测一次，并更新 status。 |
 | `DELETE /api/devices/<id>` | 从注册表里删掉一台设备（只允许离线设备；在线的返回 409）。 |
 
@@ -94,7 +96,7 @@ export default {
   - 提交时按钮显示「正在验证…」。失败时把原因显示在表单上，已填的内容保留；成功后回到账号列表。
 - 设备页里离线的设备可以「移除」，要二次确认。
 
-## 六、目录（0.4）
+## 六、沿用的服务目录
 
 ### 邮箱（只读 IMAP，每家一个连接器）
 
@@ -160,7 +162,7 @@ export default {
 
 - `amap`，默认未连接，使用一个高德「Web 服务」Key；在 App 的连接器表单里填写、验证后启用，删除账号即断开。Key 只保存在云端私有配置中，不进入查询工具或结果。
 - 注册入口：高德开放平台 → 我的应用 → 添加 Key → **Web 服务**；名称自定。IP 白名单可先留空；需要限制时填云端请求高德的实际出口 IP，不能直接假定为服务器公网 IP。
-- 直接调用高德官方 Web 服务 API，作为豆豆自带的 SDK MCP 工具发布；不依赖远程社区 MCP。
+- 直接调用高德官方 Web 服务 API，作为豆豆的 OpenClaw 插件工具发布；不依赖远程社区 MCP。
 - 工具：`geocode`（地址转坐标）、`reverse_geocode`、`search_places`、`search_nearby`、`route`（步行/驾车/公交/骑行）、`distance`（直线/驾车/步行）、`convert_coordinates`、`weather`。全部只查询，不下单、订票或打车。
 - 坐标为高德 **GCJ-02**，经度在前；手机 GPS/WGS84 结果先显式转换，不能静默混用。路线距离为米、耗时为秒；天气以 `reporttime` 为数据时间。返回最多三条路线和每条六十步，省略大段折线；截断时明确标记。
 - 添加账号时用公共地标做一次地址查询验证，不读取用户位置。查询消耗高德 Key 的额度，配额、服务权限及使用许可由高德账号决定。HTTP 200 中的额度、IP 白名单和平台类型错误也要显示中文原因，不自动换号或反复请求。

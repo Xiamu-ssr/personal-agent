@@ -52,7 +52,7 @@ struct SayOption: Equatable, Identifiable {
 }
 enum SayCard: Equatable {
     case connector(String), goal(String), link(url:String,title:String,description:String,image:String?)
-    case media(type: MediaItem.Kind,path:String,name:String), browser, device(String?)
+    case media(type: MediaItem.Kind,path:String,name:String), device(String?)
     init?(_ r: [String:Any]) {
         switch r["type"] as? String {
         case "connector": guard let s=r["id"] as? String, !s.isEmpty else { return nil }; self = .connector(s)
@@ -63,7 +63,6 @@ enum SayCard: Equatable {
         case "image","video","audio","file":
             guard let s=r["path"] as? String, DataPath.valid(s), let k=MediaItem.Kind(rawValue:r["type"] as? String ?? "") else { return nil }
             self = .media(type:k,path:s,name:r["name"] as? String ?? (s as NSString).lastPathComponent)
-        case "browser": self = .browser
         case "device": self = .device(r["capability"] as? String)
         default: return nil
         }

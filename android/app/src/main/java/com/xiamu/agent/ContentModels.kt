@@ -10,7 +10,6 @@ sealed interface SayCard {
     data class Goal(val name: String) : SayCard
     data class Link(val url: String, val title: String, val description: String, val image: String?) : SayCard
     data class Media(val file: ReplyMedia) : SayCard
-    data object Browser : SayCard
     data class Device(val capability: String?) : SayCard
 }
 private fun httpUrl(s: String): Boolean = runCatching { java.net.URI(s).let { it.scheme in setOf("http", "https") && !it.host.isNullOrBlank() && it.userInfo == null } }.getOrDefault(false)
@@ -20,7 +19,6 @@ fun sayCards(j: JSONObject): List<SayCard> = j.optJSONArray("cards").objects().t
         "goal" -> c.optString("name").takeIf(String::isNotBlank)?.let(SayCard::Goal)
         "link" -> c.optString("url").takeIf(::httpUrl)?.let { SayCard.Link(it, c.optString("title").ifBlank { it }, c.optString("description"), c.optString("image").takeIf(::httpUrl)) }
         "image", "video", "audio", "file" -> ReplyMedia.from(JSONObject(c.toString()).put("kind", c.getString("type")))?.let(SayCard::Media)
-        "browser" -> SayCard.Browser
         "device" -> SayCard.Device(c.optString("capability").takeIf(String::isNotBlank))
         else -> null
     }
@@ -98,8 +96,8 @@ data class Goal(val name: String,val path: String,val title: String,val domain: 
     companion object {
         val domains=listOf("健康","人际","金融","事业","兴趣","效率","其他")
         fun from(j: JSONObject): Goal {
-            val domain=j.getString("domain"); val status=j.getString("status"); val progress=j.getInt("progress")
-            require(domain in domains && status in listOf("追踪中","暂停","完成","放弃") && progress in 0..100) { "目标格式不正确" }
+            val domain=j.optString("domain"); val status=j.getString("status"); val progress=j.getInt("progress")
+            require(status in listOf("未开始","进行中","等待条件","待用户反馈","已完成","暂停","取消") && progress in 0..100) { "目标格式不正确" }
             val path=j.getString("path"); require(isDataFile(path) && path.startsWith("data/goals/"))
             return Goal(j.getString("name"),path,j.getString("title"),domain,j.optString("cadence"),j.optString("due").takeIf { !j.isNull("due") && it.isNotBlank() },status,progress,j.optString("body"),j.optString("nextCheckin").takeIf { !j.isNull("nextCheckin") && it.isNotBlank() })
         }

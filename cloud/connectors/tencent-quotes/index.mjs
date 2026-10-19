@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "../../src/product-tools.mjs";
 
 const ENDPOINT = "https://qt.gtimg.cn/q=", CACHE_MS = 5000, MAX_BYTES = 1024 * 1024;
 // Same public GBK quote format used by price-bell; this connector does not access the bell's service or state.
@@ -58,7 +58,7 @@ export function createTencentQuotesConnector({ endpoint = ENDPOINT, fetchImpl = 
     fields: [], label: () => "公开行情", validate: () => ({}), test: () => request(["sh000001"]),
     tools(accounts, ctx) {
       const cache = ctx.pending || new Map();
-      return [tool("quotes", "免费查询沪深京股票、ETF、指数的最新公开行情，不消耗 Wind 积分。代码必须带市场，000001.SH 为上证指数、000001.SZ 为平安银行。asOf 是上游报价时间，fetchedAt 仅为抓取时间；休市时可能是收盘价，不要把旧报价称为正在跳动的实时价格。只读，不交易。", {
+      return [defineTool("quotes", "免费查询沪深京股票、ETF、指数的最新公开行情，不消耗 Wind 积分。代码必须带市场，000001.SH 为上证指数、000001.SZ 为平安银行。asOf 是上游报价时间，fetchedAt 仅为抓取时间；休市时可能是收盘价，不要把旧报价称为正在跳动的实时价格。只读，不交易。", {
         symbols: z.array(z.string().min(1).max(20)).min(1).max(50),
       }, async ({ symbols }) => {
         try {

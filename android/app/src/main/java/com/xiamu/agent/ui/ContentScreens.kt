@@ -60,10 +60,10 @@ fun GoalsScreen(bottom: Dp) {
     var domain by remember { mutableStateOf<String?>(null) }
     val context=ctx()
     LazyColumn(Modifier.fillMaxSize(),contentPadding=pagePadding(bottom)) {
-        item { Text("目标",style=Type.title(23),color=Pal.Ink,modifier=Modifier.padding(top=8.dp,bottom=8.dp)); SectionTitle("追踪中") }
+        item { Text("目标",style=Type.title(23),color=Pal.Ink,modifier=Modifier.padding(top=8.dp,bottom=8.dp)); SectionTitle("正在跟进") }
         if(json==null) item { if(error.isBlank()) Loading() else ErrorNote(error) }
-        if(json!=null && goals.orEmpty().none { it.status=="追踪中" }) item { EmptyNote("从一个小目标开始，豆豆陪你跟进。") }
-        goals.orEmpty().filter { it.status=="追踪中" }.forEach { goal -> item(key=goal.name) {
+        if(json!=null && goals.orEmpty().none { it.status !in listOf("已完成","取消") }) item { EmptyNote("从一个小目标开始，豆豆陪你跟进。") }
+        goals.orEmpty().filter { it.status !in listOf("已完成","取消") }.forEach { goal -> item(key=goal.name) {
             Column(Modifier.fillMaxWidth().padding(bottom=10.dp).card().tap { Nav.open(Route.GoalDetail(goal.name)) }.padding(17.dp)) {
                 Row { Text(goal.title,style=Type.title(16),color=Pal.Ink,modifier=Modifier.weight(1f)); Text("${goal.progress}%",style=Type.body(13),color=Pal.Muted) }
                 LinearProgressIndicator(progress={goal.progress/100f},color=Pal.Ink,trackColor=Pal.Line,modifier=Modifier.fillMaxWidth().padding(top=14.dp,bottom=10.dp).height(4.dp))

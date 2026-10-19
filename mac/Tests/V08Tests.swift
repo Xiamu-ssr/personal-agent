@@ -8,7 +8,7 @@ import SwiftUI
         let config=URLSessionConfiguration.ephemeral; config.protocolClasses=[MockTransport.self]; Api.session=URLSession(configuration:config)
         Prefs.server="http://127.0.0.1:18808"
         check(Prefs.isolatedRoot != nil,"test data root is isolated")
-        for card in [["type":"connector","id":"github"],["type":"goal","name":"每周运动"],["type":"link","url":"https://example.test/a"],["type":"browser"],["type":"device","capability":"shell"]] {
+        for card in [["type":"connector","id":"github"],["type":"goal","name":"每周运动"],["type":"link","url":"https://example.test/a"],["type":"device","capability":"shell"]] {
             check(SayCard(card) != nil,"parse card \(card["type"]!)")
         }
         for kind in ["image","video","audio","file"] { check(SayCard(["type":kind,"path":"data/library/media/演示."+kind]) != nil,"parse media \(kind)") }
@@ -63,17 +63,15 @@ import SwiftUI
         for _ in 0..<100 {if refreshes>=2 && !coalesced.loading {break};try? await Task.sleep(nanoseconds:10_000_000)}
         check(refreshes == 2 && coalesced.items.count == 1,"new feed notification during a load schedules a fresh snapshot")
         let badge=FeedBadge(); badge.leave(); badge.receive(); check(badge.unread,"feed new sets badge"); badge.enter(); check(!badge.unread,"enter feed clears badge"); badge.receive(); check(!badge.unread,"visible feed stays read")
-        var g:[String:Any]=["name":"每周运动","path":"data/goals/每周运动.md","title":"每周运动","domain":"健康","cadence":"0 8 * * 1","status":"追踪中","progress":25,"body":"## 计划\n每周三次","nextCheckin":"2026-10-19T00:00:00.000Z"]
+        var g:[String:Any]=["name":"每周运动","path":"data/goals/每周运动.md","title":"每周运动","domain":"健康","cadence":"0 8 * * 1","status":"进行中","progress":25,"body":"## 计划\n每周三次","nextCheckin":"2026-10-19T00:00:00.000Z"]
         check(Goal(g)?.nextCheckin != nil,"parse goal next check in ISO milliseconds")
         g["progress"]=25.5; check(Goal(g)?.progress == 25.5,"fractional goal progress is preserved"); g["progress"]=101; check(Goal(g) == nil,"reject goal progress outside range"); g["progress"]=25
-        g["domain"]="invalid"; check(Goal(g) == nil,"reject unknown goal domain"); g["domain"]="健康"
+        g["domain"]="自定义"; check(Goal(g) != nil,"accept free goal domain"); g["domain"]="健康"
         g["status"]="暂停"; check(Goal(g)?.nextCheckin == nil,"paused goal has no next check in")
-        g["status"]="完成"; check(Goal(g)?.nextCheckin == nil,"completed goal has no next check in")
+        g["status"]="已完成"; check(Goal(g)?.nextCheckin == nil,"completed goal has no next check in")
         check((try! ActivityStore.endpoint("goal:每周运动",action:"send")).contains("%3A"),"activity IDs percent encode punctuation")
-        check(Api.wsRequest("browser")?.url?.path == "/ws/browser","browser uses separate socket path")
-        check(Api.wsRequest("browser")?.url?.query == nil,"browser token never appears in URL")
         await sideChats(); feedSourceLinks()
-        print("PASS: \(count) v0.8 assertions (cards, options, say/stream, busy input, avatar, snapshots, feed paging/badge, goals, browser routing)")
+        print("PASS: \(count) v0.8 assertions (cards, options, say/stream, busy input, avatar, snapshots, feed paging/badge, goals)")
     }
     @MainActor static func sideChats() async {
         SideChats.shared.reset()

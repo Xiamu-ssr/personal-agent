@@ -1,3 +1,5 @@
+> 历史设计记录，已被 [当前可视化 Spec](index.html) 与 [spec.yaml](spec.yaml) 取代；不作为 OpenClaw 重构的实施依据，也不要求旧设计兼容。
+
 # 豆豆 0.5 · HTML 简报卡片、切换模型、任务续聊、保留 Claude Code 内置提示词
 
 在 `app-v3.md` 的基础上改。没提到的照 v3。2026-10-11 用户定的。

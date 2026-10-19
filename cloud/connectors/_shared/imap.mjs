@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { ImapFlow } from "imapflow";
 import { convert } from "html-to-text";
 import { z } from "zod";
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { defineTool } from "../../src/product-tools.mjs";
 
 const CLIENT_INFO = { name: "Doudou Personal Agent", version: "0.4.0", vendor: "Personal Agent" };
 const BODY_LIMIT = 20_000;
@@ -217,7 +217,7 @@ export function createImapConnector({ name = "imap", title = "其他邮箱", hos
       }
 
       return [
-        tool("list_folders", "列出邮箱文件夹。account 不填时查询全部账号。", { account: accountSchema.optional() }, wrap(async ({ account }) => {
+        defineTool("list_folders", "列出邮箱文件夹。account 不填时查询全部账号。", { account: accountSchema.optional() }, wrap(async ({ account }) => {
           const items = [], errors = [];
           for (const a of chosen(account)) {
             try { items.push(...await withClient(a.values, async (client) => (await client.list()).map((f) => ({ account: a.id, name: f.path, delimiter: f.delimiter, specialUse: f.specialUse || null })))); }
@@ -225,7 +225,7 @@ export function createImapConnector({ name = "imap", title = "其他邮箱", hos
           }
           return { items, ...(errors.length ? { errors } : {}) };
         })),
-        tool("search", "只读搜索邮件，按日期倒序。before 为上次返回的 next_before，不填 account 则搜索所有账号。", {
+        defineTool("search", "只读搜索邮件，按日期倒序。before 为上次返回的 next_before，不填 account 则搜索所有账号。", {
           account: accountSchema.optional(), folder: folderSchema, query: z.string().max(1000).optional(),
           from: z.string().max(500).optional(), since: dateSchema.optional(), until: dateSchema.optional(),
           unread: z.boolean().optional(), limit: z.number().int().min(1).max(50).default(20), before: z.string().optional(),
@@ -284,13 +284,13 @@ export function createImapConnector({ name = "imap", title = "其他邮箱", hos
           return { items, next_before: !errors.length && candidates.length > args.limit ? encode({ v: 1, fingerprint, mailboxes, last: tuple(items.at(-1)) }) : null,
             ...(errors.length ? { errors } : {}) };
         })),
-        tool("read", "读取一封邮件的纯文本正文（最多 20k 字）和附件清单，不改变已读状态。", {
+        defineTool("read", "读取一封邮件的纯文本正文（最多 20k 字）和附件清单，不改变已读状态。", {
           account: accountSchema, folder: folderSchema, uid: uidSchema,
         }, wrap(async ({ account, folder, uid }) => {
           const a = chosen(account)[0];
           return withClient(a.values, (client) => inFolder(client, folder, () => fetchMessage(client, a, folder, uid)));
         })),
-        tool("save_attachment", "按附件清单的 name 下载附件到 workspace/mail/<日期>/，返回相对路径。只读邮箱，单附件最多 25MB。", {
+        defineTool("save_attachment", "按附件清单的 name 下载附件到 workspace/mail/<日期>/，返回相对路径。只读邮箱，单附件最多 25MB。", {
           account: accountSchema, folder: folderSchema, uid: uidSchema, name: z.string().min(1).max(1000),
         }, wrap(async ({ account, folder, uid, name }) => {
           const a = chosen(account)[0];
@@ -317,7 +317,7 @@ export function createImapConnector({ name = "imap", title = "其他邮箱", hos
             return { account: a.id, path: path.relative(ctx.root, file), name, size: data.length };
           }));
         })),
-        tool("read_since", "从各账号 INBOX 的已提交 UID 游标补读邮件。处理完后必须 sync_commit(cursor)；不提交就会重复返回。", {
+        defineTool("read_since", "从各账号 INBOX 的已提交 UID 游标补读邮件。处理完后必须 sync_commit(cursor)；不提交就会重复返回。", {
           account: accountSchema.optional(), limit: z.number().int().min(1).max(100).default(50),
         }, wrap(async ({ account, limit }) => {
           prune();
@@ -345,7 +345,7 @@ export function createImapConnector({ name = "imap", title = "其他邮箱", hos
           if (cursor) pending.set(cursor, { targets, createdAt: Date.now() });
           return { items, cursor, more, ...(errors.length ? { errors } : {}) };
         })),
-        tool("sync_commit", "提交 read_since 返回的 cursor，只有处理完成后才能调用；重复提交或过期批次会报错。", {
+        defineTool("sync_commit", "提交 read_since 返回的 cursor，只有处理完成后才能调用；重复提交或过期批次会报错。", {
           cursor: z.string().min(1),
         }, wrap(async ({ cursor }) => {
           prune();

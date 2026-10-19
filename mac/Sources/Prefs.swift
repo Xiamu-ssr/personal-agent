@@ -56,6 +56,11 @@ enum Prefs {
         d.removeObject(forKey: "feedUnread")
     }
 
+    static var deviceRole: String {
+        get { d.string(forKey: "deviceRole") ?? "owner" }
+        set { d.set(newValue, forKey: "deviceRole") }
+    }
+
     static var deviceId: String {
         if let id = d.string(forKey: "deviceId") { return id }
         let id = "mac-" + UUID().uuidString.prefix(8).lowercased()

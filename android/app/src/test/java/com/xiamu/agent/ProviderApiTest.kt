@@ -46,13 +46,9 @@ class ProviderApiTest {
         val request=server.takeRequest();assertEquals("PUT",request.method);assertEquals("/api/settings",request.path)
         assertEquals(selection,ModelSelection.from(JSONObject(request.body.readUtf8()).getJSONObject("model")))
     }
-    @Test fun permissionSaveDoesNotSendOrFlattenAModel()=runBlocking {
-        server.enqueue(MockResponse().setBody(providerSettingsJson));Api.saveSettings(permissionMode="auto")
-        val body=JSONObject(server.takeRequest().body.readUtf8());assertEquals(setOf("permissionMode"),body.keySet())
-    }
     @Test fun standaloneProviderTestReturnsLatency()=runBlocking {
         server.enqueue(MockResponse().setBody("""{"ok":true,"ms":14}"""))
-        assertEquals(14L,Api.testProvider("https://example.test",ProviderKey(key),"shared-model"))
+        assertEquals(14L,Api.testProvider("https://example.test",ProviderKey(key),"shared-model","openai"))
         val request=server.takeRequest();assertEquals("/api/providers/test",request.path);assertEquals("POST",request.method)
         assertEquals(key,JSONObject(request.body.readUtf8()).getString("apiKey"))
     }

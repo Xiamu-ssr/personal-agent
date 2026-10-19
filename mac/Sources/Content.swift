@@ -92,13 +92,13 @@ struct Goal:Identifiable,Equatable {
     init?(_ r:[String:Any]) {
         guard let name=r["name"] as? String, !name.isEmpty, !name.contains("/"),
               let path=r["path"] as? String, DataPath.valid(path), let title=r["title"] as? String,
-              let domain=r["domain"] as? String, Self.domains.contains(domain),
-              let status=r["status"] as? String, ["追踪中","暂停","完成","放弃"].contains(status),
+
+              let status=r["status"] as? String, ["未开始","进行中","等待条件","待用户反馈","已完成","暂停","取消"].contains(status),
               let progress=(r["progress"] as? NSNumber)?.doubleValue, progress.isFinite, (0...100).contains(progress),
-              let cadence=r["cadence"] as? String, let body=r["body"] as? String else { return nil }
-        self.name=name; self.path=path; self.title=title; self.domain=domain; self.status=status; self.progress=progress
-        self.cadence=cadence; self.body=body; due=r["due"] as? String
-        nextCheckin=status == "追踪中" ? ProductTime.date(r["nextCheckin"]) : nil
+              let body=r["body"] as? String else { return nil }
+        self.name=name; self.path=path; self.title=title; self.domain=r["domain"] as? String ?? ""; self.status=status; self.progress=progress
+        self.cadence=r["cadence"] as? String ?? ""; self.body=body; due=r["due"] as? String
+        nextCheckin=["进行中","等待条件"].contains(status) ? ProductTime.date(r["nextCheckin"]) : nil
     }
 }
 struct Idea:Identifiable {

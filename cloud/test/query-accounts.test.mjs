@@ -56,7 +56,7 @@ test("Tavily retries the identical query once on explicit quota, shares cooldown
   for (const key of KEYS) assert.equal(state.includes(key), false);
   assert.equal(state.includes("核验公司公告"), false);
   assert.equal(fs.statSync(stateFile).mode & 0o777, 0o600);
-  assert.notEqual(manager.mcpServers().tavily.instance, manager.mcpServers().tavily.instance, "query transports must remain isolated");
+  assert.notEqual(manager.toolGroups().tavily, manager.toolGroups().tavily, "tool snapshots remain isolated");
 });
 
 test("Tavily distinguishes official quota failures from ordinary throttling, authentication, server and parse errors", async (t) => {
@@ -150,7 +150,7 @@ test("App HTTP lists distinguishable secret hints while model tools and editable
   const server = startServer({ harness: { busy: false, running: new Map(), connectors: manager }, hub: new DeviceHub(), bus, log: () => {}, connectors: manager, listen: { port: 0, host: "127.0.0.1" } });
   await once(server, "listening");
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
-  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/connectors`, { headers: { Authorization: `Bearer ${config.token}` } });
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/connectors`, { headers: { "X-Doudou-Protocol":"1", Authorization: `Bearer ${config.token}` } });
   assert.equal(response.status, 200);
   const body = await response.json(), account = body.cloud.installed[0].accounts[0];
   for (const [title, value] of [["API Key", key], ["密码", password], ["授权码", authorization]]) {

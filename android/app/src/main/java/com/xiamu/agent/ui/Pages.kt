@@ -77,7 +77,6 @@ sealed interface Route {
     data object Health : Route
     data object Soul : Route
     data object Memory : Route
-    data object Browser : Route
     data object Capabilities : Route
     data class GoalDetail(val name: String) : Route
     data class FeedDetail(val quote: com.xiamu.agent.FeedQuote) : Route
@@ -94,8 +93,6 @@ sealed interface Route {
     data class Doc(val title: String,val path: String,val pointers: Boolean = false,val editable: Boolean = false) : Route
     data class Image(val path: String) : Route
     data class Pdf(val title: String,val path: String) : Route
-    data class MemoryCategory(val dir: String) : Route
-    data object Diaries : Route
 }
 object Nav {
     val tab=mutableIntStateOf(0)
@@ -145,7 +142,6 @@ fun RoutePage(r: Route) {
         Route.Health -> HealthScreen()
         Route.Soul -> SoulScreen()
         Route.Memory -> MemoryScreen(0.dp)
-        Route.Browser -> BrowserScreen()
         Route.Capabilities -> SubPage("本机能力") { item { EnableAllCapabilities() }; item { LocalCapabilities() } }
         is Route.GoalDetail -> GoalDetailScreen(r.name)
         is Route.FeedDetail -> FeedDetailScreen(r.quote)
@@ -158,8 +154,6 @@ fun RoutePage(r: Route) {
         is Route.ConnectorForm -> ConnectorFormScreen(r)
         Route.Devices -> DevicesScreen()
         Route.Skills -> SkillsScreen()
-        is Route.MemoryCategory -> MemoryCategoryScreen(r.dir)
-        Route.Diaries -> DiariesScreen()
     }
 }
 
@@ -238,7 +232,7 @@ private fun WebPage(r: Route.Web) {
 @Composable
 private fun DocPage(r: Route.Doc) {
     val scope=androidx.compose.runtime.rememberCoroutineScope()
-    val (document,err)=load("doc:${r.path}") { if(r.path.startsWith("data/memory/") || r.path.startsWith("data/soul/")) Api.getJson("/api/memory/item?path=${Api.encode(r.path)}").optString("text") else Api.readFile(r.path) }
+    val (document,err)=load("doc:${r.path}") { if(r.path.startsWith("memory/") || r.path in listOf("SOUL.md","USER.md","MEMORY.md")) Api.getJson("/api/memory/item?path=${Api.encode(r.path)}").optString("text") else Api.readFile(r.path) }
     var text by remember(document) { mutableStateOf(document.orEmpty()) }
     var editing by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -267,7 +261,7 @@ private fun DocPage(r: Route.Doc) {
     } }
 }
 
-fun memoryDoc(rel: String) = Route.Doc(rel.substringAfterLast('/').removeSuffix(".md"), "data/memory/$rel", pointers = true)
+fun memoryDoc(rel: String) = Route.Doc(rel.substringAfterLast('/').removeSuffix(".md"), "memory/$rel", pointers = true)
 
 @Composable
 private fun ImagePage(path: String) {

@@ -106,7 +106,7 @@ class DeviceService : Service() {
                     if (ws !== webSocket || !running || !Prefs.configured) return@post
                     retry = 0
                     val caps = JSONArray().apply { Capabilities.all.forEach { put(it.toJson(enabled(it))) } }
-                    val device = JSONObject().put("id", Prefs.deviceId).put("name", Prefs.deviceName).put("kind", "android")
+                    val device = JSONObject().put("id", Prefs.deviceId).put("name", Prefs.deviceName).put("kind", "android").put("role", Prefs.deviceRole)
                         .put("capabilities", caps)
                     webSocket.send(JSONObject().put("t", "register").put("device", device).toString())
                     online.value = true
