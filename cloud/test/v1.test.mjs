@@ -78,6 +78,25 @@ test('new HTTP protocol is mandatory and internal tools cannot be reached throug
  assert.equal((await fetch(base+'/internal/call',{method:'POST',headers:{...headers,'X-Real-IP':'203.0.113.9'},body:'{}'})).status,403);
  const memory=await (await fetch(base+'/api/memory',{headers})).json();assert.equal(memory.kernel,'openclaw');assert.equal(memory.categories,undefined);
 });
+test('live running activities keep the started timestamp required by both native apps',async t=>{
+ let finish;
+ const {h,bus,connectors}=product(t,{ready:true,respond:()=>new Promise(resolve=>{finish=()=>resolve({text:'已完成检查'});}),close:async()=>{}});
+ const done=h.runIsolated('检查运行中的活动','检查活动列表',{id:'running-list-contract',chatType:'side'});
+ t.after(async()=>{finish?.();await done;});
+ const server=startServer({harness:h,hub:h.hub,bus,connectors,log(){},listen:{host:'127.0.0.1',port:0}});
+ await once(server,'listening');t.after(async()=>{server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));});
+ const base='http://127.0.0.1:'+server.address().port,headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'1'};
+ const page=await (await fetch(base+'/api/activities',{headers})).json();
+ const state=await (await fetch(base+'/api/state',{headers})).json();
+ for(const row of [page.running.find(r=>r.id==='running-list-contract'),state.activities.find(r=>r.id==='running-list-contract')]){
+  assert.equal(row.id,'running-list-contract');assert.equal(row.chatType,'side');
+  assert.ok(Number.isSafeInteger(row.started)&&row.started>0,'running rows need started, not the completed-row ts field');
+  assert.equal(row.summary,'');
+ }
+ finish();await done;
+ const completed=await (await fetch(base+'/api/activities',{headers})).json();
+ assert.equal(completed.running.length,0);assert.ok(completed.recent.find(r=>r.id==='running-list-contract').ts>0);
+});
 test('both provider protocols probe their own endpoints without exposing the submitted credential',async()=>{
  for(const protocol of ['anthropic','openai']){
   let endpoint;const value=await testProvider({protocol,baseUrl:'https://example.test/v1',apiKey:'fixture-test-key',model:'fixture-model'},{request:async(url)=>{endpoint=url;return Response.json(protocol==='openai'?{choices:[]}:{content:[]});}});
