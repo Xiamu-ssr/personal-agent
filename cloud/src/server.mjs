@@ -472,6 +472,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       if (msg.t === "register" && msg.device?.id) {
         log(`device online: ${msg.device.id} (${(msg.device.capabilities || []).length} caps)`);
         hub.register(ws, msg.device);
+        ws.send(JSON.stringify({t:"registered",id:msg.device.id}));
       }
       if (msg.t === "result") hub.handleResult(msg);
     });

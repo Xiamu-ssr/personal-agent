@@ -1,6 +1,7 @@
 import AppKit
 import EventKit
 import UserNotifications
+import ApplicationServices
 
 /// Folder entries are permission switches. Only entries with a run closure are device tools.
 struct Capability: Identifiable {
@@ -13,7 +14,15 @@ struct Capability: Identifiable {
     var run: (([String: Any]) async throws -> Any)? = nil
 
     var id: String { name }
-    var enabled: Bool { Prefs.granted(name) }
+    var enabled: Bool { Prefs.granted(name) && permissionFailure == nil }
+    var permissionFailure: String? {
+        if name == "computer_use" {
+            if !CGPreflightScreenCaptureAccess() { return "屏幕录制尚未授权，请在这台 Mac 的豆豆中开启操作电脑" }
+            if !AXIsProcessTrusted() { return "辅助功能尚未授权，请在这台 Mac 的豆豆中开启操作电脑" }
+        }
+        if name == "calendar_events" && EKEventStore.authorizationStatus(for: .event) != .fullAccess { return "日历尚未授权或权限已收回" }
+        return nil
+    }
 
     var appIcon: NSImage {
         let key = (FolderPermission.directory(for: name)?.path ?? name) as NSString
@@ -49,6 +58,8 @@ struct Capability: Identifiable {
         var value: [String: Any] = ["name": name, "title": title, "description": description,
                                   "args": args, "sync": false, "source": name, "enabled": enabled]
         if let hint { value["hint"] = hint }
+        value["status"] = enabled ? "ready" : Prefs.granted(name) ? "permission_required" : "off"
+        if !enabled { value["unavailableReason"] = Prefs.granted(name) ? permissionFailure ?? "系统授权尚未开启" : "请在这台 Mac 的豆豆中开启「\(title)」" }
         return value
     }
 }

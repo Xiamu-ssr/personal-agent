@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">豆豆</string>
+    <string name="phone_use_label">豆豆手机操作</string>
+    <string name="phone_use_description">让你的豆豆观察屏幕、读取界面节点，并按任务点击、输入、滑动及切换应用。开启后，可在豆豆的设备与权限中随时停止手机操作。</string>
 </resources>

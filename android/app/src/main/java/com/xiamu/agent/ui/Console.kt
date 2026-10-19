@@ -30,7 +30,7 @@ fun AvatarConsole() {
                 Spacer(Modifier.size(42.dp))
             }
             Spacer(Modifier.height(16.dp))
-            SegTabs(listOf("活动","设备归属","设备","定时","记忆"),tab) { tab=it }
+            SegTabs(listOf("活动","权限","设备","定时","记忆"),tab) { tab=it }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when(tab) {
                     0 -> ActivitiesPanel()
@@ -96,18 +96,11 @@ private fun ActivityRow(title: String,summary: String,time: String,icon: ImageVe
 }
 @Composable
 internal fun PermissionsPanel() {
-    val c=ctx()
-    var role by remember { mutableStateOf(Prefs.deviceRole) }
-    Column(Modifier.padding(top=22.dp)) {
-        Text("这台手机属于谁",style=Type.title(20),color=Pal.Ink)
-        Spacer(Modifier.height(12.dp))
-        CardList { listOf("owner","agent").forEachIndexed { i,value ->
-            if(i>0) Hairline()
-            ListRow(if(value=="agent") "豆豆的设备" else "我的设备",if(value=="agent") "可以操作应用、文件与系统" else "默认读取；按明确任务使用 Phone Use",subLines=3,trailing={RadioButton(role==value,null)},onClick={
-                role=value; Prefs.deviceRole=value; com.xiamu.agent.device.DeviceService.start(c,reregister=true)
-            })
-        } }
-        FooterNote("具体能力在连接应用中授权，豆豆按任务和设备归属判断操作范围。")
+    LazyColumn(contentPadding=PaddingValues(bottom=24.dp)) {
+        item { DeviceOwnership() }
+        item { SectionTitle("操作手机"); CardList { PhoneUseAuthorization() } }
+        item { BackgroundConnection() }
+        item { Spacer(Modifier.height(16.dp)); SilverButton("全部本机能力",Modifier.fillMaxWidth()) { Nav.console.value=false; Nav.open(Route.Connectors(0)) } }
     }
 }
 @Composable

@@ -62,7 +62,8 @@ fun connectorInfo(j: JSONObject, device: Boolean = false): ConnectorInfo {
         ConnectorAccount(it.optString("id"), it.optString("label"), it.optString("status"), it.opt("error") as? String, it.optLong("checkedAt"), it.optJSONObject("values")?.stringMap().orEmpty())
     }
     return ConnectorInfo(
-        j.optString("name"), j.optString("title").ifBlank { j.optString("name") }, j.optString("description"), j.optString("icon"),
+        j.optString("name"), j.optString("title").ifBlank { j.optString("name") },
+        (if (device && !j.optBoolean("enabled")) j.optString("unavailableReason").takeIf { it.isNotBlank() && it != "null" } else null) ?: j.optString("description"), j.optString("icon"),
         if (device) j.optBoolean("enabled") else accounts.any { it.status == "ok" } || j.optString("status") == "on",
         fields, j.optBoolean("multiAccount", true), accounts,
     )

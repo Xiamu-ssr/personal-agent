@@ -70,7 +70,7 @@ final class ConnectorStore {
                     lastSeen: (d["lastSeen"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) },
                     caps: (d["capabilities"] as? [[String: Any]] ?? []).map {
                         RemoteCap(name: $0["name"] as? String ?? "", title: $0["title"] as? String ?? ($0["name"] as? String ?? ""),
-                                  description: $0["description"] as? String ?? "", enabled: $0["enabled"] as? Bool ?? true)
+                                  description: ($0["enabled"] as? Bool == false ? $0["unavailableReason"] as? String : nil) ?? ($0["description"] as? String ?? ""), enabled: $0["enabled"] as? Bool ?? true)
                     })
             }
             error = ""
@@ -95,13 +95,16 @@ struct CapRow: View {
             AppIcon(style:.capability(cap.name),size:36)
             VStack(alignment: .leading, spacing: 3) {
                 Text(cap.title).font(Theme.font(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
-                Text(note.isEmpty ? (cap.hint ?? cap.description) : note).font(Theme.font(size: 12)).foregroundStyle(note.isEmpty ? Theme.sub : Theme.danger).lineLimit(2)
+                Text(note.isEmpty ? (Prefs.granted(cap.name) ? cap.permissionFailure : nil) ?? cap.hint ?? cap.description : note).font(Theme.font(size: 12)).foregroundStyle(note.isEmpty ? Theme.sub : Theme.danger).lineLimit(3)
             }
             Spacer(minLength: 10)
             if asking { ActiveProgress().controlSize(.small) }
             Toggle("", isOn: Binding(get: { on }, set: set)).toggleStyle(.switch).labelsHidden().tint(Color(red:0.20,green:0.65,blue:0.39)).disabled(asking)
                 .accessibilityLabel(cap.title)
         }.padding(.vertical, 10).padding(.horizontal, 6)
+            .onReceive(NotificationCenter.default.publisher(for:NSApplication.didBecomeActiveNotification)) { _ in
+                on=cap.enabled; DeviceClient.shared.reregister()
+            }
     }
     private func set(_ want: Bool) {
         guard !asking else { return }
@@ -129,7 +132,7 @@ struct LocalCapabilityList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                Button(enabling ? "正在开启…" : "一键开启") { enable() }.buttonStyle(PrimaryButtonStyle(height: 36)).disabled(enabling)
+                Button(enabling ? "正在申请…" : "申请本机权限") { enable() }.buttonStyle(PrimaryButtonStyle(height: 36)).disabled(enabling)
                 Text(progress).font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
             }
             Rows(items: Capabilities.all) { CapRow(cap: $0).id($0.name) }.id(revision).disabled(enabling).card(radius: 16, padding: 10)

@@ -29,13 +29,11 @@ export async function prepareAttachments(root,atts) {
   }
   return atts;
 }
-// Images are message blocks; other uploads stay as explicit paths for Read.
+// Uploads enter the conversation as references. Native tools read their contents on demand.
 const fileSize=(size)=>size<1024?`${size} B`:size<1024*1024?`${Number((size/1024).toFixed(1))} KB`:`${Number((size/(1024*1024)).toFixed(1))} MB`;
 export function userContent(root,text,atts=[]) {
   if(!atts.length)return text;
   const lines=atts.map((a)=>a.kind==="voice"?`- ${a.path}（语音笔记，转写：${a.transcript||"空"}）`:
-    a.kind==="image"?`- ${a.path}（图片，已附在本条消息里）`:`- ${a.path}（文件，${Number.isFinite(a.size)?fileSize(a.size)+"，":""}需要时自己读）`);
-  const content=[{type:"text",text:`${text||(atts.every((a)=>a.kind==="voice")?"（一段语音笔记）":"（发来了附件）")}\n\n[附件]\n${lines.join("\n")}`}];
-  for(const a of atts)if(a.kind==="image")content.push({type:"image",source:{type:"base64",media_type:IMAGE_TYPES[path.extname(a.path).toLowerCase()],data:fs.readFileSync(localFile(root,a.path,"data/uploads")).toString("base64")}});
-  return content;
+    a.kind==="image"?`- ${a.path}（图片，用 view_image 按需查看）`:`- ${a.path}（文件，${Number.isFinite(a.size)?fileSize(a.size)+"，":""}需要时自己读）`);
+  return `${text||(atts.every((a)=>a.kind==="voice")?"（一段语音笔记）":"（发来了附件）")}\n\n[已上传的附件；这是文件位置，不是文件正文]\n${lines.join("\n")}`;
 }

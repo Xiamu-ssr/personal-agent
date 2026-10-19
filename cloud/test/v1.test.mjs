@@ -63,6 +63,28 @@ test('device ownership stays a role; task GUI capability is not blocked by a har
  const id='owned-run';h.sessionRuns.set('agent:main:main',{id});h.history.put(id,{status:'running'});
  const catalog=await h.productTool('catalog',{sessionKey:'agent:main:main',group:'devices'});assert.ok(catalog.content[0].text.includes('call_device'));
 });
+
+test('device catalog distinguishes offline, missing implementation and revoked permission; registration updates preserve pending calls',async()=>{
+ const hub=new DeviceHub(),ws=new EventEmitter();ws.close=()=>{};
+ let call;ws.send=value=>{call=JSON.parse(value);};
+ const device={id:'fixture-device-status',name:'测试设备',kind:'android',role:'agent',capabilities:[{name:'phone_use',title:'手机操作',description:'真实手机操作',args:'{"op":"snapshot"}',enabled:false,status:'permission_required',unavailableReason:'手机操作尚未获得无障碍授权'}]};
+ hub.register(ws,device);
+ const catalog=JSON.parse((await hub.tools().find(t=>t.name==='list_devices').execute({})).content[0].text).find(d=>d.id===device.id);
+ assert.equal(catalog.online,true);assert.equal(catalog.role,'agent');assert.equal(catalog.capabilities[0].enabled,false);assert.match(catalog.capabilities[0].unavailableReason,/无障碍授权/);
+ await assert.rejects(hub.call(device.id,'phone_use',{}),/无障碍授权/);
+ await assert.rejects(hub.call(device.id,'not_implemented',{}),/当前版本没有提供/);
+ const enabled={...device,capabilities:device.capabilities.map(c=>({...c,enabled:true,status:'ready',unavailableReason:undefined}))};
+ hub.register(ws,enabled);const pending=hub.call(device.id,'phone_use',{op:'snapshot'});
+ hub.register(ws,enabled);hub.handleResult({id:call.id,ok:true,data:{nodes:[]}});
+ assert.deepEqual(await pending,{nodes:[]});assert.equal(ws.listenerCount('close'),1);
+ const interrupted=hub.call(device.id,'phone_use',{op:'snapshot'});
+ const rejected=assert.rejects(interrupted,/连接已替换/);
+ const replacement=new EventEmitter();replacement.close=()=>{};replacement.send=()=>{};
+ hub.register(replacement,enabled);await rejected;assert.equal(hub.devices.get(device.id).pending.size,0);
+ ws.emit('close');assert.equal(hub.known().find(d=>d.id===device.id).online,true);
+ replacement.emit('close');assert.equal(hub.known().find(d=>d.id===device.id).online,false);
+ await assert.rejects(hub.call(device.id,'phone_use',{}),/设备离线/);
+});
 test('failed scheduled checks stay in activities while a failed user request reports the failure in chat',async t=>{
  const {h}=product(t,{respond:async()=>{throw new Error('HTTP 402');},close:async()=>{}});
  const checked=await h.runMain('定时检查',{id:'scheduled-error',reportError:false});assert.equal(checked.ok,false);assert.equal(h.history.get('scheduled-error').status,'error');assert.equal(h.speech.history().length,0);

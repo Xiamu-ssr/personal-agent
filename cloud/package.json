@@ -1,6 +1,6 @@
 {
   "name": "personal-agent-cloud",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "description": "Doudou: one OpenClaw agent with shared apps, memory and device capabilities",
@@ -10,7 +10,8 @@
     "check": "node scripts/check.mjs",
     "test": "node --test --test-concurrency=2 test/*.test.mjs",
     "verify:kernel": "node scripts/verify-openclaw.mjs",
-    "verify:context": "node scripts/verify-context-policy.mjs"
+    "verify:context": "node scripts/verify-context-policy.mjs",
+    "verify:attachments": "node scripts/verify-attachments.mjs"
   },
   "engines": {
     "node": ">=24.16.0 <25 || >=26.1.0"

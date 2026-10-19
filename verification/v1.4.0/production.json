@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "singleDoudouDeviceEntry": true,
+  "version": "1.4.0",
+  "ready": true,
+  "protocol": "2",
+  "selectedContextWindow": 1048576,
+  "activeContextBudget": 292000,
+  "nativeCompactionReserve": 20000,
+  "compactAtTokens": 272000,
+  "allBudgetsValid": true,
+  "persistentConfigurationAndMemoryPreserved": true,
+  "mainSessionPreserved": true,
+  "sessionResetDisabled": true,
+  "memoryFlushEnabled": true,
+  "midTurnPrecheckEnabled": true
+}

@@ -1,0 +1,15 @@
+{
+  "version": "1.4.0",
+  "status": "done",
+  "modelReal": true,
+  "uploadedImages": 1,
+  "uploadedFiles": 1,
+  "imageTextCorrect": true,
+  "imageCountCorrect": true,
+  "fileTextCorrect": true,
+  "nativeTools": [
+    "view_image",
+    "read"
+  ],
+  "model": "deepseek-ai/DeepSeek-V4.1-Flash"
+}

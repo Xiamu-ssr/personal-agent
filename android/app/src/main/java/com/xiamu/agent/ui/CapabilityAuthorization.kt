@@ -30,7 +30,7 @@ fun EnableAllCapabilities() {
         notice=if(HealthAccess.readPermissions.any { it in granted }) "健康读取权限已开启" else "Health Connect 未授权，计步权限仍可单独使用"
     }
     fun afterRuntime() {
-        Capabilities.all.forEach { Prefs.setGranted(it.name,it.hasPermissions(c)) }
+        Capabilities.all.filter { it.name!="phone_use" }.forEach { Prefs.setGranted(it.name,it.hasPermissions(c)) }
         Prefs.notifyMessages=Capabilities.byName("notify")!!.hasPermissions(c)
         permissionRevision.intValue++; DeviceService.start(c,reregister=true)
         if(HealthAccess.available(c)) health.launch(HealthAccess.permissions(c))
@@ -38,12 +38,13 @@ fun EnableAllCapabilities() {
     }
     val runtime=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { afterRuntime() }
     Column(Modifier.fillMaxWidth().padding(vertical=12.dp)) {
-        GoldButton(if(requesting) "正在开启…" else "一键开启",Modifier.fillMaxWidth(),enabled=!requesting) {
+        GoldButton(if(requesting) "正在申请…" else "申请常用权限",Modifier.fillMaxWidth(),enabled=!requesting) {
             requesting=true
             val permissions=(Capabilities.all.flatMap { it.permissions } + listOf(Manifest.permission.RECORD_AUDIO,Manifest.permission.CAMERA)).distinct()
                 .filter { ContextCompat.checkSelfPermission(c,it) != PackageManager.PERMISSION_GRANTED }
             if(permissions.isEmpty()) afterRuntime() else runtime.launch(permissions.toTypedArray())
         }
+        FooterNote("手机操作需单独开启无障碍授权，后台运行需在系统设置中允许。")
         if(notice.isNotBlank()) Text(notice,fontSize = Type.Label,lineHeight = Type.SecondaryLine,color=Pal.Muted,modifier=Modifier.padding(top=8.dp))
     }
 }

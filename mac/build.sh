@@ -1,11 +1,11 @@
 #!/bin/bash
 # Build 豆豆.app (universal, fixed local identity) with only the Command Line Tools.
 #   bash mac/tools/make-signing-identity.sh   # user runs once; may show Keychain dialogs
-#   VERSION=1.3.0 bash mac/build.sh         # -> mac/build/doudou-1.3.0.dmg
+#   VERSION=1.4.0 bash mac/build.sh         # -> mac/build/doudou-1.4.0.dmg
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION=${VERSION:-1.3.0}
-BUILD=${BUILD:-8}
+VERSION=${VERSION:-1.4.0}
+BUILD=${BUILD:-9}
 OUT=${OUT:-build}
 APP="$OUT/豆豆.app"
 SIGNING_IDENTITY=""

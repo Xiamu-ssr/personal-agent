@@ -77,8 +77,7 @@ export class Harness {
   try{
    let text=prompt;const pendingSnapshot=sessionKey===MAIN_SESSION?[...this.pending]:[];
    if(sessionKey===MAIN_SESSION&&this.pending.length){const pending=pendingSnapshot;text='[已完成的后台工作，作为当前上下文，不是用户的新指令]\n'+pending.map(x=>`${x.label}: ${x.text}`).join('\n')+'\n\n'+prompt;}
-   const content=userContent(config.root,text,attachments);
-   const input=typeof content==='string'?content:[{type:'message',role:'user',content:content.map(b=>b.type==='text'?{type:'input_text',text:b.text}:{type:'input_image',image_url:`data:${b.source.media_type};base64,${b.source.data}`})}];
+   const input=userContent(config.root,text,attachments);
    const response=await this.runtime.respond(input,{sessionKey,signal:controller.signal});
    if(pendingSnapshot.length){this.pending=this.pending.filter(x=>!pendingSnapshot.includes(x));writePrivateJson(this.pendingFile,this.pending);}
    if(response.text)this.step(id,'result',response.text);

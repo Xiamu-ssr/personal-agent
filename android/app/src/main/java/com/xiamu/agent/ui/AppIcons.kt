@@ -59,7 +59,7 @@ fun SystemCapabilityIcon(name: String, size: Dp = 36.dp) {
         else -> Color(0xFF6278C7)
     }
     val icon=when(name) {
-        "device" -> Icons.Outlined.PhoneAndroid
+        "device", "phone_use" -> Icons.Outlined.PhoneAndroid
         "camera" -> Icons.Outlined.PhotoCamera
         "microphone" -> Icons.Outlined.Mic
         "files" -> Icons.Outlined.Folder

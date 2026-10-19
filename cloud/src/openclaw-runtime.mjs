@@ -44,7 +44,7 @@ export class OpenClawRuntime {
     maxConcurrent:2,heartbeat:{every:'0m'},compaction:{mode:'safeguard',memoryFlush:{enabled:true},midTurnPrecheck:{enabled:true}},sandbox:{mode:'off'}},entries:{main:{name:config.agentName}}},
    session:{dmScope:'main',reset:{mode:'none'}},
    models:{mode:'replace',catalogRefresh:{enabled:false},providers},update:{checkOnStart:false},
-   tools:{profile:'full',toolSearch:false,deny:['sessions_spawn','agents_list','cron','browser','web_search'],exec:{security:'full',ask:'off'}},
+   tools:{profile:'full',toolSearch:false,deny:['sessions_spawn','agents_list','cron','browser','web_search','nodes','mobile_ui'],exec:{security:'full',ask:'off'}},
    plugins:{allow:['doudou'],load:{paths:[path.join(CODE,'openclaw-plugin')]},entries:{doudou:{enabled:true}}},
   });
  }

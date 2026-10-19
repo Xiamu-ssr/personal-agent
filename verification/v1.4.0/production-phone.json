@@ -1,0 +1,23 @@
+{
+  "status": "done",
+  "modelReal": true,
+  "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+  "cloud": "1.4.0",
+  "releaseApk": "1.4.0",
+  "device": "OPPO PHW110",
+  "android": "15",
+  "existingPairingPreserved": true,
+  "deviceRole": "agent",
+  "registeredReady": true,
+  "nativeSnapshot": true,
+  "nativeScreenshot": true,
+  "backgroundBatteryExemptionGrantedAndChecked": true,
+  "pinduoduoChineseSearch": true,
+  "pinduoduoResultsObserved": true,
+  "resultsScrollObserved": true,
+  "returnedToDoudou": true,
+  "deviceToolCallsAcrossTwoRuns": 32,
+  "purchases": 0,
+  "messagesToOthers": 0,
+  "adbUsedForModelActions": false
+}

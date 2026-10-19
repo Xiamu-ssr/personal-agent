@@ -209,6 +209,7 @@ private fun LoginField(
 
 @Composable
 fun CapabilityRow(cap: Capability) {
+    if(cap.name=="phone_use") { PhoneUseAuthorization(); return }
     val c = ctx()
     val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle

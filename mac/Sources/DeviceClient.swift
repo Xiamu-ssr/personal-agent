@@ -11,11 +11,14 @@ final class DeviceClient {
     var online = false
 
     @ObservationIgnored private let socket = Socket(role: "device")
+    @ObservationIgnored private var server: String?
+    @ObservationIgnored private var token: String?
 
     private init() {
         socket.onOpen = { [weak self] in self?.register() }
         socket.onMessage = { [weak self] m in
             switch m["t"] as? String {
+            case "registered": if m["id"] as? String == Prefs.deviceId { self?.online = true }
             case "call": self?.handle(m)
             case "event": Self.notify(kind: m["kind"] as? String ?? "", text: m["text"] as? String ?? "")
             default: break
@@ -24,18 +27,25 @@ final class DeviceClient {
         socket.onClose = { [weak self] _ in self?.online = false }
     }
 
-    func start() { socket.start() }
+    func start() {
+        if accountChanged {
+            socket.stop(); online = false
+            server = Prefs.server; token = Api.authToken
+        }
+        socket.start()
+    }
+
+    private var accountChanged: Bool { server != Prefs.server || token != Api.authToken }
 
     func stop() {
         socket.stop()
         online = false
     }
 
-    /// Reconnect so the cloud sees the new name / capability switches.
+    /// Update capabilities on the same connection; reconnect only when the account changes.
     func reregister() {
-        online = false
-        socket.stop()
-        if Prefs.configured { socket.start() }
+        guard Prefs.configured else { return }
+        if accountChanged { start() } else if online { register() } else { socket.start() }
     }
 
     private func register() {
@@ -43,7 +53,7 @@ final class DeviceClient {
             "id": Prefs.deviceId, "name": Prefs.deviceName, "kind": "mac", "role": Prefs.deviceRole,
             "capabilities": Capabilities.tools.map(\.json),
         ]
-        online = socket.send(["t": "register", "device": device])
+        _ = socket.send(["t": "register", "device": device])
         ChatClient.shared.devicesVersion += 1
     }
 

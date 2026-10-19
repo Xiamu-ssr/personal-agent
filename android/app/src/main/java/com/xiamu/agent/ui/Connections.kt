@@ -129,9 +129,11 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
             ) {
                 when (selected) {
                     0 -> {
+                        item { DeviceOwnership() }
                         item { EnableAllCapabilities() }
                         item { SectionTitle("本机能力") }
                         item { LocalCapabilities() }
+                        item { BackgroundConnection() }
                         item { FooterNote("只把你打开的能力交给豆豆。系统权限也可以随时收回。") }
                     }
                     1 -> {
@@ -220,7 +222,7 @@ fun DevicesScreen(gateway: ConnectorGateway = CloudConnectors) {
     SubPage("设备") {
         item { BigTitle("设备", "在不同设备间，继续同一件事") }
         item {
-            DeviceCard(Prefs.deviceName, if (DeviceService.online.value) "本机 · 在线" else "本机 · 连接中", "android", true) {
+            DeviceCard(Prefs.deviceName, if (DeviceService.online.value) "本机 · 已接入云端" else "本机 · ${DeviceService.connectionStatus.value}", "android", DeviceService.online.value) {
                 Nav.open(Route.Connectors(0))
             }
         }

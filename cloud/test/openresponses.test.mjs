@@ -61,3 +61,8 @@ test('a partial answer, backend failure, token limit or closed socket cannot bec
     await assert.rejects(openResponse(url, options), error);
   });
 });
+
+test('a rejected gateway request preserves its useful cause instead of only HTTP 400',async t=>{
+  const url=await gateway(t,(_req,res)=>{res.writeHead(400,{'content-type':'application/json'});res.end(JSON.stringify({error:{message:'input[0].content[1].source is required'}}));});
+  await assert.rejects(openResponse(url,options),/HTTP 400：input\[0\].content\[1\].source is required/);
+});

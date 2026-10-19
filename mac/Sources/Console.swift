@@ -7,7 +7,7 @@ struct ConsoleView:View {
             VStack(spacing:7) { AgentAvatar(size:84); Text(ProfileStore.shared.agentName).font(Theme.font(size:20,weight:.semibold))
                 if ChatClient.shared.avatarState == .working { Text(ChatClient.shared.avatarText.isEmpty ? "努力工作中" : ChatClient.shared.avatarText).font(Theme.font(size:12)).foregroundStyle(Theme.sub) }
             }
-            PillTabs(titles:["活动","设备归属","设备","定时","记忆"],selection:Binding(get:{Nav.shared.consoleTab},set:{Nav.shared.consoleTab=$0})).padding(6).background(Theme.card,in:Capsule())
+            PillTabs(titles:["活动","设备权限","设备","定时","记忆"],selection:Binding(get:{Nav.shared.consoleTab},set:{Nav.shared.consoleTab=$0})).padding(6).background(Theme.card,in:Capsule())
             Group {
                 switch Nav.shared.consoleTab { case 0: ActivityListView(); case 1: PermissionPanel(); case 2: ComputerPanel(); case 3: SchedulesPanel(); default: MemoryPanel() }
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
@@ -72,16 +72,18 @@ struct PermissionPanel:View {
     @State private var role=Prefs.deviceRole
     var body:some View {
         ScrollView { VStack(alignment:.leading,spacing:16) {
-            Text("这台 Mac 属于谁").font(Theme.titleFont(20))
+            Text("这台设备属于谁").font(Theme.titleFont(20))
             ForEach(["owner","agent"],id:\.self) { value in
                 Button { role=value; Prefs.deviceRole=value; DeviceClient.shared.reregister() } label: {
                     HStack { Image(systemName:role == value ? "largecircle.fill.circle" : "circle"); VStack(alignment:.leading,spacing:6) {
-                        Text(value == "agent" ? "豆豆的设备" : "我的设备").font(Theme.font(size:16,weight:.medium))
-                        Text(value == "agent" ? "可以操作应用、文件与系统" : "默认读取；按明确任务使用 Computer Use").font(Theme.font(size:13)).foregroundStyle(Theme.sub)
+                        Text(value == "agent" ? "豆豆专用" : "我日常使用").font(Theme.font(size:16,weight:.medium))
+                        Text(value == "agent" ? "让豆豆用它操作应用、处理事务" : "平时读取信息；操作应用按我交代的任务来").font(Theme.font(size:13)).foregroundStyle(Theme.sub)
                     }; Spacer() }.card(radius:18,padding:20)
                 }.buttonStyle(.plain)
             }
-            Note(text:"具体能力在连接应用中授权。豆豆按当前任务和设备归属判断操作范围。")
+            Text("本机能力与授权").font(Theme.titleFont(18)).padding(.top,8)
+            LocalCapabilityList()
+            Note(text:DeviceClient.shared.online ? "设备已接入云端，已授权能力可用" : "设备正在连接云端")
         }.padding(28) }
     }
 }

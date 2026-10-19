@@ -55,7 +55,16 @@ export class DeviceHub {
     reg[info.id] = { ...info, lastSeen: Date.now() };
     writeJson(REGISTRY(), reg);
     const prev = this.devices.get(info.id);
-    if (prev && prev.ws !== ws) prev.ws.close(4000, "replaced");
+    if (prev?.ws === ws) {
+      prev.info = info;
+      this.onChange();
+      return;
+    }
+    if (prev) {
+      for (const pending of prev.pending.values()) pending.reject(new Error("设备连接已替换，请重新观察后操作"));
+      prev.pending.clear();
+      prev.ws.close(4000, "replaced");
+    }
     this.devices.set(info.id, { info, ws, pending: new Map() });
     ws.on("close", () => {
       const cur = this.devices.get(info.id);
@@ -93,12 +102,13 @@ export class DeviceHub {
   }
 
   // Every device that ever registered, online or not, with all its capabilities (for the App's connector pages).
-  known() {
+  known({forModel=false}={}) {
     return Object.values(readJson(REGISTRY(), {}))
       .map((info) => ({
         id: info.id, name: info.name, kind: info.kind, role: info.role, online: this.devices.has(info.id), lastSeen: info.lastSeen,
         capabilities: (info.capabilities || []).map((c) => ({
-          name: c.name, title: c.title || c.name, description: c.hint || c.description || "", enabled: c.enabled !== false,
+          name: c.name, title: c.title || c.name, description: (forModel ? c.description : c.hint) || c.description || "", enabled: c.enabled !== false,
+          ...(forModel && {args:c.args||"{}"}),...(c.status && {status:c.status}),...(c.unavailableReason && {unavailableReason:c.unavailableReason}),
         })),
       }))
       .sort((a, b) => b.online - a.online || b.lastSeen - a.lastSeen);
@@ -135,7 +145,8 @@ export class DeviceHub {
     const d = this.devices.get(deviceId);
     if (!d) return Promise.reject(new Error("设备离线"));
     if (!capability.startsWith("__") && !enabledCaps(d.info).some((c) => c.name === capability)) {
-      return Promise.reject(new Error(`这台设备没有开启「${capability}」。要用的话，请用户在那台设备的豆豆里打开`));
+      const cap = (d.info.capabilities || []).find(c=>c.name===capability);
+      return Promise.reject(new Error(cap ? cap.unavailableReason || `这台设备没有开启「${cap.title||capability}」，请在这台设备的豆豆中开启` : `这台设备的当前版本没有提供「${capability}」能力，不能通过打开系统权限获得`));
     }
     const id = crypto.randomUUID();
     const started = Date.now();
@@ -193,8 +204,8 @@ export class DeviceHub {
     const text = (v) => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] });
     const fail = (e) => ({ content: [{ type: "text", text: String(e.message || e) }], isError: true });
     return [
-        defineTool("list_devices", "列出在线设备和每台设备的能力清单（含参数说明）。", {}, async () =>
-          text([...this.devices.values()].map(({ info }) => ({ ...info, capabilities: enabledCaps(info) })))),
+        defineTool("list_devices", "查看所有已登记设备的在线状态、归属、能力参数及未启用原因。调用前确认设备在线且能力 enabled=true；未提供能力不是用户漏授权。", {}, async () =>
+          text(this.known({forModel:true}))),
         defineTool(
           "call_device",
           "调用某台设备的一个能力。args 按能力清单里的说明传。设备离线会直接返回错误。",

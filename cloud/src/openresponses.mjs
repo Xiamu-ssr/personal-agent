@@ -16,7 +16,17 @@ export async function openResponse(url, { token, sessionKey, input, signal, onTe
       req.on('error', reject);
       req.end(body);
     });
-    if (response.statusCode !== 200) throw new Error(`OpenClaw HTTP ${response.statusCode}`);
+    if (response.statusCode !== 200) {
+      let bytes = 0, detail = '';
+      for await (const chunk of response) {
+        bytes += chunk.length;
+        if (bytes > 64 * 1024) break;
+        detail += chunk.toString('utf8');
+      }
+      let reason;
+      try { const value = JSON.parse(detail); reason = value.error?.message || value.message; } catch {}
+      throw new Error(`OpenClaw HTTP ${response.statusCode}${typeof reason === 'string' ? '：' + reason.slice(0, 1000) : ''}`);
+    }
     let pending = '', output = '', completed = false, usage;
     const decoder = new TextDecoder();
     const frame = value => {

@@ -40,6 +40,9 @@ class DeviceService : Service() {
     private var retry = 0
     private var running = false
     private var locationForeground = false
+    private var account: Pair<String,String>? = null
+
+    override fun onCreate() { super.onCreate(); active = this }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -49,13 +52,13 @@ class DeviceService : Service() {
         StepCounter.start(this)
         scope.launch { runCatching { HealthAccess.refresh(this@DeviceService) } }
         running = true
-        if (intent?.action == ACTION_REREGISTER) {
+        if (ws != null && account != (Prefs.server to Prefs.token)) {
             val old = ws
             ws = null
             old?.close(1000, "re-register")
             online.value = false
         }
-        if (ws == null) connect()
+        if (ws == null) connect() else if(intent?.action == ACTION_REREGISTER) ws?.let(::register)
         return START_STICKY
     }
 
@@ -67,6 +70,7 @@ class DeviceService : Service() {
         main.removeCallbacksAndMessages(null)
         scope.cancel()
         online.value = false
+        if(active === this) active = null
         super.onDestroy()
     }
 
@@ -75,7 +79,7 @@ class DeviceService : Service() {
         val n: Notification = NotificationCompat.Builder(this, App.CH_SERVICE)
             .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle(if (online.value) "豆豆在线" else "豆豆连接中")
-            .setContentText(if (online.value) "这台手机已连接，豆豆可以用你授权的能力" else "正在连接云端")
+            .setContentText(if (online.value) "已接入云端 · 豆豆可使用已授权的能力" else connectionStatus.value)
             .setContentIntent(open)
             .setOngoing(true)
             .build()
@@ -97,20 +101,30 @@ class DeviceService : Service() {
     private fun enabled(c: Capability) = c.enabled(this)
     private fun enabledCaps(): List<Capability> = Capabilities.all.filter(::enabled)
 
+    private fun register(webSocket: WebSocket) {
+        val caps = JSONArray().apply { Capabilities.all.forEach { cap ->
+            put(cap.toJson(enabled(cap)).put("unavailableReason",cap.unavailableReason(this@DeviceService))
+                .put("status",if(enabled(cap)) "ready" else if(Prefs.granted(cap.name)) "permission_required" else "off"))
+        } }
+        val device = JSONObject().put("id", Prefs.deviceId).put("name", Prefs.deviceName).put("kind", "android").put("role", Prefs.deviceRole)
+            .put("capabilities", caps)
+        webSocket.send(JSONObject().put("t", "register").put("device", device).toString())
+    }
+
     private fun connect() {
         if (!Prefs.configured || !running) return
         val request = Api.wsRequest("device") ?: return
+        account = Prefs.server to Prefs.token
         ws = Api.http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 main.post {
                     if (ws !== webSocket || !running || !Prefs.configured) return@post
                     retry = 0
-                    val caps = JSONArray().apply { Capabilities.all.forEach { put(it.toJson(enabled(it))) } }
-                    val device = JSONObject().put("id", Prefs.deviceId).put("name", Prefs.deviceName).put("kind", "android").put("role", Prefs.deviceRole)
-                        .put("capabilities", caps)
-                    webSocket.send(JSONObject().put("t", "register").put("device", device).toString())
-                    online.value = true
+                    online.value = false
+                    connectionStatus.value = "连接已建立，等待云端确认设备"
+                    register(webSocket)
                     startInForeground()
+                    main.postDelayed({ if(ws === webSocket && !online.value) { webSocket.cancel(); reconnectLater(webSocket) } },15000)
                     main.postDelayed({ if (ws === webSocket) Chat.filesVersion.intValue++ }, 400)
                 }
             }
@@ -119,13 +133,21 @@ class DeviceService : Service() {
                 if (ws !== webSocket || !running || !Prefs.configured) return
                 val m = runCatching { JSONObject(text) }.getOrNull() ?: return
                 when (m.optString("t")) {
+                    "registered" -> main.post {
+                        if(ws === webSocket && m.optString("id") == Prefs.deviceId) {
+                            online.value = true; connectionStatus.value = "设备已接入云端"; startInForeground()
+                        }
+                    }
                     "call" -> scope.launch { handleCall(webSocket, m) }
                     "event" -> onEvent(m.optString("kind"), m.optString("text"))
                 }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = dropped(webSocket)
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = dropped(webSocket)
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                main.post { if(ws === webSocket) connectionStatus.value = if(response?.code == 401) "设备连接未通过认证，请重新配对" else "连接中断，正在重新接入云端" }
+                dropped(webSocket)
+            }
         })
     }
 
@@ -161,7 +183,8 @@ class DeviceService : Service() {
                 Capabilities.readSince(this, source, args.optString("cursor").takeIf { it.isNotBlank() && it != "null" },
                     args.optInt("limit", 50))
             } else {
-                val cap = enabledCaps().firstOrNull { it.name == name } ?: throw IllegalStateException("用户没有授权这个能力：$name")
+                val cap = Capabilities.byName(name) ?: throw IllegalStateException("当前版本没有提供这个能力：$name")
+                if(!cap.enabled(this)) throw IllegalStateException(cap.unavailableReason(this))
                 cap.run(this, args)
             }
             reply.put("ok", true).put("data", data)
@@ -174,6 +197,14 @@ class DeviceService : Service() {
     companion object {
         const val ACTION_REREGISTER = "reregister"
         val online = mutableStateOf(false)
+        val connectionStatus = mutableStateOf("正在连接云端")
+        @Volatile private var active: DeviceService? = null
+
+        fun capabilitiesChanged(ctx: Context) {
+            val service = active
+            if(service != null) service.main.post { service.ws?.let { service.register(it) } }
+            else if(Prefs.configured) start(ctx)
+        }
 
         internal fun onAgentEvent(ctx: Context, kind: String, text: String) {
             if (kind != "reply" || App.foreground || !Prefs.notifyMessages || text.isBlank()) return

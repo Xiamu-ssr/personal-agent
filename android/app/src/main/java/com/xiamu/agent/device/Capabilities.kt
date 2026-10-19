@@ -37,7 +37,7 @@ import kotlin.coroutines.resume
 
 /**
  * One thing this phone can do for the agent. Every capability is registered with its [enabled] state;
- * the agent only sees enabled ones. [sync] capabilities can also be caught up incrementally (read_since).
+ * the agent sees availability and the reason for disabled ones. [sync] capabilities can also be caught up incrementally (read_since).
  */
 class Capability(
     val name: String,
@@ -51,12 +51,20 @@ class Capability(
     val run: suspend (Context, JSONObject) -> Any,
 ) {
     fun hasPermissions(ctx: Context): Boolean {
+        if(name == "phone_use") return PhoneUseService.systemEnabled(ctx) && PhoneUseService.ready()
         if(name == "health") return HealthAccess.hasPermissions(ctx)
         fun has(p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
         return if (name == "location") permissions.any(::has) else permissions.all(::has)
     }
 
     fun enabled(ctx: Context) = Prefs.granted(name) && hasPermissions(ctx)
+
+    fun unavailableReason(ctx: Context): String? = when {
+        name == "phone_use" -> PhoneUseService.unavailableReason(ctx)
+        !Prefs.granted(name) -> "请在这台设备的豆豆中开启「$title」"
+        !hasPermissions(ctx) -> "「$title」的系统授权尚未开启或已被收回，请在这台设备的豆豆中重新授权"
+        else -> null
+    }
 
     fun toJson(enabled: Boolean): JSONObject = JSONObject()
         .put("name", name)
@@ -76,6 +84,12 @@ object Capabilities {
     private val notifyPerm = if (Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.POST_NOTIFICATIONS) else emptyList()
 
     val all: List<Capability> = listOf(
+        Capability(
+            "phone_use", "手机操作",
+            "通过这台手机的无障碍服务观察和操作应用。先用 apps(query) 找应用包名，launch(package) 启动；snapshot 返回可操作节点 ref、bounds 和 frame，screenshot 返回图片。截图和节点坐标长边最多1440，坐标点击/滑动必须携带最近观察返回的 frame，不能用原始屏幕坐标。优先用 ref 点击/输入，界面变化后重新观察。type 替换输入框文字，submit=true 提交；scroll(direction=down/up/left/right) 表示内容滚动方向。swipe 以图片坐标 from/to 描述手指移动。操作回执只说明动作已执行，用下一次观察确认结果。",
+            """{"op":"apps|launch|snapshot|screenshot|click|long_click|type|scroll|swipe|back|home|recents|notifications|quick_settings","query":"应用名称，apps可选","package":"launch必填包名","ref":"节点引用","frame":"坐标操作必填，最近观察返回的frame","x":100,"y":200,"text":"输入文字","submit":false,"direction":"down","from":{"x":100,"y":800},"to":{"x":100,"y":300},"duration":350}""",
+            emptyList(), hint = "看屏幕、点击、输入和滑动；需要开启豆豆手机操作的无障碍授权",
+        ) { _, a -> PhoneUseService.execute(a) },
         Capability(
             "battery", "电量", "手机电量和是否在充电", "{}", emptyList(), hint = "豆豆能看手机还剩多少电",
         ) { ctx, _ ->

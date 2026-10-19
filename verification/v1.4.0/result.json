@@ -1,0 +1,62 @@
+{
+  "version": "1.4.0",
+  "cloudTests": {
+    "pass": 123,
+    "fail": 0
+  },
+  "androidUnitTests": {
+    "pass": 160,
+    "fail": 0
+  },
+  "artifacts": {
+    "doudou-1.4.0.dmg": {
+      "bytes": 10708624,
+      "sha256": "bcf7fadfe847280fd176907993bf3aba3bf4ee53c97b0f535da48ad5eb88eb11"
+    },
+    "doudou-1.4.0.apk": {
+      "bytes": 9442094,
+      "sha256": "7672f49288b5d8b372426ae134ed568d388b3748e66eb14eadbadbbedc40c611"
+    }
+  },
+  "android": {
+    "versionName": "1.4.0",
+    "versionCode": 21,
+    "signatureVerified": true,
+    "previousSigningCertificatePreserved": true,
+    "oppoReleaseUpgradePassed": true
+  },
+  "mac": {
+    "version": "1.4.0",
+    "build": "9",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "codeSignatureVerified": true,
+    "diskImageVerified": true,
+    "nativeUiTest": "real production attachment side chat; separate profile"
+  },
+  "localDeviceGateway": {
+    "device": "OPPO Android 15",
+    "pinduoduoSearch": true,
+    "taobaoSearch": true,
+    "chineseTextInput": true,
+    "imeSubmit": true,
+    "click": true,
+    "scrollAndSwipe": true,
+    "screenshot": true,
+    "staleFrameRejected": true,
+    "permissionOffAndRestore": true,
+    "foregroundRpcCalls": 12,
+    "foregroundRpcErrors": 0,
+    "screenLockStateReported": true
+  },
+  "productionPhone": "production-phone.json",
+  "productionAttachments": "production-attachments.json",
+  "productionPreservation": "production.json",
+  "privacy": {
+    "changedSourceTextScanned": true,
+    "publishedScreenshotsPixelsReviewed": true,
+    "credentialsAndProductionAddressesExcluded": true
+  }
+}

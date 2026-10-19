@@ -28,13 +28,13 @@ test("attachment size is the actual file size, ignoring any client-supplied size
   }
 });
 
-test("legacy attachment requests without size still accept attachment-only messages", () => {
+test("attachment-only messages use the file's authoritative size", () => {
   const root = fs.mkdtempSync(path.join(testRoot, "legacy-")), att = upload(root, "空文件.txt", Buffer.alloc(0));
   assert.deepEqual(validateMessage(root, "", [att]), { text: "", attachments: [{ ...att, size: 0 }] });
   assert.deepEqual(validateMessage(root, "  纯文本  "), { text: "纯文本", attachments: [] });
 });
 
-test("image, file and voice attachments retain kinds, names and sizes; images remain message blocks", () => {
+test("uploads retain metadata and enter the model as references; image bytes are read on demand", () => {
   const root = fs.mkdtempSync(path.join(testRoot, "kinds-"));
   const imageBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
   const atts = [
@@ -47,8 +47,12 @@ test("image, file and voice attachments retain kinds, names and sizes; images re
   assert.deepEqual(validateMessage(root, "", value.attachments), value, "HTTP/WS and harness validation can run twice");
   value.attachments[2].transcript = "本地转写";
   const content = userContent(root, "", value.attachments);
-  assert.match(content[0].text, /语音笔记，转写：本地转写/);
-  assert.deepEqual(content[1], { type: "image", source: { type: "base64", media_type: "image/png", data: imageBytes.toString("base64") } });
+  assert.equal(typeof content,"string");
+  assert.match(content, /语音笔记，转写：本地转写/);
+  assert.match(content, /图片，用 view_image 按需查看/);
+  for(const att of atts)assert.ok(content.includes(att.path));
+  assert.ok(!content.includes(imageBytes.toString("base64")));
+  assert.ok(!content.includes("文件内容"));
 });
 
 test("file lines include readable sizes and legacy records without size remain readable", () => {
@@ -56,8 +60,8 @@ test("file lines include readable sizes and legacy records without size remain r
   for (const [size, label] of [[0, "0 B"], [12 * 1024, "12 KB"], [1536, "1.5 KB"], [2 * 1024 * 1024, "2 MB"]]) {
     const att = upload(root, "参考.txt", Buffer.alloc(size));
     const { attachments } = validateMessage(root, "看文件", [att]);
-    assert.ok(userContent(root, "看文件", attachments)[0].text.includes(`（文件，${label}，需要时自己读）`));
-    assert.ok(userContent(root, "看文件", [att])[0].text.includes("（文件，需要时自己读）"));
+    assert.ok(userContent(root, "看文件", attachments).includes(`（文件，${label}，需要时自己读）`));
+    assert.ok(userContent(root, "看文件", [att]).includes("（文件，需要时自己读）"));
   }
   assert.equal(userContent(root, "旧纯文本"), "旧纯文本");
 });
