@@ -31,7 +31,7 @@ export function createTavilyConnector({ baseUrl = "https://api.tavily.com", fetc
         catch (e) { return { content: [{ type: "text", text: JSON.stringify(privateResult({ error: e.message }, keys, ctx)) }], isError: true }; }
       };
       return [
-        defineTool("search", "深入调研时搜索网页。日常搜索请用内置网页搜索。", {
+        defineTool("search", "搜索网页。日常查询用 basic，深入调研可用 advanced；额度由连接的 Tavily 账号承担。", {
           query: z.string().min(1).max(1000), depth: z.enum(["basic", "advanced"]).default("basic"),
           max_results: z.number().int().min(1).max(20).default(5), time_range: z.enum(["day", "week", "month", "year"]).optional(),
         }, wrap((values, { query, depth, max_results, time_range }) => request(values, "search", {
