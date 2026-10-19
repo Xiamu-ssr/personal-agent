@@ -25,6 +25,24 @@ struct ProviderModel: Identifiable, Equatable {
     }
 }
 
+struct ProviderPreset: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let protocolName: String
+    let baseURL: String
+    let hint: String
+    let models: [ProviderModel]
+    init?(_ row: [String: Any]) {
+        guard let id = row["id"] as? String, !id.isEmpty, let name = row["name"] as? String, !name.isEmpty,
+              let protocolName = row["protocol"] as? String, ["anthropic", "openai"].contains(protocolName),
+              let baseURL = row["baseUrl"] as? String, Api.serverURL(baseURL) != nil,
+              let hint = row["hint"] as? String, let raw = row["models"] as? [[String: Any]], !raw.isEmpty else { return nil }
+        let models = raw.compactMap(ProviderModel.init)
+        guard models.count == raw.count, models.count <= 20, Set(models.map(\.id)).count == models.count else { return nil }
+        self.id = id; self.name = name; self.protocolName = protocolName; self.baseURL = baseURL; self.hint = hint; self.models = models
+    }
+}
+
 /// Only public provider metadata enters settings state. API keys are never decoded here.
 struct ModelProvider: Identifiable, Equatable {
     let id: String
@@ -70,6 +88,10 @@ struct ProviderDraft: CustomStringConvertible, CustomDebugStringConvertible {
             protocolName=provider.protocolName; name = provider.name; baseURL = provider.baseURL ?? ""
             models = provider.models.map { ProviderModelDraft(modelID: $0.id, name: $0.name) }
         }
+    }
+    init(preset: ProviderPreset) {
+        name = preset.name; baseURL = preset.baseURL; protocolName = preset.protocolName
+        models = preset.models.map { ProviderModelDraft(modelID: $0.id, name: $0.name) }
     }
     var description: String { "ProviderDraft(fields: redacted, models: \(models.count))" }
     var debugDescription: String { description }
@@ -122,11 +144,24 @@ enum ProviderSecret {
 
 @MainActor @Observable final class ProviderFormModel: CustomStringConvertible, CustomDebugStringConvertible {
     let provider: ModelProvider?
+    let presets: [ProviderPreset]
+    var presetID: String
     var draft: ProviderDraft
     private(set) var working = false
     private(set) var deleting = false
     private(set) var error = ""
-    init(provider: ModelProvider? = nil) { self.provider = provider; draft = ProviderDraft(provider: provider) }
+    init(provider: ModelProvider? = nil, presets: [ProviderPreset] = []) {
+        self.provider = provider; self.presets = presets; presetID = ""
+        draft = ProviderDraft(provider: provider)
+        if provider == nil, let first = presets.first { presetID = first.id; draft = ProviderDraft(preset: first) }
+    }
+    func choosePreset(_ id: String) {
+        guard provider == nil, !working, id != presetID else { return }
+        presetID = id
+        // A key entered for one vendor must never silently move to another endpoint.
+        draft = presets.first(where: { $0.id == id }).map(ProviderDraft.init(preset:)) ?? ProviderDraft()
+        error = ""
+    }
     nonisolated var description: String { "ProviderFormModel(fields: redacted)" }
     nonisolated var debugDescription: String { description }
 
@@ -211,7 +246,7 @@ struct ModelSettingsPage: View {
                 }
             } else if store.loading { ActiveProgress().frame(maxWidth: .infinity).padding(30) }
             if !store.error.isEmpty { Note(text: store.error) }
-        })
+        }).task(id: ChatClient.shared.settingsVersion) { await store.load() }
     }
 }
 
@@ -219,9 +254,14 @@ struct ModelProviderFormPage: View {
     let providerID: String?
     @State private var form: ProviderFormModel
     @State private var showKey = false
+    @State private var showDetails = false
+    @State private var showModels = false
     init(providerID: String?) {
         self.providerID = providerID
-        _form = State(initialValue: ProviderFormModel(provider: AgentSettingsStore.shared.snapshot?.providers.first { $0.id == providerID }))
+        let snapshot = AgentSettingsStore.shared.snapshot
+        _form = State(initialValue: ProviderFormModel(provider: snapshot?.providers.first { $0.id == providerID }, presets: snapshot?.providerPresets ?? []))
+        _showDetails = State(initialValue: providerID != nil || snapshot?.providerPresets.isEmpty != false)
+        _showModels = State(initialValue: providerID != nil || snapshot?.providerPresets.isEmpty != false)
     }
     private func leave() {
         if Nav.shared.stacks[Nav.shared.tab]?.last == .modelProvider(providerID) { Nav.shared.pop() }
@@ -232,8 +272,15 @@ struct ModelProviderFormPage: View {
             if providerID != nil && form.provider == nil { Note(text: "这个服务已不存在，请返回模型列表") }
             else {
                 VStack(alignment: .leading, spacing: 18) {
-                    field("名称", placeholder: "例如：我的模型服务", value: $form.draft.name, marker: "provider-name")
-                    field("Base URL", placeholder: "https://example.test", value: $form.draft.baseURL, marker: "provider-url")
+                    if providerID == nil && !form.presets.isEmpty {
+                        Picker("供应商", selection: Binding(get: { form.presetID }, set: { form.choosePreset($0); showKey = false; showDetails = $0.isEmpty; showModels = $0.isEmpty })) {
+                            ForEach(form.presets) { Text($0.name).tag($0.id) }
+                            Text("自定义").tag("")
+                        }.verificationAction("provider-preset")
+                        if let preset = form.presets.first(where: { $0.id == form.presetID }) {
+                            Text(preset.hint).font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         Text("API Key").font(Theme.font(size: 13, weight: .medium))
                         HStack(spacing: 10) {
@@ -248,8 +295,21 @@ struct ModelProviderFormPage: View {
                         }.padding(.horizontal, 12).frame(height: 42).background(Theme.field, in: RoundedRectangle(cornerRadius: 12))
                         if form.provider != nil { Text("已保存 \(form.provider?.keyHint ?? "••••") · 留空表示不改").font(Theme.font(size: 12)).foregroundStyle(Theme.sub) }
                     }
-                    HStack { Text("协议").font(Theme.font(size: 13, weight: .medium)); Spacer(); Picker("协议",selection:$form.draft.protocolName) { Text("Anthropic").tag("anthropic"); Text("OpenAI").tag("openai") }.labelsHidden().frame(width:140) }.padding(.vertical, 5)
+                    VStack(alignment: .leading, spacing: 12) {
+                        fold("服务设置", expanded: $showDetails, marker: "provider-details")
+                        if showDetails {
+                        VStack(alignment: .leading, spacing: 14) {
+                            field("名称", placeholder: "例如：我的模型服务", value: $form.draft.name, marker: "provider-name")
+                            field("Base URL", placeholder: "https://example.test", value: $form.draft.baseURL, marker: "provider-url")
+                            HStack { Text("协议").font(Theme.font(size: 13, weight: .medium)); Spacer(); Picker("协议",selection:$form.draft.protocolName) { Text("Anthropic").tag("anthropic"); Text("OpenAI").tag("openai") }.labelsHidden().frame(width:140) }
+                        }.padding(.top, 12)
+                        }
+                    }
                 }
+                Text(form.draft.models.map(\.name).filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(Theme.font(size: 12)).foregroundStyle(Theme.sub).fixedSize(horizontal: false, vertical: true)
+                fold("模型（\(form.draft.models.count)）", expanded: $showModels, marker: "provider-models")
+                if showModels {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Text("模型").font(Theme.font(size: 14, weight: .semibold)); Spacer()
@@ -266,6 +326,7 @@ struct ModelProviderFormPage: View {
                     }
                     Text("可以添加 1–20 个模型；保存前会用第一个模型测试连接。")
                         .font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
+                }.padding(.top, 12)
                 }
                 if !form.error.isEmpty {
                     Text(form.error).font(Theme.font(size: 13)).foregroundStyle(Theme.ink).textSelection(.enabled)
@@ -287,6 +348,14 @@ struct ModelProviderFormPage: View {
         #if MAC_VERIFY
         .onAppear { ProviderFormVerification.current = form }
         #endif
+    }
+    private func fold(_ title: String, expanded: Binding<Bool>, marker: String) -> some View {
+        Button { expanded.wrappedValue.toggle() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right").font(Theme.font(size: 11)).foregroundStyle(Theme.sub)
+                Text(title).font(Theme.font(size: 14, weight: .medium)); Spacer()
+            }.padding(.vertical, 8).contentShape(Rectangle())
+        }.buttonStyle(.plain).verificationAction(marker)
     }
     private func field(_ title: String, placeholder: String, value: Binding<String>, marker: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {

@@ -9,6 +9,7 @@ import { GatewayClient } from '@openclaw/gateway-client';
 import { config, CODE } from './config.mjs';
 import { listProviders, providerRecord } from './providers.mjs';
 import { readAppSettings } from './app-settings.mjs';
+import { nativeModelDefinition } from './provider-presets.mjs';
 import { writePrivateJson } from './private-json.mjs';
 export const MAIN_SESSION = 'agent:main:main';
 export class OpenClawRuntime {
@@ -26,7 +27,7 @@ export class OpenClawRuntime {
    const p=providerRecord(this.root,publicRecord.id),baseUrl=p.builtin?this.env.MODEL_BASE_URL:p.baseUrl,apiKey=p.builtin?this.env.MODEL_API_KEY:p.apiKey;
    if(!baseUrl||!apiKey) { if(model.provider===p.id)throw new Error('当前模型服务尚未配置');continue; }
    providers[p.id]={baseUrl:p.protocol==='anthropic'?baseUrl.replace(/\/v1\/?$/,''):baseUrl,apiKey,api:p.protocol==='openai'?'openai-completions':'anthropic-messages',
-    models:p.models.map(m=>({id:m.id,name:m.name,reasoning:false,input:['text','image'],contextWindow:p.builtin?200000:128000,maxTokens:p.builtin?16384:8192}))};
+    models:p.models.map(m=>nativeModelDefinition(p,m))};
   }
   fs.mkdirSync(this.state,{recursive:true,mode:0o700});
   const prompt=fs.readFileSync(path.join(config.prompts,'system-prompt.md'),'utf8').split(/^---\s*$/m).at(-1)

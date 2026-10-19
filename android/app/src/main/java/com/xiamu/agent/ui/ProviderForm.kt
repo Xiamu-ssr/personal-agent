@@ -37,24 +37,36 @@ fun ProviderFormScreen(id: String?) {
     var shown by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf("") }
     val models=remember { mutableStateListOf(ProviderModel("","")) }
-    var loading by remember { mutableStateOf(editing) }
-    var ready by remember { mutableStateOf(!editing) }
+    var presets by remember { mutableStateOf<List<ProviderPreset>>(emptyList()) }
+    var presetId by remember { mutableStateOf("") }
+    var presetMenu by remember { mutableStateOf(false) }
+    var details by remember { mutableStateOf(editing) }
+    var expandedModels by remember { mutableStateOf(editing) }
+    var loading by remember { mutableStateOf(true) }
+    var ready by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
+    fun choosePreset(preset: ProviderPreset?) {
+        presetId=preset?.id.orEmpty(); name=preset?.name.orEmpty(); baseUrl=preset?.baseUrl.orEmpty(); protocol=preset?.protocol ?: "openai"
+        models.clear(); models.addAll(preset?.models ?: listOf(ProviderModel("","")))
+        apiKey=""; shown=false; error=""; details=preset==null; expandedModels=preset==null
+    }
     LaunchedEffect(id,revision) {
-        if(id!=null) {
-            loading=true
-            try {
-                val provider=Api.settings().providers.firstOrNull { it.id==id && !it.builtin } ?: kotlin.error("找不到这个模型服务")
+        loading=true
+        try {
+            val settings=Api.settings(); presets=settings.providerPresets
+            if(id!=null) {
+                val provider=settings.providers.firstOrNull { it.id==id && !it.builtin } ?: kotlin.error("找不到这个模型服务")
                 name=provider.name; protocol=provider.protocol; baseUrl=provider.baseUrl.orEmpty(); hint=provider.maskedKey
-                models.clear(); models.addAll(provider.models); ready=true; error=""
-            } catch(e: CancellationException) { throw e }
-            catch(e: Exception) { error=e.message ?: "加载失败" }
-            finally { loading=false }
-        }
+                models.clear(); models.addAll(provider.models)
+            } else choosePreset(presets.firstOrNull())
+            ready=true; error=""
+        } catch(e: CancellationException) { throw e }
+        catch(e: Exception) { error=e.message ?: "加载失败" }
+        finally { loading=false }
     }
     DisposableEffect(Unit) { onDispose { apiKey="" } }
     val progress=if(deleting) "正在删除…" else "正在测试并保存…"
@@ -64,8 +76,20 @@ fun ProviderFormScreen(id: String?) {
             LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 if(loading) item { Loading() }
                 if(ready) {
-                    item { ProviderField("名称",name,{name=it},"例如：我的模型服务",!saving) }
-                    item { ProviderField("Base URL",baseUrl,{baseUrl=it},"https://example.test",!saving,keyboard=KeyboardType.Uri) }
+                    if(!editing && presets.isNotEmpty()) item {
+                        Box {
+                            TextButton(onClick={presetMenu=true},enabled=!saving,modifier=Modifier.fillMaxWidth().card().testTag("provider-preset")) {
+                                Text("供应商",style=Type.body(13),color=Pal.Muted)
+                                Spacer(Modifier.weight(1f)); Text(presets.firstOrNull { it.id==presetId }?.name ?: "自定义",style=Type.title(15),color=Pal.Ink)
+                                Icon(Icons.Outlined.ExpandMore,null,tint=Pal.Muted)
+                            }
+                            DropdownMenu(expanded=presetMenu,onDismissRequest={presetMenu=false},modifier=Modifier.heightIn(max=360.dp)) {
+                                presets.forEach { preset -> DropdownMenuItem(text={Text(preset.name)},onClick={choosePreset(preset);presetMenu=false}) }
+                                DropdownMenuItem(text={Text("自定义")},onClick={choosePreset(null);presetMenu=false})
+                            }
+                        }
+                        presets.firstOrNull { it.id==presetId }?.let { Text(it.hint,style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(top=8.dp,start=4.dp)) }
+                    }
                     item {
                         ProviderField("API Key",apiKey,{apiKey=it},if(editing) "留空保持不变" else "请输入 API Key",!saving,
                             keyboard=KeyboardType.Password,password=!shown,trailing={
@@ -73,9 +97,23 @@ fun ProviderFormScreen(id: String?) {
                             })
                         if(editing && hint.isNotBlank()) Text("当前 Key：$hint · 留空保持不变",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(top=6.dp,start=4.dp))
                     }
+                    item { TextButton(onClick={details=!details},enabled=!saving,modifier=Modifier.testTag("provider-details")) {
+                        Text("服务设置",color=Pal.Ink); Icon(if(details) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,null,tint=Pal.Muted)
+                    } }
+                    if(details) {
+                    item { ProviderField("名称",name,{name=it},"例如：我的模型服务",!saving) }
+                    item { ProviderField("Base URL",baseUrl,{baseUrl=it},"https://example.test",!saving,keyboard=KeyboardType.Uri) }
                     item { Row(Modifier.fillMaxWidth().card().padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
                         Text("协议",style=Type.body(13),color=Pal.Muted,modifier=Modifier.weight(1f)); TextButton(onClick={protocol=if(protocol=="anthropic") "openai" else "anthropic"}) { Text(if(protocol=="anthropic") "Anthropic" else "OpenAI",color=Pal.Ink) }
                     } }
+                    }
+                    item {
+                        Text(models.map { it.name }.filter { it.isNotBlank() }.joinToString(" · "),style=Type.body(12),color=Pal.Muted)
+                        TextButton(onClick={expandedModels=!expandedModels},enabled=!saving,modifier=Modifier.testTag("provider-models")) {
+                            Text("模型（${models.size}）",color=Pal.Ink); Icon(if(expandedModels) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,null,tint=Pal.Muted)
+                        }
+                    }
+                    if(expandedModels) {
                     models.forEachIndexed { index,model -> item(key="model:$index") {
                         Column(Modifier.fillMaxWidth().card().padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
@@ -89,6 +127,8 @@ fun ProviderFormScreen(id: String?) {
                         }
                     } }
                     item { TextButton(enabled=!saving && models.size<20,onClick={models.add(ProviderModel("",""))}) { Icon(Icons.Outlined.Add,null,tint=Pal.Ink,modifier=Modifier.size(18.dp)); Text("添加模型",color=Pal.Ink) } }
+                    item { Text("保存前会用第一个模型测试连接。",style=Type.body(12),color=Pal.Muted) }
+                    }
                 }
             }
             Column(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=10.dp)) {

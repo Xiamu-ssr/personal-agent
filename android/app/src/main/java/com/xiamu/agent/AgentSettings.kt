@@ -27,6 +27,17 @@ data class ProviderModel(val id: String,val name: String,val note: String = "") 
     }
 }
 
+data class ProviderPreset(val id: String,val name: String,val protocol: String,val baseUrl: String,val hint: String,val models: List<ProviderModel>) {
+    fun draft() = ProviderDraft(name,baseUrl,models,protocol=protocol)
+    companion object {
+        fun from(j: JSONObject) = ProviderPreset(j.getString("id"),j.getString("name"),j.getString("protocol"),
+            j.getString("baseUrl"),j.getString("hint"),j.getJSONArray("models").objects().map(ProviderModel::from)).also {
+            require(it.id.isNotBlank() && it.name.isNotBlank() && it.protocol in listOf("anthropic","openai") && normalizedBaseUrl(it.baseUrl)!=null) { "供应商预设不完整" }
+            require(it.models.size in 1..20 && it.models.map { m -> m.id }.distinct().size==it.models.size) { "预设模型不完整" }
+        }
+    }
+}
+
 data class ModelProvider(val id: String,val name: String,val builtin: Boolean,val protocol: String,
     val models: List<ProviderModel>,val baseUrl: String? = null,val keyHint: String? = null) {
     val maskedKey: String get() = keyHint?.takeIf { it.isNotBlank() }?.let { if(it.all { c -> c=='•' }) "••••" else "••••${it.takeLast(4)}" }.orEmpty()
@@ -44,11 +55,13 @@ data class ModelProvider(val id: String,val name: String,val builtin: Boolean,va
     }
 }
 
-data class AgentSettings(val model: ModelSelection, val providers: List<ModelProvider>) {
+data class AgentSettings(val model: ModelSelection, val providers: List<ModelProvider>,val providerPresets: List<ProviderPreset> = emptyList()) {
     val modelLabel: String get() = providers.firstOrNull { it.id==model.provider }?.models?.firstOrNull { it.id==model.id }?.name.orEmpty()
     companion object {
-        fun from(j: JSONObject) = AgentSettings(ModelSelection.from(j.getJSONObject("model")),j.getJSONArray("providers").objects().map(ModelProvider::from)).also {
+        fun from(j: JSONObject) = AgentSettings(ModelSelection.from(j.getJSONObject("model")),j.getJSONArray("providers").objects().map(ModelProvider::from),
+            j.optJSONArray("providerPresets")?.objects()?.map(ProviderPreset::from).orEmpty()).also {
             require(it.providers.map { p -> p.id }.distinct().size==it.providers.size) { "模型服务 ID 重复" }
+            require(it.providerPresets.map { p -> p.id }.distinct().size==it.providerPresets.size) { "供应商预设 ID 重复" }
             require(j.getString("kernel")=="openclaw" && it.providers.any { p -> p.id==it.model.provider && p.models.any { m -> m.id==it.model.id } }) { "请升级云端至豆豆 1.0" }
         }
     }

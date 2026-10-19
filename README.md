@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.0.0"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.1.0"><img src="https://img.shields.io/badge/Release-v1.1.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.1.0"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=101612" alt="Android · macOS · Cloud">
   <a href="https://github.com/openclaw/openclaw"><img src="https://img.shields.io/badge/Built%20with-OpenClaw-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with OpenClaw"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=101612" alt="MIT License"></a>
@@ -27,12 +27,12 @@
 
 ## 开始使用
 
-**当前版本：[v1.0.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.0.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
+**当前版本：[v1.1.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.1.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
-| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.0.0/doudou-1.0.0.apk) | Android 9 或更新版本 |
-| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.0.0/doudou-1.0.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
+| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.1.0/doudou-1.1.0.apk) | Android 9 或更新版本 |
+| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.1.0/doudou-1.1.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
 | 云端 | [部署指南](docs/deployment.md) | Linux、Node.js 24.16+ 或 26.1+、systemd、Nginx、HTTPS |
 
 先[部署云端](#部署)，生成一次性配对码，再在 App 填入自己的服务器地址。第一次聊天，豆豆会问怎么称呼你、自己叫什么，再推荐需要连接的应用和本机能力。
@@ -202,7 +202,9 @@ sudo -u agent /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node /opt/personal
 
 App 填写自己的地址，例如 `https://agent.example.com/agent`，以及配对码。配对码 24 小时有效、用后作废；另一台设备重新生成。配对后发一条消息，确认模型真正回复，再按需连接应用和本机能力。
 
-模型在 App 设置里选择，设备归属在各端设置。内置 ZenMux 服务可选 Haiku 5.5（默认）、Opus 5.5、GLM 5.3 Flash / FlashX、MiMo-V2.6-Pro，也可添加自己的 Anthropic 或 OpenAI 兼容服务及模型 ID。聊天、动态和摘要沿用当前选择；切换正在工作的服务会等到合适的空闲边界。模型 ID、上下文配置和维护命令见[完整部署指南](docs/deployment.md)。
+模型在 App 设置里选择。添加服务时选供应商、填 Key，即可使用预填的接口和模型；内置硅基流动、DeepSeek、智谱、百炼、Kimi、MiniMax、豆包、ZenMux、OpenAI、Anthropic、Gemini、OpenRouter 共 12 家预设。支持修改地址和模型 ID，也可完全自定义。各端共享账号清单与当前模型，切换不新建主 Session。见[模型服务说明](docs/model-providers.md)。
+
+<p align="center"><img src="docs/images/v1.1.0/model-provider-presets.png" alt="1.1 Mac 供应商预设：硅基流动接口与 10 个常用模型自动填好；本地假服务界面，未录入真实 Key" width="900"></p>
 
 ## Spec
 
@@ -222,7 +224,7 @@ node spec/build.mjs
 
 ## 验证与已知限制
 
-1.0 的验收记录见[发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.0.0)。检查包含持久化迁移、原生 OpenClaw 工具循环、主会话连续性和重启续接、两端协议与签名构建。
+1.1 的验收记录见[发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.1.0)。检查包含供应商预设、密钥隔离、真实模型与原生工具循环、主会话重启续接、两端签名构建。
 
 - 本版 Android 已构建签名安装包，尚未进行真机验收；健康数据和手机权限仍需要真机验证。
 - 手机和电脑的应用操作需要实际设备在线、授权；模型、搜索和第三方服务的费用另计。
@@ -246,8 +248,8 @@ cd android
 ```bash
 # 首次构建创建自己的本地签名身份，可能弹出钥匙串授权
 bash mac/tools/make-signing-identity.sh
-VERSION=1.0.0 bash mac/build.sh
-# 产物：mac/build/doudou-0.8.3.dmg；Apple 芯片 + Intel 通用
+VERSION=1.1.0 bash mac/build.sh
+# 产物：mac/build/doudou-1.1.0.dmg；Apple 芯片 + Intel 通用
 ```
 
 Mac 安装包采用本地签名，未做 Apple 公证；首次安装的打开方式见[发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)。

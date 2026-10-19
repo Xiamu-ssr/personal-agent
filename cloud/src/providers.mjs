@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { writePrivateJson } from "./private-json.mjs";
 import { messagesRequest } from "./messages-api.mjs";
+import { presetModel } from "./provider-presets.mjs";
 
 export const HAIKU_MODEL = "anthropic/claude-haiku-5.5";
 export const MODELS = [
@@ -63,7 +64,8 @@ function mask(value, key) {
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mask(v, key)]));
 }
 export function publicProvider(p) {
-  return { id: p.id, builtin: false, protocol: p.protocol, ...mask({ name: p.name, baseUrl: p.baseUrl, models: p.models }, p.apiKey), keyHint: p.apiKey.length > 4 ? p.apiKey.slice(-4) : "••••" };
+  const models = p.models.map(m => ({ ...m, ...(presetModel(p, m.id)?.note && { note: presetModel(p, m.id).note }) }));
+  return { id: p.id, builtin: false, protocol: p.protocol, ...mask({ name: p.name, baseUrl: p.baseUrl, models }, p.apiKey), keyHint: p.apiKey.length > 4 ? p.apiKey.slice(-4) : "••••" };
 }
 export function listProviders(root) { return [structuredClone(ZENMUX), ...readProviders(root).map(publicProvider)]; }
 export function providerRecord(root, id) {
@@ -80,12 +82,13 @@ export async function testProvider(input, { env = process.env, request = message
   try {
     response = await request((input.protocol === "openai" ? url+"/chat/completions" : url.replace(/\/v1$/, "")+"/v1/messages"), { method: "POST", signal: AbortSignal.timeout(timeout),
       headers: { "content-type": "application/json", "anthropic-version": "2023-06-01", "x-api-key": key, authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, max_tokens: 16, messages: [{ role: "user", content: "Hi" }] }),
+      body: JSON.stringify({ model, [input.protocol === 'openai' && new URL(url).hostname === 'api.openai.com' ? 'max_completion_tokens' : 'max_tokens']: 256, messages: [{ role: "user", content: "Reply OK." }] }),
     }, env);
   } catch { fail("模型服务连接失败或超时"); }
   let body; try { body = await response.json(); } catch {}
   if (!response.ok) {
-    const message = typeof body?.error?.message === "string" ? redact(body.error.message.replaceAll(key, "••••")).replace(/\s+/g, " ").slice(0, 200) : "";
+    const raw = body?.error?.message ?? body?.message;
+    const message = typeof raw === "string" ? redact(raw.replaceAll(key, "••••")).replace(/\s+/g, " ").slice(0, 200) : "";
     fail(`HTTP ${response.status}` + (message ? "：" + message : ""));
   }
   if (!(input.protocol === "openai" ? Array.isArray(body?.choices) : Array.isArray(body?.content))) fail(`HTTP ${response.status}：模型服务返回格式不正确`);

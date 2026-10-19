@@ -1,0 +1,102 @@
+{
+  "version": "1.1.0",
+  "date": "2026-10-19",
+  "kernel": "openclaw@2026.10.4",
+  "protocol": "1",
+  "catalog": {
+    "providers": 12,
+    "modelPresets": 41,
+    "siliconFlowModels": 10,
+    "singleCloudCatalogForBothApps": true,
+    "customModelsSupported": true
+  },
+  "automated": {
+    "cloudTests": {
+      "passed": 109,
+      "failed": 0
+    },
+    "androidDebugTests": {
+      "passed": 159,
+      "failed": 0
+    },
+    "androidReleaseTests": {
+      "passed": 159,
+      "failed": 0
+    },
+    "macProviderAssertions": 71,
+    "macNativeInterfaceChecks": 18
+  },
+  "realModelChecks": {
+    "siliconFlowCatalogAvailableModels": 98,
+    "capabilities": [
+      {
+        "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+        "vision": true,
+        "replyPresent": true,
+        "toolRoundTrip": true
+      },
+      {
+        "model": "zai-org/GLM-5.3-Flash",
+        "vision": true,
+        "replyPresent": true,
+        "toolRoundTrip": true
+      },
+      {
+        "model": "Qwen/Qwen3.6-35B-A3B",
+        "vision": true,
+        "replyPresent": true
+      },
+      {
+        "model": "Qwen/Qwen3.5-9B",
+        "vision": true,
+        "replyPresent": true
+      },
+      {
+        "model": "moonshotai/Kimi-K2.7-Code",
+        "vision": true,
+        "replyPresent": true
+      },
+      {
+        "model": "zai-org/GLM-5.3",
+        "vision": false,
+        "error": "HTTP 400: {\"code\":20041,\"message\":\"The model is not a VLM (Vision Language Model). Please use text-only prompts.\",\"data\":null}"
+      }
+    ],
+    "isolatedNativeOpenClaw": {
+      "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "kernel": "openclaw@2026.10.4",
+      "realModel": true,
+      "nativeProductToolRoundTrip": true,
+      "restartContinuation": true,
+      "isolatedUserData": true
+    },
+    "production": {
+      "deepSeekNativeToolRoundTrip": true,
+      "sameSessionSwitchToGlmFlash": true,
+      "deepSeekRestartContinuation": true,
+      "selectedModel": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "credentialsPrivate": true
+    }
+  },
+  "persistentData": {
+    "backupBeforeDeployment": true,
+    "v1MigrationNotRepeated": true,
+    "nativeSessionsRetained": true,
+    "nativeMemoryItems": 52
+  },
+  "artifacts": {
+    "doudou-1.1.0.apk": {
+      "bytes": 9407534,
+      "sha256": "1392fd515a700ea0f37eac253dc48f54a51e13f19304ad36ef6a6f97889a52c0"
+    },
+    "doudou-1.1.0.dmg": {
+      "bytes": 10574202,
+      "sha256": "8f766abbbfa6d2ca6a10d3b01ffd54f5ce9de44ac5c5218f5be9c5f78ea775b9"
+    }
+  },
+  "limits": [
+    "Android physical-device acceptance was not performed.",
+    "Provider accounts other than SiliconFlow were not tested with real credentials.",
+    "Mac package uses local signing and is not notarized."
+  ]
+}

@@ -27,6 +27,7 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         guard let view = VerificationActionAnchor.views.object(forKey:name as NSString), view.window === window else { throw ProviderReviewFailure(description:"missing native marker: " + name) }; return view
     }
     @MainActor static func press(_ name:String) async throws {
+        try await until("native action: " + name) { VerificationActionAnchor.views.object(forKey:name as NSString)?.window === window }
         let view = try marker(name); view.scrollToVisible(view.bounds); try await pause(80)
         let point = view.convert(NSPoint(x:view.bounds.midX,y:view.bounds.midY),to:nil)
         for type in [NSEvent.EventType.leftMouseDown,.leftMouseUp] {
@@ -35,6 +36,7 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         }; try await pause(180)
     }
     @MainActor static func input(_ name:String, _ text:String) async throws {
+        try await until("native field: " + name) { VerificationActionAnchor.views.object(forKey:name as NSString)?.window === window }
         let view = try marker(name), rect = view.convert(view.bounds,to:window.contentView!)
         let candidates = collect(window.contentView!,type:NSTextField.self).filter { field in
             let f = field.convert(field.bounds,to:window.contentView!)
@@ -96,6 +98,11 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         try await press("provider-add")
         try await until("new provider form") { ProviderFormVerification.current?.provider == nil }
         let adding = try form()
+        try check(adding.presets.count == 12 && adding.presetID == "siliconflow" && adding.draft.protocolName == "openai", "new service starts with the cloud-supplied SiliconFlow preset")
+        try check(adding.draft.models.count == 10 && adding.draft.models[0].modelID == "deepseek-ai/DeepSeek-V4.1-Flash", "preset supplies model IDs without manual entry")
+        try await shot("30-provider-presets")
+        adding.choosePreset(""); try await pause()
+        try await press("provider-details"); try await press("provider-models")
         try await input("provider-name","我的模型服务")
         try await input("provider-url","https://example.test/")
         try await input("provider-key","sk-test-0000abcd")

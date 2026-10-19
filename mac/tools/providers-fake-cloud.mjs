@@ -5,6 +5,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
+import { listProviderPresets } from '../../cloud/src/provider-presets.mjs';
 import { fileURLToPath } from 'node:url';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const { WebSocketServer } = await import(path.join(repo, 'cloud/node_modules/ws/wrapper.mjs'));
@@ -18,8 +19,8 @@ const builtin = { id:'zenmux', name:'ZenMux', builtin:true, protocol:'anthropic'
 let providers = [builtin, { id:'example', name:'示例模型服务', builtin:false, protocol:'anthropic', baseUrl:'https://example.test', keyHint:'abcd', models:[{id:'claude-custom-demo',name:'示例 Claude',note:'适合日常聊天与资料整理'}] }];
 let model = {provider:'zenmux',id:builtin.models[0].id};
 const events = [], requests = [];
-const settings = () => ({model,kernel:'openclaw',providers});
-const state = () => ({version:'1.0.0',busy:false,chatEmpty:false,avatar:{state:'idle'},activities:[],devices:[]});
+const settings = () => ({model,kernel:'openclaw',providers,providerPresets:listProviderPresets()});
+const state = () => ({version:'1.1.0',busy:false,chatEmpty:false,avatar:{state:'idle'},activities:[],devices:[]});
 const history = [{id:'hello-demo',role:'assistant',source:'say',text:'你好，模型服务可以在设置里添加。',ts:Date.now()}];
 const server = http.createServer(async (req, res) => {
   const p = new URL(req.url, 'http://127.0.0.1').pathname;
@@ -48,7 +49,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'PATCH' && (!old || old.builtin)) return send(404,{error:'没有这个服务'});
     await delay(900);
     if (body.name?.includes('失败') || body.models?.[0]?.id === 'bad-model') return send(400,{error:'HTTP 401：演示服务拒绝了 API Key，请检查后重试。' + (body.apiKey || '')});
-    const provider = {...old,id:old?.id || crypto.randomUUID(),builtin:false,protocol:'anthropic',name:body.name || old?.name,baseUrl:body.baseUrl || old?.baseUrl,keyHint:body.apiKey ? body.apiKey.slice(-4) : old?.keyHint,models:body.models || old?.models};
+    const provider = {...old,id:old?.id || crypto.randomUUID(),builtin:false,protocol:body.protocol || old?.protocol || 'openai',name:body.name || old?.name,baseUrl:body.baseUrl || old?.baseUrl,keyHint:body.apiKey ? body.apiKey.slice(-4) : old?.keyHint,models:body.models || old?.models};
     providers = old ? providers.map(v => v.id === old.id ? provider : v) : [...providers,provider]; changed();
     return send(old ? 200 : 201,{provider});
   }

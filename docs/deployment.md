@@ -1,4 +1,4 @@
-# 部署豆豆 1.0
+# 部署豆豆 1.1
 
 1.0 使用 OpenClaw 2026.10.4，一个 Agent、同一个持续压缩的主 Session。Android、Mac 和 cloud 必须一起升级；旧协议返回 426。
 
@@ -15,7 +15,7 @@ MODEL_API_KEY=replace-with-your-key
 AGENT_TZ=Asia/Shanghai
 ```
 
-内置 ZenMux 使用 Anthropic Messages；App 可添加 Anthropic 或 OpenAI Chat Completions 兼容服务。Anthropic 填 API 根地址，OpenAI 一般填含 `/v1` 的地址。实际模型选择保存在 `system/app-settings.json`，服务资料及密钥在 `system/providers.json`。配置更新后，下轮请求使用新模型；不新建主会话。
+内置 ZenMux 使用 Anthropic Messages；App 的「模型 → 添加模型服务」提供 12 家供应商预设，选择供应商后填写 API Key，接口与常用模型自动填入。也可添加自定义 Anthropic 或 OpenAI Chat Completions 兼容服务。Anthropic 填 API 根地址，OpenAI 一般填含 `/v1` 的地址。实际模型选择保存在 `system/app-settings.json`，服务资料及密钥在 `system/providers.json`。配置更新后，下轮请求使用新模型；不新建主会话。
 
 ## 安装
 
@@ -35,6 +35,10 @@ sudo -u agent /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node \
 ```
 
 把地址 `https://agent.example.com/agent` 和一次性配对码填入 App。健康检查的 `ready:true` 表示内核可接收请求；还应发送一条消息确认实际模型和工具执行。
+
+## 从 1.0 升级
+
+先停服备份整个 `/srv/agent` 与环境配置，再替换代码、更新依赖并重启。1.1 不重跑迁移，也不清空原生 Session、记忆、Goal 或连接器。App 更新后即可使用供应商预设，原有配对继续使用。
 
 ## 从 0.8 升级
 

@@ -24,6 +24,20 @@ import AppKit
         check(snapshot.providers.count == 2 && snapshot.providers[1].models[0].note.isEmpty, "providers parse optional model description")
         check(snapshot.providers[1].keyHint == "••••abcd" && snapshot.providers[0].keyHint == nil && snapshot.providers[0].baseURL == nil, "public key hint and builtin metadata")
         check(snapshot.label(.model) == "Claude 演示", "settings labels resolve structured selection")
+        let presetRows: [[String: Any]] = [
+            ["id":"siliconflow", "name":"硅基流动", "protocol":"openai", "baseUrl":"https://api.siliconflow.cn/v1", "hint":"常用模型", "models":[["id":"deepseek-ai/DeepSeek-V4.1-Flash", "name":"DeepSeek V4.1 Flash", "note":"图片 · 对话 · 工具"]]],
+            ["id":"anthropic", "name":"Anthropic", "protocol":"anthropic", "baseUrl":"https://api.anthropic.com", "hint":"官方 API", "models":[["id":"claude-haiku-5-5", "name":"Claude Haiku 5.5"]]],
+        ]
+        var catalog = settings(); catalog["providerPresets"] = presetRows
+        let presets = try AgentSettingsSnapshot.parse(catalog).providerPresets
+        check(presets.count == 2 && presets[0].models[0].note.contains("图片"), "shared provider catalog parses")
+        let prefilled = ProviderFormModel(presets: presets)
+        check(prefilled.draft.name == "硅基流动" && prefilled.draft.protocolName == "openai" && prefilled.draft.models[0].modelID == "deepseek-ai/DeepSeek-V4.1-Flash", "new accounts prefill endpoint protocol and model IDs")
+        prefilled.draft.apiKey = "fixture-one-vendor-key"
+        prefilled.choosePreset("anthropic")
+        check(prefilled.draft.apiKey.isEmpty && prefilled.draft.baseURL == "https://api.anthropic.com" && prefilled.draft.protocolName == "anthropic", "changing vendor clears the other vendor credential")
+        prefilled.choosePreset("")
+        check(prefilled.draft.name.isEmpty && prefilled.draft.models.count == 1, "custom service remains editable")
         check(parses(settings(["provider":"example", "id":"claude-demo"])), "same model ID may exist in different providers")
         var invalid = settings(); invalid["model"] = "claude-demo"
         check(!parses(invalid), "old flat model format is rejected")

@@ -32,11 +32,15 @@ enum AgentSetting: String, Hashable {
 struct AgentSettingsSnapshot {
     let model: ModelSelection
     let providers: [ModelProvider]
+    let providerPresets: [ProviderPreset]
     static func parse(_ row: [String: Any]) throws -> AgentSettingsSnapshot {
         guard row["kernel"] as? String == "openclaw", let model = (row["model"] as? [String:Any]).flatMap(ModelSelection.init), let raw = row["providers"] as? [[String:Any]] else { throw ApiError(code:0,message:"请升级云端至豆豆 1.0") }
         let providers = raw.compactMap(ModelProvider.init)
         guard providers.count == raw.count, Set(providers.map(\.id)).count == providers.count, providers.contains(where: { $0.id == model.provider && $0.models.contains(where: { $0.id == model.id }) }) else { throw ApiError(code:0,message:"模型设置不完整") }
-        return AgentSettingsSnapshot(model:model, providers:providers)
+        let rawPresets = row["providerPresets"] as? [[String: Any]] ?? []
+        let presets = rawPresets.compactMap(ProviderPreset.init)
+        guard presets.count == rawPresets.count, Set(presets.map(\.id)).count == presets.count else { throw ApiError(code: 0, message: "供应商预设不完整") }
+        return AgentSettingsSnapshot(model:model, providers:providers, providerPresets:presets)
     }
     func label(_ setting: AgentSetting) -> String {
         if setting == .model { return providers.first { $0.id == model.provider }?.models.first { $0.id == model.id }?.name ?? "加载中…" }

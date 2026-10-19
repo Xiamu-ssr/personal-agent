@@ -9,6 +9,18 @@ internal val providerSettingsJson="""{"model":{"provider":"custom-demo","id":"sh
 class ProviderSettingsTest {
     private val key="sk-test-0000abcd"
     private fun draft(name: String="演示服务",url: String="https://example.test",models: List<ProviderModel> = listOf(ProviderModel("demo-model","演示模型")),secret: String=key) = ProviderDraft(name,url,models,ProviderKey(secret))
+    @Test fun providerCatalogPrefillsTheProtocolEndpointAndModelsWithoutAKey() {
+        val preset=JSONObject("""{"id":"siliconflow","name":"硅基流动","protocol":"openai","baseUrl":"https://api.siliconflow.cn/v1","hint":"常用模型","models":[{"id":"deepseek-ai/DeepSeek-V4.1-Flash","name":"DeepSeek V4.1 Flash","note":"图片 · 对话 · 工具"}]}""")
+        val settings=AgentSettings.from(JSONObject(providerSettingsJson).put("providerPresets",org.json.JSONArray().put(preset)))
+        val draft=settings.providerPresets.single().draft()
+        assertEquals("openai",draft.protocol);assertEquals("https://api.siliconflow.cn/v1",draft.baseUrl)
+        assertEquals("deepseek-ai/DeepSeek-V4.1-Flash",draft.models.single().id)
+        assertEquals("",draft.apiKey.value());assertNotNull(draft.validate(false))
+        val body=draft.copy(apiKey=ProviderKey(key)).json(false)
+        assertEquals(setOf("id","name"),body.getJSONArray("models").getJSONObject(0).keySet())
+        assertEquals("图片 · 对话 · 工具",settings.providerPresets.single().models.single().note)
+        assertThrows(IllegalArgumentException::class.java) { AgentSettings.from(JSONObject(providerSettingsJson).put("providerPresets",org.json.JSONArray().put(preset).put(preset))) }
+    }
     @Test fun providersAndScopedSelectionParse() {
         val settings=AgentSettings.from(JSONObject(providerSettingsJson))
         assertEquals(ModelSelection("custom-demo","shared-model"),settings.model)

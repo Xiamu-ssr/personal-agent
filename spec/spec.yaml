@@ -158,10 +158,10 @@ domains:
       - 1
       - 28
       - 12
-    role: 个人使用 ZenMux；可通过 OpenClaw 切换模型服务。
+    role: 按供应商选择模型；各端共享当前选择。
     chips: []
     compact: true
-    doc: '- 模型供应与产品设计分开，未来可直接接 DeepSeek API。'
+    doc: '- 内置供应商地址与常用模型，填写 Key 后测试接入；支持自定义。'
   - id: conn
     name: 连接器
     icon: 🧩
