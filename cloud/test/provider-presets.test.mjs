@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { listProviderPresets, nativeModelDefinition } from '../src/provider-presets.mjs';
+import { COMPACT_AT_TOKENS, listProviderPresets, nativeModelDefinition } from '../src/provider-presets.mjs';
 import { Providers, readProviders, testProvider } from '../src/providers.mjs';
 import { getAppSettings, putAppSettings } from '../src/app-settings.mjs';
 import { ConnectorManager } from '../src/connectors.mjs';
@@ -31,6 +31,17 @@ test('the shared catalog has usable, unique provider templates and distinguishes
   }
   const gemini = presets.find(p => p.id === 'gemini');
   assert.equal(nativeModelDefinition(gemini, gemini.models[0]).compat.requiresReasoningContentOnAssistantMessages, false);
+});
+
+test('the 272K operating policy preserves native model windows and fits smaller models', () => {
+  const silicon = listProviderPresets().find(p => p.id === 'siliconflow');
+  const model = nativeModelDefinition(silicon, silicon.models[0]);
+  assert.equal(COMPACT_AT_TOKENS, 272000);
+  assert.equal(model.contextWindow, 1048576);
+  assert.equal(model.contextTokens, 292000);
+  const small = nativeModelDefinition({ protocol: 'openai', baseUrl: 'https://models.example/v1' }, { id: 'small', name: 'Small' });
+  assert.equal(small.contextWindow, 131072);
+  assert.equal(small.contextTokens, small.contextWindow);
 });
 
 test('templates become accounts only after probing, preserve custom models and never return credentials', async () => {

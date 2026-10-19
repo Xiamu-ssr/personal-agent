@@ -1,0 +1,69 @@
+{
+  "version": "1.3.2",
+  "unitTests": {
+    "passed": 121,
+    "failed": 0
+  },
+  "syntaxChecks": true,
+  "specBuild": true,
+  "nativeKernel": {
+    "ok": true,
+    "kernel": "openclaw",
+    "version": "2026.10.4",
+    "nativeMemoryRecall": true,
+    "nativeToolRoundTrip": true,
+    "sameMainSession": true,
+    "restartContinuation": true,
+    "nativeStop": true,
+    "modelRequests": 5
+  },
+  "nativeContextPolicy": {
+    "ok": true,
+    "kernel": "openclaw",
+    "version": "2026.10.4",
+    "nativeModelWindow": 1048576,
+    "activeContextBudget": 292000,
+    "compactAtTokens": 272000,
+    "syntheticUsage": true,
+    "belowThresholdInputTokens": 250000,
+    "aboveThresholdInputTokens": 273000,
+    "belowThresholdNoCompaction": true,
+    "nativeCompaction": true,
+    "persistedCompactions": 1,
+    "continuityAfterCompaction": true,
+    "sameSessionId": true,
+    "sessionResetDisabled": true,
+    "midTurnPrecheck": true,
+    "memoryFlushes": 0,
+    "modelRequests": 9
+  },
+  "production": {
+    "ok": true,
+    "version": "1.3.2",
+    "ready": true,
+    "protocol": "2",
+    "selectedContextWindow": 1048576,
+    "activeContextBudget": 292000,
+    "nativeCompactionReserve": 20000,
+    "compactAtTokens": 272000,
+    "allBudgetsValid": true,
+    "persistentConfigurationAndMemoryPreserved": true,
+    "mainSessionPreserved": true,
+    "sessionResetDisabled": true,
+    "memoryFlushEnabled": true,
+    "midTurnPrecheckEnabled": true,
+    "offlineBackupCreated": true,
+    "specInstalledAndCompared": true
+  },
+  "deploymentVerification": {
+    "initialAttemptRolledBack": true,
+    "issue": "Verifier expected numeric protocol 2; health returns string 2.",
+    "correctedVerifierPassed": true
+  },
+  "externalHttps": {
+    "externalHealthStatus": 200,
+    "externalStateStatus": 200,
+    "version": "1.3.2",
+    "ready": true
+  }
+}

@@ -125,6 +125,7 @@ domains:
         desc: 一个 Session，持续 compact
         doc: |-
           - 不自动 new/reset；压缩前保存重要信息，之后继续原会话。
+          - 约 272K token 主动压缩；与模型容量分开配置，小窗口模型按自身上限提前压缩。
           - 后台任务可用同一 Agent 的隔离 Session，结果交回主会话。
           - 彻底移除 Claude Code SDK 与旧执行路径，不做兼容。
       - id: cl_memory

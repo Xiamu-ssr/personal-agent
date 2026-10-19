@@ -18,3 +18,7 @@
 OpenResponses 使用支持显式取消的本地 HTTP 流，执行期限交给 OpenClaw，工具执行和 compact 的静默阶段不再触发 fetch 的 300 秒响应体超时。中断、模型失败和输出耗尽仍记为失败，不自动重试有副作用的任务。
 
 关闭 OpenClaw 的外层 Tool Search；原生工具和 `doudou_catalog` / `doudou_call` 直接提供参数，避免重复嵌套目录。按[硅基流动模型目录](https://www.siliconflow.com/)修正 DeepSeek V4.1 Flash、GLM 5.3 Flash 和 GLM 5.3 的 1M 上下文。协议仍为 2，现有 1.3.0 客户端继续使用。
+
+## 1.3.2 主动压缩线
+
+主动压缩线为约 272,000 tokens，主会话与隔离会话使用同一策略。模型的真实 `contextWindow` 保留；原生 `contextTokens` 运行预算为 292,000，包含 OpenClaw 2026.10.4 的 20,000 压缩预留。较小窗口按模型容量限制。开启原生工具循环中途预检，继续由 OpenClaw 执行记忆 flush 和 compact，保持同一 Session。
