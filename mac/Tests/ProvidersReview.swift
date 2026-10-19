@@ -24,14 +24,15 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
     }
     @MainActor static func collect<T:NSView>(_ view:NSView, type:T.Type) -> [T] { (view as? T).map{[$0]} ?? view.subviews.flatMap{collect($0,type:type)} }
     @MainActor static func marker(_ name:String) throws -> NSView {
-        guard let view = VerificationActionAnchor.views.object(forKey:name as NSString), view.window === window else { throw ProviderReviewFailure(description:"missing native marker: " + name) }; return view
+        guard let view = VerificationActionAnchor.views.object(forKey:name as NSString), view.window != nil else { throw ProviderReviewFailure(description:"missing native marker: " + name) }; return view
     }
     @MainActor static func press(_ name:String) async throws {
-        try await until("native action: " + name) { VerificationActionAnchor.views.object(forKey:name as NSString)?.window === window }
+        try await until("native action: " + name) { VerificationActionAnchor.views.object(forKey:name as NSString)?.window != nil }
         let view = try marker(name); view.scrollToVisible(view.bounds); try await pause(80)
         let point = view.convert(NSPoint(x:view.bounds.midX,y:view.bounds.midY),to:nil)
+        let actionWindow = view.window!
         for type in [NSEvent.EventType.leftMouseDown,.leftMouseUp] {
-            let event = NSEvent.mouseEvent(with:type,location:point,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:type == .leftMouseDown ? 1:0)!
+            let event = NSEvent.mouseEvent(with:type,location:point,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:actionWindow.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:type == .leftMouseDown ? 1:0)!
             NSApp.postEvent(event,atStart:false)
         }; try await pause(180)
     }
@@ -52,8 +53,8 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
     @MainActor static func form() throws -> ProviderFormModel {
         guard let form = ProviderFormVerification.current else { throw ProviderReviewFailure(description:"native provider form") }; return form
     }
-    @MainActor static func shot(_ name:String) async throws {
-        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true); try await pause(650)
+    @MainActor static func shot(_ name:String, settle:UInt64 = 650) async throws {
+        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true); try await pause(settle)
         guard let view = window.contentView else { throw ProviderReviewFailure(description:"snapshot view") }
         view.layoutSubtreeIfNeeded(); let target = output.appendingPathComponent(name + ".png")
         if CGPreflightScreenCaptureAccess() {
@@ -101,6 +102,9 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         try check(adding.presets.count == 12 && adding.presetID == "siliconflow" && adding.draft.protocolName == "openai", "new service starts with the cloud-supplied SiliconFlow preset")
         try check(adding.draft.models.count == 10 && adding.draft.models[0].modelID == "deepseek-ai/DeepSeek-V4.1-Flash", "preset supplies model IDs without manual entry")
         try await shot("30-provider-presets")
+        try await press("provider-preset"); try await press("provider-preset-option-deepseek")
+        try check(adding.presetID == "deepseek" && adding.draft.name == "DeepSeek", "native supplier popover selects a preset")
+        try await press("provider-preset"); try await press("provider-preset-option-siliconflow")
         adding.choosePreset(""); try await pause()
         try await press("provider-details"); try await press("provider-models")
         try await input("provider-name","我的模型服务")
@@ -117,6 +121,7 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         try await input("provider-model-name-" + extra,"轻快模型")
         try await shot("26-provider-add")
         try await press("provider-key-eye")
+        try await shot("26b-provider-key-reveal")
         try check(collect(window.contentView!,type:NSTextField.self).contains { !($0 is NSSecureTextField) && $0.stringValue == "sk-test-0000abcd" }, "reveal toggle displays only the typed fake key")
         try await press("provider-key-eye")
         try await input("provider-name","测试失败的模型服务")
@@ -145,6 +150,14 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         try check(patches.count == 1 && patches[0]["keyProvided"] as? Bool == false,"actual edit request omits blank API Key")
         let posts = requests.filter{$0["method"] as? String == "POST" && $0["path"] as? String == "/api/providers"}
         try check(posts.count == 2 && !requests.contains{$0["path"] as? String == "/api/providers/test"},"create failure and retry each use one atomic save request")
+        Nav.shared.go(.chat); try await shot("31-chat-light")
+        _ = try await Api.json("/__review/avatar",method:"POST",body:["state":"happy","text":"这件事办好了"])
+        try await until("completion avatar") { ChatClient.shared.avatarState == .happy }
+        try await shot("32-companion-peek",settle:350)
+        AppearanceStore.shared.select(.dark); try await shot("33-chat-dark")
+        _ = try await Api.json("/__review/avatar",method:"POST",body:["state":"idle"])
+        Nav.shared.go(.settings); try await shot("34-settings-dark")
+        AppearanceStore.shared.select(.light); try await shot("35-settings-light")
         let result:[String:Any] = ["checks":checks,"screenshots":shots.sorted(),"capture":captureMethod,"isolatedUserData":true,"fixture":"scripted contract cloud","keyLogged":false,"requests":requests]
         try JSONSerialization.data(withJSONObject:result,options:[.prettyPrinted,.sortedKeys]).write(to:output.appendingPathComponent("providers-acceptance.json"))
     }

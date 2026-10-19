@@ -229,7 +229,8 @@ struct ModelSettingsPage: View {
                                 let selection = ModelSelection(provider: provider.id, id: model.id)
                                 Button { Task { await store.selectModel(selection) } } label: {
                                     HStack(spacing: 16) {
-                                        Image(systemName: snapshot.model == selection ? "largecircle.fill.circle" : "circle").font(Theme.font(size: 20))
+                                        Image(systemName: snapshot.model == selection ? "checkmark.circle.fill" : "circle").font(Theme.font(size: 20))
+                                            .foregroundStyle(snapshot.model == selection ? Theme.accent : Theme.sub.opacity(0.6))
                                         VStack(alignment: .leading, spacing: 6) {
                                             Text(model.name).font(Theme.font(size: 15, weight: .medium))
                                             Text(model.note.isEmpty ? model.id : model.note).font(Theme.font(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
@@ -254,8 +255,10 @@ struct ModelProviderFormPage: View {
     let providerID: String?
     @State private var form: ProviderFormModel
     @State private var showKey = false
+    @State private var showPresetMenu = false
     @State private var showDetails = false
     @State private var showModels = false
+    @FocusState private var focusedField: String?
     init(providerID: String?) {
         self.providerID = providerID
         let snapshot = AgentSettingsStore.shared.snapshot
@@ -273,10 +276,26 @@ struct ModelProviderFormPage: View {
             else {
                 VStack(alignment: .leading, spacing: 18) {
                     if providerID == nil && !form.presets.isEmpty {
-                        Picker("供应商", selection: Binding(get: { form.presetID }, set: { form.choosePreset($0); showKey = false; showDetails = $0.isEmpty; showModels = $0.isEmpty })) {
-                            ForEach(form.presets) { Text($0.name).tag($0.id) }
-                            Text("自定义").tag("")
-                        }.verificationAction("provider-preset")
+                        Button { showPresetMenu = true } label: {
+                            HStack(spacing: 12) {
+                                Text("供应商").font(Theme.font(size: 13)).foregroundStyle(Theme.sub)
+                                Spacer()
+                                Text(form.presets.first { $0.id == form.presetID }?.name ?? "自定义").font(Theme.font(size: 14, weight: .medium))
+                                Image(systemName: "chevron.down").font(Theme.font(size: 10, weight: .semibold)).foregroundStyle(Theme.sub)
+                            }.foregroundStyle(Theme.ink).padding(16).background(Theme.field, in: RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.line, lineWidth: 0.6))
+                        }.buttonStyle(.plain).verificationAction("provider-preset")
+                        .popover(isPresented: $showPresetMenu, arrowEdge: .top) {
+                            ScrollView {
+                                VStack(spacing: 4) {
+                                    ForEach(form.presets) { preset in
+                                        presetOption(preset.name, id: preset.id)
+                                    }
+                                    Divider().padding(.vertical, 4)
+                                    presetOption("自定义", id: "")
+                                }.padding(10)
+                            }.frame(width: 280, height: 380).background(Theme.card)
+                        }
                         if let preset = form.presets.first(where: { $0.id == form.presetID }) {
                             Text(preset.hint).font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
                         }
@@ -288,11 +307,13 @@ struct ModelProviderFormPage: View {
                                 if showKey { TextField(form.provider?.keyHint ?? "填写 API Key", text: $form.draft.apiKey) }
                                 else { SecureField(form.provider?.keyHint ?? "填写 API Key", text: $form.draft.apiKey) }
                             }.textFieldStyle(.plain).font(Theme.font(size: 14)).privacySensitive()
+                                .focused($focusedField, equals: "provider-key")
                                 .accessibilityIdentifier("provider-key").verificationAction("provider-key")
-                            Button { showKey.toggle() } label: { Image(systemName: showKey ? "eye.slash" : "eye").foregroundStyle(Theme.sub) }
+                            Button { showKey.toggle() } label: { Image(systemName: showKey ? "eye.slash" : "eye").foregroundStyle(Theme.sub).frame(width: 32, height: 32).contentShape(Rectangle()) }
                                 .buttonStyle(.plain).help(showKey ? "隐藏 Key" : "显示 Key").accessibilityLabel(showKey ? "隐藏 Key" : "显示 Key")
                                 .verificationAction("provider-key-eye")
-                        }.padding(.horizontal, 12).frame(height: 42).background(Theme.field, in: RoundedRectangle(cornerRadius: 12))
+                        }.padding(.horizontal, 14).frame(height: 46).background(Theme.field, in: RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(focusedField == "provider-key" ? Theme.accent.opacity(0.5) : Theme.line, lineWidth: focusedField == "provider-key" ? 1 : 0.6).allowsHitTesting(false))
                         if form.provider != nil { Text("已保存 \(form.provider?.keyHint ?? "••••") · 留空表示不改").font(Theme.font(size: 12)).foregroundStyle(Theme.sub) }
                     }
                     VStack(alignment: .leading, spacing: 12) {
@@ -301,12 +322,12 @@ struct ModelProviderFormPage: View {
                         VStack(alignment: .leading, spacing: 14) {
                             field("名称", placeholder: "例如：我的模型服务", value: $form.draft.name, marker: "provider-name")
                             field("Base URL", placeholder: "https://example.test", value: $form.draft.baseURL, marker: "provider-url")
-                            HStack { Text("协议").font(Theme.font(size: 13, weight: .medium)); Spacer(); Picker("协议",selection:$form.draft.protocolName) { Text("Anthropic").tag("anthropic"); Text("OpenAI").tag("openai") }.labelsHidden().frame(width:140) }
+                            HStack { Text("协议").font(Theme.font(size: 13, weight: .medium)); Spacer(); Picker("协议",selection:$form.draft.protocolName) { Text("Anthropic").tag("anthropic"); Text("OpenAI").tag("openai") }.labelsHidden().pickerStyle(.segmented).frame(width:200) }
                         }.padding(.top, 12)
                         }
                     }
                 }
-                Text(form.draft.models.map(\.name).filter { !$0.isEmpty }.joined(separator: " · "))
+                Text(modelSummary)
                     .font(Theme.font(size: 12)).foregroundStyle(Theme.sub).fixedSize(horizontal: false, vertical: true)
                 fold("模型（\(form.draft.models.count)）", expanded: $showModels, marker: "provider-models")
                 if showModels {
@@ -357,11 +378,28 @@ struct ModelProviderFormPage: View {
             }.padding(.vertical, 8).contentShape(Rectangle())
         }.buttonStyle(.plain).verificationAction(marker)
     }
+    private var modelSummary: String {
+        let names = form.draft.models.map(\.name).filter { !$0.isEmpty }
+        return names.prefix(3).joined(separator: " · ") + (names.count > 3 ? " 等 \(names.count) 个模型" : "")
+    }
+    private func presetOption(_ name: String, id: String) -> some View {
+        Button {
+            form.choosePreset(id); showKey = false; showDetails = id.isEmpty; showModels = id.isEmpty; showPresetMenu = false
+        } label: {
+            HStack {
+                Text(name).font(Theme.font(size: 13)); Spacer()
+                if form.presetID == id { Image(systemName: "checkmark").font(Theme.font(size: 12, weight: .semibold)).foregroundStyle(Theme.accent) }
+            }.padding(11).background(form.presetID == id ? Theme.field : .clear, in: RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).foregroundStyle(Theme.ink).verificationAction("provider-preset-option-" + id)
+    }
     private func field(_ title: String, placeholder: String, value: Binding<String>, marker: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(Theme.font(size: 13, weight: .medium))
             TextField(placeholder, text: value).textFieldStyle(.plain).font(Theme.font(size: 14))
-                .padding(.horizontal, 12).frame(height: 42).background(Theme.field, in: RoundedRectangle(cornerRadius: 12))
+                .focused($focusedField, equals: marker)
+                .padding(.horizontal, 14).frame(height: 46).background(Theme.field, in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(focusedField == marker ? Theme.accent.opacity(0.5) : Theme.line, lineWidth: focusedField == marker ? 1 : 0.6).allowsHitTesting(false))
                 .accessibilityIdentifier(marker).verificationAction(marker)
         }
     }

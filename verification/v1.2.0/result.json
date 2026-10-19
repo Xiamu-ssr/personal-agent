@@ -1,0 +1,89 @@
+{
+  "clientVersion": "1.2.0",
+  "protocol": "1",
+  "cloudVersion": "1.1.0",
+  "cloudRuntimeChanged": false,
+  "dataMigrationRequired": false,
+  "changes": [
+    "Shared sage palette, action hierarchy, focus outlines and cards",
+    "Native supplier selectors and model selection",
+    "Completion and waiting cutout pose; desktop hover response",
+    "System reduced motion and video lifecycle"
+  ],
+  "mac": {
+    "providerAssertions": 71,
+    "nativeUiChecks": 19,
+    "nativeUiPassed": true,
+    "universalArchitectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "signed": true,
+    "notarized": false,
+    "mascotAssets": 15
+  },
+  "android": {
+    "unitTests": {
+      "debug": {
+        "tests": 159,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "release": {
+        "tests": 159,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "nativeUiChecks": [
+      "connected with isolated fake credentials",
+      "completion status arrives over WebSocket",
+      "native model selection saves provider and model",
+      "native supplier menu updates preset models",
+      "no app crash during native navigation and theme changes"
+    ],
+    "emulatorApi": 35,
+    "physicalDeviceTested": false,
+    "versionCode": 19,
+    "releaseSigned": true,
+    "signingCertificateSha256": "8081fba0d3ac49eac2ed4fb9fbc4e3fde23daf601ebfecc3e6adcfecd65e9b50"
+  },
+  "uiScope": "Isolated local fixtures and native UI only; no live device permissions or production model calls repeated for this client update",
+  "screenshots": "docs/images/v1.2.0/",
+  "artifacts": {
+    "doudou-1.2.0.apk": {
+      "bytes": 9423922,
+      "sha256": "a0b46b8e80068c94667d5921681d032ab09b921c35d41533356696a729f8cdbb"
+    },
+    "doudou-1.2.0.dmg": {
+      "bytes": 10679446,
+      "sha256": "253fc147ae41ca2609a8b7a687b3bc2bf635b86dabc6c4e7d555981b6f6de0f2"
+    }
+  },
+  "changedTrackedFiles": [
+    "README.md",
+    "android/app/build.gradle.kts",
+    "android/app/src/main/java/com/xiamu/agent/ui/Composer.kt",
+    "android/app/src/main/java/com/xiamu/agent/ui/Home.kt",
+    "android/app/src/main/java/com/xiamu/agent/ui/Mascot.kt",
+    "android/app/src/main/java/com/xiamu/agent/ui/ProviderForm.kt",
+    "android/app/src/main/java/com/xiamu/agent/ui/RuntimeSettings.kt",
+    "android/app/src/main/java/com/xiamu/agent/ui/Style.kt",
+    "docs/deployment.md",
+    "mac/Info.plist",
+    "mac/Sources/Avatar.swift",
+    "mac/Sources/ModelProviders.swift",
+    "mac/Sources/Theme.swift",
+    "mac/Tests/ProvidersReview.swift",
+    "mac/build.sh",
+    "mac/tools/providers-fake-cloud.mjs",
+    "spec/index.html",
+    "spec/spec.yaml"
+  ],
+  "newSourceFiles": [
+    "android/tools/review-polish.py"
+  ],
+  "openFailures": []
+}

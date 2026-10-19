@@ -1,6 +1,7 @@
 package com.xiamu.agent.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -50,6 +52,7 @@ fun ProviderFormScreen(id: String?) {
     var confirmDelete by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
     fun choosePreset(preset: ProviderPreset?) {
+        if(ready && presetId==preset?.id.orEmpty()) return
         presetId=preset?.id.orEmpty(); name=preset?.name.orEmpty(); baseUrl=preset?.baseUrl.orEmpty(); protocol=preset?.protocol ?: "openai"
         models.clear(); models.addAll(preset?.models ?: listOf(ProviderModel("","")))
         apiKey=""; shown=false; error=""; details=preset==null; expandedModels=preset==null
@@ -84,7 +87,8 @@ fun ProviderFormScreen(id: String?) {
                                 Icon(Icons.Outlined.ExpandMore,null,tint=Pal.Muted)
                             }
                             DropdownMenu(expanded=presetMenu,onDismissRequest={presetMenu=false},modifier=Modifier.heightIn(max=360.dp)) {
-                                presets.forEach { preset -> DropdownMenuItem(text={Text(preset.name)},onClick={choosePreset(preset);presetMenu=false}) }
+                                presets.forEach { preset -> DropdownMenuItem(text={Text(preset.name)},onClick={choosePreset(preset);presetMenu=false},
+                                    trailingIcon={if(preset.id==presetId) Icon(Icons.Outlined.Check,null,tint=Pal.Accent)}) }
                                 DropdownMenuItem(text={Text("自定义")},onClick={choosePreset(null);presetMenu=false})
                             }
                         }
@@ -108,7 +112,8 @@ fun ProviderFormScreen(id: String?) {
                     } }
                     }
                     item {
-                        Text(models.map { it.name }.filter { it.isNotBlank() }.joinToString(" · "),style=Type.body(12),color=Pal.Muted)
+                        val names=models.map { it.name }.filter { it.isNotBlank() }
+                        Text(names.take(3).joinToString(" · ") + if(names.size>3) " 等 ${names.size} 个模型" else "",style=Type.body(12),color=Pal.Muted)
                         TextButton(onClick={expandedModels=!expandedModels},enabled=!saving,modifier=Modifier.testTag("provider-models")) {
                             Text("模型（${models.size}）",color=Pal.Ink); Icon(if(expandedModels) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,null,tint=Pal.Muted)
                         }
@@ -172,12 +177,15 @@ fun ProviderFormScreen(id: String?) {
 @Composable
 private fun ProviderField(label: String,value: String,onChange: (String) -> Unit,hint: String,enabled: Boolean,
     keyboard: KeyboardType = KeyboardType.Text,password: Boolean = false,showLabel: Boolean = true,trailing: (@Composable () -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().background(Pal.Field,RoundedCornerShape(14.dp)).padding(start=14.dp,end=if(trailing==null) 14.dp else 4.dp,top=10.dp,bottom=10.dp)) {
+    var focused by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().background(Pal.Field,RoundedCornerShape(16.dp))
+        .border(if(focused) 1.dp else .5.dp,if(focused) Pal.Accent.copy(alpha=.5f) else Pal.Line,RoundedCornerShape(16.dp))
+        .padding(start=14.dp,end=if(trailing==null) 14.dp else 4.dp,top=11.dp,bottom=11.dp)) {
         if(showLabel) Text(label,style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(bottom=5.dp))
         Row(verticalAlignment=Alignment.CenterVertically) {
             BasicTextField(value,onChange,enabled=enabled,singleLine=true,textStyle=Type.body(15).copy(color=Pal.Ink),cursorBrush=SolidColor(Pal.Ink),
                 keyboardOptions=KeyboardOptions(autoCorrectEnabled=false,keyboardType=keyboard),visualTransformation=if(password) PasswordVisualTransformation() else VisualTransformation.None,
-                modifier=Modifier.weight(1f).heightIn(min=24.dp).testTag("provider-field:$label").semantics { contentDescription=label },
+                modifier=Modifier.weight(1f).heightIn(min=24.dp).onFocusChanged { focused=it.isFocused }.testTag("provider-field:$label").semantics { contentDescription=label },
                 decorationBox={inner -> Box(contentAlignment=Alignment.CenterStart) { if(value.isEmpty()) Text(hint,style=Type.body(15),color=Pal.Faint); inner() } })
             trailing?.invoke()
         }

@@ -1,6 +1,13 @@
 package com.xiamu.agent.ui
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ripple
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,24 +74,27 @@ object ThemeState {
 }
 object Pal {
     private val dark get()=ThemeState.dark.value
-    val Background get()=if(dark) Color.Black else Color.White
-    val Ink get()=if(dark) Color.White else Color.Black
-    val Muted get()=if(dark) Color(0xFF999999) else Color(0xFF707070)
+    val Background get()=if(dark) Color(0xFF111714) else Color(0xFFF8FAF7)
+    val Ink get()=if(dark) Color(0xFFE8F0E9) else Color(0xFF202B24)
+    val Muted get()=if(dark) Color(0xFFA4B2A8) else Color(0xFF69766D)
     val Faint get()=Muted
-    val Line get()=if(dark) Color(0xFF292929) else Color(0xFFE8E8E8)
-    val Card get()=if(dark) Color(0xFF202020) else Color(0xFFF3F3F3)
+    val Line get()=Ink.copy(alpha=if(dark) .12f else .075f)
+    val Card get()=if(dark) Color(0xFF1B2520) else Color.White
     val CardSolid get()=Card
-    val Field get()=Card
+    val Field get()=if(dark) Color(0xFF202E26) else Color(0xFFF0F4EE)
+    val Accent get()=if(dark) Color(0xFFA5C9AC) else Color(0xFF476D52)
+    val Action get()=if(dark) Color(0xFFB0D1B5) else Color(0xFF314D3A)
+    val ActionText get()=if(dark) Color(0xFF15261A) else Color.White
     val Icon get()=Ink
     val Link get()=if(dark) Color(0xFF69AFFF) else Color(0xFF0668CE)
     val GoldInk get()=Ink
-    val Gold get()=Ink
-    val Danger get()=Muted
-    val Online get()=Ink
-    val Info get()=Muted
-    val UserBubble get()=if(dark) Color(0xFFE8E8E8) else Color(0xFF202020)
-    val UserText get()=Background
-    val Quiet get()=if(dark) Color(0xFF363636) else Color(0xFFE6E6E6)
+    val Gold get()=Accent
+    val Danger get()=if(dark) Color(0xFFE6A99E) else Color(0xFFB05346)
+    val Online get()=Accent
+    val Info get()=Accent
+    val UserBubble get()=if(dark) Color(0xFF2B3D30) else Color(0xFFE8EFE5)
+    val UserText get()=Ink
+    val Quiet get()=UserBubble
     val QuietText get()=Ink
 }
 
@@ -132,7 +142,7 @@ fun AgentTheme(content: @Composable () -> Unit) {
     }
     val colors = if (night) androidx.compose.material3.darkColorScheme() else lightColorScheme()
     MaterialTheme(
-        colorScheme = colors.copy(primary = Pal.Ink, onPrimary = Pal.Background, primaryContainer = Pal.Quiet,
+        colorScheme = colors.copy(primary = Pal.Accent, onPrimary = Pal.ActionText, primaryContainer = Pal.Quiet,
             onPrimaryContainer = Pal.Ink, secondary = Pal.Gold, secondaryContainer = Pal.Quiet,
             onSecondaryContainer = Pal.Ink, background = background, surface = Pal.Card, surfaceVariant = Pal.Field,
             surfaceContainer = Pal.Card, surfaceContainerHigh = Pal.Card, surfaceContainerHighest = Pal.Field,
@@ -150,13 +160,14 @@ fun AgentTheme(content: @Composable () -> Unit) {
 }
 
 fun Modifier.canvasBackground() = background(Pal.Background)
-fun Modifier.card(radius: Dp = 22.dp, color: Color = Pal.Card): Modifier = background(color, RoundedCornerShape(radius))
+fun Modifier.card(radius: Dp = 22.dp, color: Color = Pal.Card): Modifier =
+    background(color, RoundedCornerShape(radius)).border(.5.dp,Pal.Line,RoundedCornerShape(radius))
 fun Modifier.gold(shape: Shape = CircleShape) = clip(shape).background(Pal.Quiet)
 
-/** clickable without the grey ripple; most surfaces here are glassy and the ripple looks muddy on them. */
+/** Quiet, bounded feedback for touch; business actions keep their own hit targets. */
 @Composable
 fun Modifier.tap(enabled: Boolean = true, onClick: () -> Unit): Modifier =
-    clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
+    clickable(remember { MutableInteractionSource() }, indication = ripple(color=Pal.Accent), enabled = enabled, onClick = onClick)
 
 @Composable
 fun Screen(content: @Composable BoxScope.() -> Unit) {
@@ -273,11 +284,17 @@ fun ListRow(
 @Composable
 fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
-    Box(
-        modifier.height(52.dp).then(if (enabled) Modifier.gold(shape) else Modifier.clip(shape).background(Pal.Field))
-            .tap(enabled, onClick),
-        contentAlignment = Alignment.Center,
-    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (enabled) Pal.GoldInk else Pal.Faint) }
+    val interaction=remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if(pressed) .98f else 1f,label="button-press")
+    Button(onClick=onClick,enabled=enabled,interactionSource=interaction,shape=shape,
+        modifier=modifier.height(52.dp).graphicsLayer { scaleX=scale;scaleY=scale },
+        contentPadding=PaddingValues(horizontal=20.dp,vertical=10.dp),
+        colors=ButtonDefaults.buttonColors(containerColor=Pal.Action,contentColor=Pal.ActionText,
+            disabledContainerColor=Pal.Action.copy(alpha=.2f),disabledContentColor=Pal.Muted),
+        elevation=ButtonDefaults.buttonElevation(defaultElevation=2.dp,pressedElevation=0.dp)) {
+        Text(text,fontSize=15.sp,fontWeight=FontWeight.SemiBold,color=if(enabled) Pal.ActionText else Pal.Muted)
+    }
 }
 
 /** Neutral secondary action. */

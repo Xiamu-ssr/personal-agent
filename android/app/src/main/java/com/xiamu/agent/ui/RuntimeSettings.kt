@@ -89,6 +89,6 @@ private fun ModelOptionRow(title: String,note: String,selected: Boolean,enabled:
             Text(title,style=Type.title(15),color=Pal.Ink,maxLines=1,overflow=TextOverflow.Ellipsis)
             Text(note,style=Type.body(12),color=Pal.Muted,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(top=4.dp))
         }
-        RadioButton(selected,onClick=null,enabled=enabled,colors=RadioButtonDefaults.colors(selectedColor=Pal.Ink,unselectedColor=Pal.Faint))
+        RadioButton(selected,onClick=null,enabled=enabled,colors=RadioButtonDefaults.colors(selectedColor=Pal.Accent,unselectedColor=Pal.Faint.copy(alpha=.6f)))
     }
 }

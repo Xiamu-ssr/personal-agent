@@ -9,7 +9,7 @@ import { listProviderPresets } from '../../cloud/src/provider-presets.mjs';
 import { fileURLToPath } from 'node:url';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const { WebSocketServer } = await import(path.join(repo, 'cloud/node_modules/ws/wrapper.mjs'));
-const output = '/tmp/v081-mac-shots'; fs.mkdirSync(output, { recursive:true });
+const output = process.env.DOUDOU_REVIEW_OUTPUT || '/tmp/v081-mac-shots'; fs.mkdirSync(output, { recursive:true });
 const builtin = { id:'zenmux', name:'ZenMux', builtin:true, protocol:'anthropic', models:[
   { id:'anthropic/claude-haiku-5.5', name:'Claude Haiku 5.5', note:'消耗约 1×；输入超过 100K 后约 5×' },
   { id:'anthropic/claude-opus-5.5', name:'Claude Opus 5.5', note:'消耗约 40×；缓存读约 20×' },
@@ -20,7 +20,8 @@ let providers = [builtin, { id:'example', name:'示例模型服务', builtin:fal
 let model = {provider:'zenmux',id:builtin.models[0].id};
 const events = [], requests = [];
 const settings = () => ({model,kernel:'openclaw',providers,providerPresets:listProviderPresets()});
-const state = () => ({version:'1.1.0',busy:false,chatEmpty:false,avatar:{state:'idle'},activities:[],devices:[]});
+let avatar = {state:'idle'};
+const state = () => ({version:'1.1.0',busy:false,chatEmpty:false,avatar,activities:[],devices:[]});
 const history = [{id:'hello-demo',role:'assistant',source:'say',text:'你好，模型服务可以在设置里添加。',ts:Date.now()}];
 const server = http.createServer(async (req, res) => {
   const p = new URL(req.url, 'http://127.0.0.1').pathname;
@@ -59,6 +60,11 @@ const server = http.createServer(async (req, res) => {
     providers = providers.filter(v => v.id !== id); changed(); return send(200,{ok:true});
   }
   if (p === '/__review/state') return send(200,{requests,events,providerCount:providers.length});
+  if (p === '/__review/avatar' && req.method === 'POST') {
+    avatar = {state:body.state || 'idle',text:body.text || ''};
+    for (const client of ws.clients) if (client.readyState === 1) client.send(JSON.stringify({t:'avatar',...avatar}));
+    return send(200,{ok:true});
+  }
   if (p === '/__review/select' && req.method === 'POST') { model = body.model; changed(); return send(200,{ok:true}); }
   send(200,{});
 });

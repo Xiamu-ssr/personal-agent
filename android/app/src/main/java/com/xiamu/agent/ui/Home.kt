@@ -16,7 +16,7 @@ import com.xiamu.agent.*
 import kotlinx.coroutines.launch
 
 val mainTabs=listOf("聊天","动态","点子","目标","资源库")
-val FloatingHeaderSpace=124.dp
+val FloatingHeaderSpace=140.dp
 private val tabIcons=listOf(Icons.Outlined.ChatBubbleOutline,Icons.Outlined.Feed,Icons.Outlined.Lightbulb,Icons.Outlined.CheckBox,Icons.Outlined.Category)
 @Composable
 fun HomeHeader(sideChat: Boolean = false) {

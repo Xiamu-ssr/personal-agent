@@ -23,25 +23,26 @@ enum Theme {
     static var dark: Bool { AppearanceStore.shared.selection == .dark || (AppearanceStore.shared.selection == .system && AppearanceStore.shared.systemDark) }
     static var scheme: ColorScheme? { switch AppearanceStore.shared.selection { case .system: nil; case .light: .light; case .dark: .dark } }
     static var appearance: NSAppearance? { AppearanceStore.shared.selection == .system ? nil : NSAppearance(named: dark ? .darkAqua : .aqua) }
-    static var background: Color { dark ? .black : .white }
-    static var card: Color { Color(hex: dark ? 0x1C1C1E : 0xF3F3F3) }
-    static var ink: Color { dark ? .white : .black }
-    static var sub: Color { Color(hex: dark ? 0x99999E : 0x77777B) }
+    static var background: Color { Color(hex: dark ? 0x111714 : 0xF8FAF7) }
+    static var card: Color { Color(hex: dark ? 0x1B2520 : 0xFFFFFF) }
+    static var ink: Color { Color(hex: dark ? 0xE8F0E9 : 0x202B24) }
+    static var sub: Color { Color(hex: dark ? 0xA4B2A8 : 0x69766D) }
     static var faint: Color { sub }
-    static var line: Color { ink.opacity(0.09) }
-    static var accent: Color { ink }
+    static var line: Color { ink.opacity(dark ? 0.12 : 0.075) }
+    static var accent: Color { Color(hex: dark ? 0xA5C9AC : 0x476D52) }
+    static var action: Color { Color(hex: dark ? 0xB0D1B5 : 0x314D3A) }
     static var link: Color { Color(hex: dark ? 0x64A8FF : 0x007AFF) }
-    static var field: Color { card }
-    static var userBubble: Color { Color(hex: dark ? 0x303033 : 0xE8E8EA) }
+    static var field: Color { Color(hex: dark ? 0x202E26 : 0xF0F4EE) }
+    static var userBubble: Color { Color(hex: dark ? 0x2B3D30 : 0xE8EFE5) }
     static var ornament: Color { sub }
-    static var online: Color { ink }
-    static var warning: Color { ink }
-    static var info: Color { ink }
-    static var danger: Color { ink }
-    static var actionText: Color { ink }
+    static var online: Color { accent }
+    static var warning: Color { Color(hex: dark ? 0xDDBB7F : 0x8E651F) }
+    static var info: Color { accent }
+    static var danger: Color { Color(hex: dark ? 0xE6A99E : 0xB05346) }
+    static var actionText: Color { Color(hex: dark ? 0x15261A : 0xFFFFFF) }
     static var canvas: Color { background }
     static var selection: Color { userBubble }
-    static var sidebar: Color { background }
+    static var sidebar: Color { Color(hex: dark ? 0x151E18 : 0xF0F4ED) }
     static var bodySize: CGFloat { 15 }
     static var secondarySize: CGFloat { 13 }
     static func font(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font { .system(size: size, weight: weight, design: design) }
@@ -64,8 +65,8 @@ struct CardStyle: ViewModifier {
         content
             .padding(padding)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
-            .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 2)
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5).allowsHitTesting(false))
+            .shadow(color: .black.opacity(Theme.dark ? 0.09 : 0.028), radius: 14, y: 4)
     }
 }
 
@@ -78,12 +79,14 @@ struct CapsuleBase: View {
     var radius: CGFloat = 999
 
     var body: some View {
-        RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Theme.userBubble)
+        RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Theme.action)
     }
 }
 
 struct PrimaryButtonStyle: ButtonStyle {
-    var height: CGFloat = 40
+    var height: CGFloat = 42
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -91,23 +94,30 @@ struct PrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(Theme.actionText)
             .padding(.horizontal, 20)
             .frame(height: height)
-            .background(CapsuleBase())
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .contentShape(Capsule())
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.action))
+            .shadow(color: Theme.action.opacity(enabled ? 0.12 : 0), radius: 8, y: 3)
+            .opacity(enabled ? (configuration.isPressed ? 0.88 : 1) : 0.4)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
+            .contentShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
 /// Secondary capsule action.
 struct SoftButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Theme.font(size: 12.5, weight: .medium))
             .foregroundStyle(Theme.accent)
             .padding(.horizontal, 14)
-            .frame(height: 28)
-            .background(Capsule().fill(Theme.userBubble))
+            .frame(height: 32)
+            .background(Capsule().fill(configuration.isPressed ? Theme.userBubble : Theme.field))
             .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 0.5))
-            .opacity(configuration.isPressed ? 0.7 : 1)
+            .opacity(enabled ? 1 : 0.4)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
             .contentShape(Capsule())
     }
 }
@@ -117,6 +127,7 @@ struct CircleIconButton: View {
     let icon: String
     var help = ""
     let action: () -> Void
+    @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
@@ -124,13 +135,14 @@ struct CircleIconButton: View {
                 .font(Theme.font(size: 14, weight: .medium))
                 .foregroundStyle(Theme.ink.opacity(0.8))
                 .frame(width: 36, height: 36)
-                .background(Circle().fill(Theme.card))
+                .background(Circle().fill(hovered ? Theme.userBubble : Theme.card))
                 .overlay(Circle().strokeBorder(Theme.line, lineWidth: 0.5))
 
         }
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)
+        .onHover { hovered = $0 }
     }
 }
 

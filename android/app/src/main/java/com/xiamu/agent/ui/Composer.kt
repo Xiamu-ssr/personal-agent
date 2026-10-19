@@ -422,7 +422,8 @@ private fun InputPill(draft: MessageDraft, hint: String) {
     }
 
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp,max=144.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Card).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp,max=144.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Card)
+            .border(.7.dp,Pal.Line,RoundedCornerShape(24.dp)).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
