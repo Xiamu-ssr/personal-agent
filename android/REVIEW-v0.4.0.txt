@@ -35,10 +35,9 @@
 - 今日简报、多卡块、空状态、站点：today-brief-overview、today-brief-topic、today-empty、today-sites、site-webview。
 - 排队撤回/修改/来不及：queue-before、queue-menu、queue-removed、queue-edit-dialog、queue-edited、queue-too-late、queue-reconnected-removed。
 - 合并任务、停止等待、定时：tasks-combined、task-stopping、tasks-schedule。
-- 记忆健康有/无、文件夹、完整总档：memory-health、memory-no-health、memory-folders、memory-profile。
-- 四种轮廓同为晨雾蓝、便签日记：dou-bean-mist、dou-girl-mist、dou-boy-mist、dou-cat-mist、diary-grid。
-- 会员卡：settings-membership。
-- 连接器/设备/本机：connectors-cloud、connector-detail、connector-form-failure、connector-account-added、connector-select-form、device-remove-confirmation、connectors-local。
+- 便签日记：diary-grid。
+- 连接器/设备/本机：connectors-cloud、connector-detail、connector-select-form、device-remove-confirmation、connectors-local。
+- 包含个人称呼或账号信息的旧截图已从当前目录移除；这不代表历史提交中的图片已被清除。
 - 健康兜底：health-fallback。另保留 site-cache-inspection.png，为实际 WebView 首屏缓存原图。
 
 已修复的检查失败

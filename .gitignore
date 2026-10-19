@@ -10,3 +10,16 @@ mac/build/
 *.dmg
 *.apk
 *.keystore
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+/data/
+/system/
+/.openclaw/
+/workspace/
+/cloud/data/
+/cloud/system/
+/cloud/.openclaw/
+/cloud/workspace/
