@@ -34,7 +34,7 @@ async function serve(t, { harness = { busy: false, connectors: new ConnectorMana
   t.after(async () => { for (const socket of sockets) socket.destroy(); server.closeAllConnections(); await new Promise((r) => server.close(r)); });
   return "http://127.0.0.1:" + server.address().port;
 }
-const auth = { "X-Doudou-Protocol":"1", Authorization: "Bearer " + config.token };
+const auth = { "X-Doudou-Protocol":"2", Authorization: "Bearer " + config.token };
 const fileUrl = (rel) => "/files/" + rel.split("/").map(encodeURIComponent).join("/");
 
 test("reply media uses case-insensitive extensions, matching MIME, measured size, link names and filename fallback", (t) => {

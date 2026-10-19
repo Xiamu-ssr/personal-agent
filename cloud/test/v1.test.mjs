@@ -54,7 +54,7 @@ test('one main session serializes busy input, suppresses quiet heartbeat, brings
  const {h}=product(t,runtime);await h.send('第一条');await h.send('补充一条');await h.mainChain;
  assert.equal(calls.length,2);assert.ok(calls.every(c=>c.sessionKey==='agent:main:main'));assert.equal(h.busy,false);
  const count=h.speech.history().length;await h.runMain('静默');assert.equal(h.speech.history().length,count);
- await h.runIsolated('独立检索','检索结果');await h.runMain('继续');assert.ok(calls.at(-1).input.includes('[已完成的后台工作'));assert.equal(h.pending.length,0);
+ await h.runIsolated('独立检索','检索结果',{mainContext:true});assert.notEqual(calls.at(-1).sessionKey,'agent:main:main');assert.match(calls.at(-1).input,/近期主聊天快照/);assert.match(calls.at(-1).input,/第一条/);await h.runMain('继续');assert.ok(calls.at(-1).input.includes('[已完成的后台工作'));assert.equal(h.pending.length,0);
 });
 test('device ownership stays a role; task GUI capability is not blocked by a hard read/write classifier',async t=>{
  const {h}=product(t,{close:async()=>{}});const ws=new EventEmitter();ws.close=()=>{};ws.send=()=>{};
@@ -71,8 +71,9 @@ test('failed scheduled checks stay in activities while a failed user request rep
 test('new HTTP protocol is mandatory and internal tools cannot be reached through proxy headers',async t=>{
  const {h,bus,connectors}=product(t,{ready:true,close:async()=>{}});
  const server=startServer({harness:h,hub:h.hub,bus,connectors,log(){},listen:{host:'127.0.0.1',port:0}});await once(server,'listening');t.after(async()=>{server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));});
- const base='http://127.0.0.1:'+server.address().port,headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'1'};
+ const base='http://127.0.0.1:'+server.address().port,headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'2'};
  assert.equal((await fetch(base+'/api/state',{headers:{authorization:headers.authorization}})).status,426);
+ assert.equal((await fetch(base+'/api/state',{headers:{...headers,'X-Doudou-Protocol':'1'}})).status,426);
  const state=await fetch(base+'/api/state',{headers});assert.equal(state.status,200);
  assert.equal((await fetch(base+'/health')).status,200);
  assert.equal((await fetch(base+'/internal/call',{method:'POST',headers:{...headers,'X-Real-IP':'203.0.113.9'},body:'{}'})).status,403);
@@ -85,7 +86,7 @@ test('live running activities keep the started timestamp required by both native
  t.after(async()=>{finish?.();await done;});
  const server=startServer({harness:h,hub:h.hub,bus,connectors,log(){},listen:{host:'127.0.0.1',port:0}});
  await once(server,'listening');t.after(async()=>{server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));});
- const base='http://127.0.0.1:'+server.address().port,headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'1'};
+ const base='http://127.0.0.1:'+server.address().port,headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'2'};
  const page=await (await fetch(base+'/api/activities',{headers})).json();
  const state=await (await fetch(base+'/api/state',{headers})).json();
  for(const row of [page.running.find(r=>r.id==='running-list-contract'),state.activities.find(r=>r.id==='running-list-contract')]){
@@ -102,4 +103,46 @@ test('both provider protocols probe their own endpoints without exposing the sub
   let endpoint;const value=await testProvider({protocol,baseUrl:'https://example.test/v1',apiKey:'fixture-test-key',model:'fixture-model'},{request:async(url)=>{endpoint=url;return Response.json(protocol==='openai'?{choices:[]}:{content:[]});}});
   assert.equal(value.ok,true);assert.ok(endpoint.endsWith(protocol==='openai'?'/v1/chat/completions':'/v1/messages'));
  }
+});
+
+test('activity history serializes native and product tool results as first-class steps',async t=>{
+ let finish;const {h,bus,connectors}=product(t,{ready:true,respond:()=>new Promise(resolve=>{finish=()=>resolve({text:'已读完目标'});}),close:async()=>{}});
+ const done=h.runMain('检查目标',{id:'tool-history-contract'});
+ await new Promise(r=>setImmediate(r));t.after(async()=>{finish?.();await done;});
+ await h.productTool('event',{sessionKey:'agent:main:main',phase:'before',tool:'read'});
+ await h.productTool('event',{sessionKey:'agent:main:main',phase:'after',tool:'read'});
+ await h.productTool('call',{sessionKey:'agent:main:main',name:'goals.list',args:{}});
+ const server=startServer({harness:h,hub:h.hub,bus,connectors,log(){},listen:{host:'127.0.0.1',port:0}});await once(server,'listening');t.after(async()=>{server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));});
+ const headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'2'};
+ const history=await(await fetch('http://127.0.0.1:'+server.address().port+'/api/activities/tool-history-contract/history',{headers})).json();
+ assert.deepEqual(history.items.map(i=>i.kind),['prompt','tool','tool_result','tool','tool_result']);
+ for(const step of history.items){assert.equal(typeof step.text,'string');assert.ok(Number.isFinite(Date.parse(step.time)));}
+ assert.equal(history.items[2].tool,'read');assert.equal(history.items[4].tool,'goals.list');
+ finish();await done;
+});
+
+test('feed and personalized Idea references send through one main-chat API, with optional comments and immutable history snapshots',async t=>{
+ const calls=[];const {h,bus,connectors}=product(t,{ready:true,respond:async(input,options)=>{calls.push({input,...options});return{text:'收到引用'};},close:async()=>{}});
+ const content=new Content({root:config.root});content.write('data/ideas/点子.md','## 最近可以试试\n- 🌱 **晚饭后散步**：从十分钟开始\n  > 帮我安排一次饭后散步\n');
+ content.write('data/feed/2026-10-19/1000-news.md','---\ntitle: 演示动态\nsource: 示例来源\n---\n有来源的正文');
+ const server=startServer({harness:h,hub:h.hub,bus,connectors,content,log(){},listen:{host:'127.0.0.1',port:0}});await once(server,'listening');t.after(async()=>{server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));});
+ const base='http://127.0.0.1:'+server.address().port,headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'2','Content-Type':'application/json'};
+ const post=(route,body)=>fetch(base+route,{method:'POST',headers,body:JSON.stringify(body)});
+ const ideas=await(await fetch(base+'/api/ideas',{headers})).json(),idea=ideas.groups[0].items[0];
+ assert.equal(calls.length,0,'browsing/selecting Ideas must not start a run');
+ const quote={kind:'idea',id:idea.id,revision:ideas.revision,title:'untrusted title'};
+ for(const [n,text]of ['', '只走十分钟'].entries()){
+  const body={text,quote,clientId:'idea-message-'+n};const response=await post('/api/send',body);assert.equal(response.status,200);const accepted=await response.json();
+  assert.deepEqual(await(await post('/api/send',body)).json(),accepted);await h.mainChain;
+ }
+ assert.equal(calls.length,2,'acknowledgement retry must not run twice');
+ assert.ok(calls.every(c=>c.sessionKey==='agent:main:main'));assert.match(calls[0].input,/帮我安排一次饭后散步/);assert.match(calls[1].input,/只走十分钟/);
+ const users=h.speech.history().filter(m=>m.role==='user');assert.equal(users[0].text,'');assert.equal(users[0].quote.title,idea.title);assert.equal(users[1].text,'只走十分钟');
+ content.write('data/ideas/点子.md','## 新的一批\n- 📷 **挑十张照片**：周末的小事\n  > 帮我整理照片\n');
+ assert.equal(h.speech.history().find(m=>m.id===users[0].id).quote.reply,idea.reply,'history retains the adopted Idea after refresh');
+ assert.equal((await post('/api/send',{text:'保留附言',quote,clientId:'stale-idea'})).status,409);assert.equal(calls.length,2);
+ const feed=await post('/api/send',{text:'',quote:{kind:'feed',path:'data/feed/2026-10-19/1000-news.md'},clientId:'feed-reference'});assert.equal(feed.status,200);await h.mainChain;
+ assert.match(calls.at(-1).input,/有来源的正文/);assert.equal(h.speech.history().filter(m=>m.role==='user').at(-1).quote.kind,'feed');
+ assert.equal((await post('/api/ideas/click',{id:idea.id,revision:ideas.revision})).status,404,'deleted immediate-adoption route is not a compatibility path');
+ assert.equal((await post('/api/feed/feedback',{path:'data/feed/2026-10-19/1000-news.md',action:'discuss'})).status,400);
 });

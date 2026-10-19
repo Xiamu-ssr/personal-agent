@@ -16,24 +16,32 @@ import com.xiamu.agent.*
 import kotlinx.coroutines.launch
 
 val mainTabs=listOf("聊天","动态","点子","目标","资源库")
-val FloatingHeaderSpace=140.dp
+val FloatingHeaderSpace get()=if(Nav.tab.intValue==0) 96.dp else 64.dp
 private val tabIcons=listOf(Icons.Outlined.ChatBubbleOutline,Icons.Outlined.Feed,Icons.Outlined.Lightbulb,Icons.Outlined.CheckBox,Icons.Outlined.Category)
 @Composable
 fun HomeHeader(sideChat: Boolean = false) {
-    Box(Modifier.fillMaxWidth().height(FloatingHeaderSpace).padding(horizontal=16.dp,vertical=8.dp)) {
+    Box(Modifier.fillMaxWidth().height(FloatingHeaderSpace).background(Pal.Background).padding(horizontal=16.dp,vertical=8.dp)) {
         Box(Modifier.align(Alignment.TopStart).padding(top=8.dp)) { CircleButton(Icons.Outlined.Menu,"打开抽屉") { Nav.drawer.value=true } }
-        Box(Modifier.align(Alignment.TopCenter)) { AvatarLabel(subtitle=if(sideChat) "旁聊" else null) { Nav.console.value=true } }
+        Box(Modifier.align(Alignment.TopCenter)) {
+            if(Nav.tab.intValue==0) AvatarLabel(subtitle=if(sideChat) "旁聊" else null) { Nav.console.value=true }
+            else Text(mainTabs[Nav.tab.intValue],style=Type.title(19),color=Pal.Ink,modifier=Modifier.padding(top=17.dp))
+        }
         if(sideChat) Box(Modifier.align(Alignment.TopEnd).padding(top=8.dp)) { CircleButton(Icons.Outlined.Close,"回到主聊天") { Nav.home(0) } }
         else if(Nav.tab.intValue==1) Box(Modifier.align(Alignment.TopEnd).padding(top=8.dp)) { CircleButton(Icons.Outlined.Tune,"调节动态") { Nav.feedSettings.value=true } }
     }
 }
 @Composable
 fun MainNavBar() {
-    Row(Modifier.widthIn(max=350.dp).fillMaxWidth().height(58.dp).clip(CircleShape).background(Pal.Card).padding(5.dp),verticalAlignment=Alignment.CenterVertically) {
+    Row(Modifier.widthIn(max=390.dp).fillMaxWidth().height(64.dp).clip(RoundedCornerShape(24.dp)).background(Pal.Card).padding(horizontal=5.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
         mainTabs.forEachIndexed { index,label ->
             val selected=Nav.tab.intValue==index
-            Box(Modifier.weight(1f).fillMaxHeight().clip(CircleShape).background(if(selected) Pal.Quiet else Color.Transparent).tap { Nav.home(index) },contentAlignment=Alignment.Center) {
-                Icon(tabIcons[index],label,tint=if(selected) Pal.Ink else Pal.Muted,modifier=Modifier.size(24.dp))
+            Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp)).tap { Nav.home(index) },contentAlignment=Alignment.Center) {
+                Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                    Box(Modifier.width(44.dp).height(28.dp).background(if(selected) Pal.Field else Color.Transparent,CircleShape),contentAlignment=Alignment.Center) {
+                        Icon(tabIcons[index],label,tint=if(selected) Pal.Ink else Pal.Muted,modifier=Modifier.size(21.dp))
+                    }
+                    Text(label,style=Type.body(10),color=if(selected) Pal.Ink else Pal.Muted)
+                }
                 if(index==1 && Chat.feedUnread.value) Box(Modifier.align(Alignment.TopEnd).padding(top=5.dp,end=13.dp).size(6.dp).background(Color(0xFFED4747),CircleShape))
             }
         }

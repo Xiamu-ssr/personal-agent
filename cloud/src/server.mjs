@@ -127,7 +127,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       if(req.method!=="POST"||!authed(req)||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress)||Object.keys(req.headers).some(h=>h==='forwarded'||h==='x-real-ip'||h.startsWith('x-forwarded-')))return json(res,403,{error:"private endpoint"});
       try {const args=JSON.parse((await readRaw(req,1024*1024)).toString('utf8'));return json(res,200,await harness.productTool(p.slice(10),args));}catch(e){return json(res,400,{error:connectors.redact(e.message)});}
     }
-    if(p.startsWith("/api/")&&req.headers['x-doudou-protocol']!==PROTOCOL)return json(res,426,{error:"请升级豆豆 1.0，新版已更换 OpenClaw 内核",code:"update_required"});
+    if(p.startsWith("/api/")&&req.headers['x-doudou-protocol']!==PROTOCOL)return json(res,426,{error:"请升级豆豆至 1.3 或更新版本，客户端与云端协议不一致",code:"update_required"});
     if (p === "/api/login" && req.method === "POST") {
       const { token } = await readBody(req);
       req.headers.authorization = `Bearer ${token || ""}`;
@@ -153,7 +153,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       if (p === "/api/feed/item" && req.method === "GET") return json(res, 200, content.post(url.searchParams.get("path")));
       if (p === "/api/feed/feedback" && req.method === "POST") {
         const body = JSON.parse((await readRaw(req, 64 * 1024)).toString("utf8"));
-        return await once(res, body?.action === "discuss" ? body.clientId : undefined, 200, () => content.feedback(body, harness.send.bind(harness)));
+        return json(res, 200, content.feedback(body));
       }
       if (p === "/api/feed/settings") {
         if (req.method === "GET") return json(res, 200, content.feedSettings());
@@ -162,7 +162,6 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       }
       if (p === "/api/feed/refresh" && req.method === "POST") return json(res, 202, await schedules.run("feed"));
       if (p === "/api/ideas" && req.method === "GET") return json(res, 200, content.ideas());
-      if (p === "/api/ideas/click" && req.method === "POST") return json(res, 200, await content.clickIdea(await readBody(req), harness.send.bind(harness)));
       if (p === "/api/ideas/refresh" && req.method === "POST") return json(res, 202, await schedules.run("ideas"));
       if (p === "/api/goals" && req.method === "GET") {
         const result = content.goals({ done: url.searchParams.get("done") === "true" });
@@ -269,10 +268,9 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       try {
         const body=JSON.parse((await readRaw(req,64*1024)).toString("utf8"));
         return await once(res, body?.clientId, 200, async () => {
-          const message=validateMessage(config.root,body?.text??"",body?.attachments??[]);
-          return { ok: true, id: await harness.send(message.text, "http", message.attachments) };
+          return content.sendMessage(body, harness.send.bind(harness));
         });
-      }catch(e){return json(res,400,{error:e instanceof SyntaxError?"请提交有效的 JSON 消息":e.message});}
+      }catch(e){return json(res,e.status||400,{error:e instanceof SyntaxError?"请提交有效的 JSON 消息":connectors.redact(e.message)});}
     }
     if (p === "/api/connectors") {
       return json(res, 200, {

@@ -39,7 +39,7 @@ class MessageRetryTest {
     @Test fun mainSendRetriesWithIdenticalClientId() = lostReceipt("/api/send") { id -> Api.postMessage("/api/send",OutgoingMessage("主聊天",emptyList(),id).json());Unit }
     @Test fun sideCreationRetriesWithIdenticalClientId() = lostReceipt("/api/side-chats") { id -> assertEquals("activity-id",Api.createSideChat("旁聊",emptyList(),id)) }
     @Test fun sideContinuationRetriesWithIdenticalClientId() = lostReceipt("/api/activities/activity-id/send") { id -> Api.sendToActivity("activity-id","继续",emptyList(),id) }
-    @Test fun discussionRetriesWithIdenticalClientId() = lostReceipt("/api/feed/feedback") { id ->
-        val m=OutgoingMessage("",emptyList(),id,FeedQuote("data/feed/2026-10-15/a.md","演示","🌱","来源"));Api.postMessage(m.path,m.json());Unit
+    @Test fun discussionRetriesWithIdenticalClientId() = lostReceipt("/api/send") { id ->
+        val m=OutgoingMessage("",emptyList(),id,ChatQuote("feed","演示","🌱","来源",path="data/feed/2026-10-15/a.md"));Api.postMessage(m.path,m.json());Unit
     }
 }

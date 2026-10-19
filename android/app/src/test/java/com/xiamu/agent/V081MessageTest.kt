@@ -9,7 +9,7 @@ class V081MessageTest {
     private data class Pick(val id: Int,val name: String,val kind: String)
     private val image=Pick(1,"sprout.png","image")
     private val file=Pick(2,"plan.pdf","file")
-    private val quote=FeedQuote("data/feed/2026-10-15/0900-demo.md","给一天留一点空白","☕","豆豆演示")
+    private val quote=ChatQuote("feed","给一天留一点空白","☕","豆豆演示",path="data/feed/2026-10-15/0900-demo.md")
     @Test fun attachmentStripKeepsImagesAndFilesInSelectionOrder() {
         val state=AttachmentDraft<Pick>().add(listOf(image,file,image.copy(id=3)))
         assertEquals(listOf("image","file","image"),state.items.map { it.kind })
@@ -53,14 +53,27 @@ class V081MessageTest {
         gate.failed(retryable=false);assertNotEquals(first,gate.begin("same"))
     }
     @Test fun emptyQuoteMetadataIsPreservedAsTheServerSnapshot() {
-        val parsed=FeedQuote.from(quote.json().put("emoji","").put("source",""))!!
+        val parsed=ChatQuote.from(quote.json().put("emoji","").put("source",""))!!
         assertEquals("",parsed.emoji);assertEquals("",parsed.source)
     }
-    @Test fun discussionUsesFeedbackAndAllowsEmptyText() {
+    @Test fun discussionUsesMainSendAndAllowsEmptyText() {
         val request=OutgoingMessage("",emptyList(),"request-id",quote);val body=request.json()
-        assertEquals("/api/feed/feedback",request.path);assertEquals("discuss",body.getString("action"))
-        assertEquals(quote.path,body.getString("path"));assertEquals("",body.getString("text"))
-        assertEquals("request-id",body.getString("clientId"));assertFalse(body.has("attachments"))
+        assertEquals("/api/send",request.path);assertFalse(body.has("action"))
+        assertEquals(quote.path,body.getJSONObject("quote").getString("path"));assertEquals("",body.getString("text"))
+        assertEquals("request-id",body.getString("clientId"));assertEquals(0,body.getJSONArray("attachments").length())
+    }
+    @Test fun ideaQuotePreservesSnapshotAndSharesTheMainSendContract() {
+        val idea=Idea("idea-1","🌱","饭后散步","从十分钟开始","帮我安排饭后散步")
+        val quote=ChatQuote.from(idea,"revision-1","最近可以试试")
+        assertEquals(quote,ChatQuote.from(quote.json()))
+        for(text in listOf("","只走十分钟")) {
+            val message=OutgoingMessage(text,emptyList(),"request-"+text,quote)
+            assertEquals("/api/send",message.path)
+            assertEquals("idea",message.json().getJSONObject("quote").getString("kind"))
+            assertEquals("idea-1",message.json().getJSONObject("quote").getString("id"))
+            assertEquals(text,message.json().getString("text"))
+            assertFalse(message.json().getJSONObject("quote").has("reply"))
+        }
     }
     @Test fun cancellingQuoteRestoresAnOrdinarySendPayload() {
         val cancelled=OutgoingMessage("我想试试",emptyList(),"id",quote).copy(quote=null)

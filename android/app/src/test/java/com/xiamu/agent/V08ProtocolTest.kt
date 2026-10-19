@@ -13,8 +13,8 @@ class V08ProtocolTest {
 
     @Test fun firstChatInternalTriggerIsNotPresentedAsUserSpeech() { assertNull(historyItem(json("""{"role":"user","source":"onboarding","text":"[第一次聊天] 设备：android"}"""))); assertNotNull(historyItem(json("""{"role":"user","source":"app","text":"你好"}"""))) }
     @Test fun activityHistoryPreservesToolStepsOutsideMainChat() {
-        val h=ActivityHistory.from(json("""{"id":"a","title":"本地活动","status":"done","items":[{"kind":"prompt","from":"user","text":"查资料","time":10},{"kind":"tool","tool":"Read","text":"读一份文件","time":11},{"kind":"result","text":"已经读完","time":12}]}"""))
-        assertEquals(1,h.steps.size); assertEquals("Read",h.steps[0].tool); assertTrue(h.prompts[0].isUser)
+        val h=ActivityHistory.from(json("""{"id":"a","title":"本地活动","status":"done","items":[{"kind":"prompt","from":"user","text":"查资料","time":10},{"kind":"tool","tool":"Read","text":"读一份文件","time":11},{"kind":"tool_result","tool":"Read","text":"执行完成","time":"2026-10-19T08:00:00.000Z"},{"kind":"result","text":"已经读完","time":12}]}"""))
+        assertEquals(2,h.steps.size); assertEquals(ActivityItemKind.ToolResult,h.steps[1].kind); assertEquals("Read",h.steps[0].tool); assertTrue(h.prompts[0].isUser)
     }
     @Test fun parsesEverySupportedSayCard() {
         val cards=sayCards(json("""{"cards":[{"type":"connector","id":"qq-mail"},{"type":"goal","name":"运动"},{"type":"link","url":"https://example.test","title":"示例","description":"摘要","image":"https://example.test/image.png"},{"type":"image","path":"data/library/media/a.png"},{"type":"video","path":"data/library/media/a.mp4"},{"type":"audio","path":"data/library/media/a.aac"},{"type":"file","path":"data/library/artifacts/a/report.pdf"},{"type":"device","capability":"health"}]}"""))

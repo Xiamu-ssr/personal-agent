@@ -21,7 +21,7 @@ test("a nested feed image survives HTTP serialization and loads through the exis
     content: new Content({ root }), listen: { host: "127.0.0.1", port: 0 } });
   await once(server, "listening");
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
-  const base = `http://127.0.0.1:${server.address().port}`, headers = { "X-Doudou-Protocol":"1", Authorization: "Bearer " + config.token };
+  const base = `http://127.0.0.1:${server.address().port}`, headers = { "X-Doudou-Protocol":"2", Authorization: "Bearer " + config.token };
   const feed = await (await fetch(base + "/api/feed", { headers })).json();
   const image = feed.items[0].image;
   assert.equal(image, "data/feed/2026-10-16/img/封面.png");

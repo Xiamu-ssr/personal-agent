@@ -143,12 +143,12 @@ struct ActivityStepsView: View {
             ForEach(items) { step in
                 VStack(alignment:.leading,spacing:8) {
                     HStack {
-                        Text(step.kind == "tool" ? "工具摘要" : step.kind == "prompt" ? (step.from == "user" ? "你的交代" : "豆豆的交代") : "豆豆")
+                        Text(step.kind == "tool" ? "调用工具" : step.kind == "tool_result" ? "执行结果" : step.kind == "prompt" ? (step.from == "user" ? "你的交代" : "豆豆的交代") : "豆豆")
                             .font(Theme.font(size:11,weight:.medium)).foregroundStyle(Theme.sub)
                         Spacer()
                         if let time=step.time {Text(Fmt.when(time)).font(Theme.font(size:10)).foregroundStyle(Theme.sub)}
                     }
-                    if step.kind == "tool" {
+                    if step.kind == "tool" || step.kind == "tool_result" {
                         DisclosureGroup("查看摘要") {Text(step.text).font(Theme.font(size:12)).foregroundStyle(Theme.sub).frame(maxWidth:.infinity,alignment:.leading)}.verificationAction("activity-step-\(step.id)")
                     } else {MarkdownView(text:step.text,size:14).textSelection(.enabled)}
                     ForEach(Array(step.attachments.enumerated()),id:\.offset) {AttachmentView(att:$0.element)}

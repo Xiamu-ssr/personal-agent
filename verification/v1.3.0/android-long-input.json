@@ -1,0 +1,8 @@
+{
+  "keyboardSettledBeforeTyping": true,
+  "expectedCharacters": 107,
+  "nativeEditorCharacters": 107,
+  "serverReceivedCharacters": 107,
+  "completeTextPreserved": true,
+  "backend": "isolated local fixture"
+}

@@ -150,7 +150,7 @@ test("App HTTP lists distinguishable secret hints while model tools and editable
   const server = startServer({ harness: { busy: false, running: new Map(), connectors: manager }, hub: new DeviceHub(), bus, log: () => {}, connectors: manager, listen: { port: 0, host: "127.0.0.1" } });
   await once(server, "listening");
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
-  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/connectors`, { headers: { "X-Doudou-Protocol":"1", Authorization: `Bearer ${config.token}` } });
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/connectors`, { headers: { "X-Doudou-Protocol":"2", Authorization: `Bearer ${config.token}` } });
   assert.equal(response.status, 200);
   const body = await response.json(), account = body.cloud.installed[0].accounts[0];
   for (const [title, value] of [["API Key", key], ["密码", password], ["授权码", authorization]]) {

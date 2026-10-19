@@ -23,30 +23,30 @@ enum Theme {
     static var dark: Bool { AppearanceStore.shared.selection == .dark || (AppearanceStore.shared.selection == .system && AppearanceStore.shared.systemDark) }
     static var scheme: ColorScheme? { switch AppearanceStore.shared.selection { case .system: nil; case .light: .light; case .dark: .dark } }
     static var appearance: NSAppearance? { AppearanceStore.shared.selection == .system ? nil : NSAppearance(named: dark ? .darkAqua : .aqua) }
-    static var background: Color { Color(hex: dark ? 0x111714 : 0xF8FAF7) }
-    static var card: Color { Color(hex: dark ? 0x1B2520 : 0xFFFFFF) }
-    static var ink: Color { Color(hex: dark ? 0xE8F0E9 : 0x202B24) }
-    static var sub: Color { Color(hex: dark ? 0xA4B2A8 : 0x69766D) }
+    static var background: Color { Color(hex: dark ? 0x151618 : 0xF6F7F9) }
+    static var card: Color { Color(hex: dark ? 0x222428 : 0xFFFFFF) }
+    static var ink: Color { Color(hex: dark ? 0xF0F1F3 : 0x24262B) }
+    static var sub: Color { Color(hex: dark ? 0xA3A6AE : 0x737780) }
     static var faint: Color { sub }
     static var line: Color { ink.opacity(dark ? 0.12 : 0.075) }
-    static var accent: Color { Color(hex: dark ? 0xA5C9AC : 0x476D52) }
-    static var action: Color { Color(hex: dark ? 0xB0D1B5 : 0x314D3A) }
+    static var accent: Color { Color(hex: dark ? 0x9BBDF4 : 0x426DA9) }
+    static var action: Color { Color(hex: dark ? 0xEBEDF0 : 0x292C32) }
     static var link: Color { Color(hex: dark ? 0x64A8FF : 0x007AFF) }
-    static var field: Color { Color(hex: dark ? 0x202E26 : 0xF0F4EE) }
-    static var userBubble: Color { Color(hex: dark ? 0x2B3D30 : 0xE8EFE5) }
+    static var field: Color { Color(hex: dark ? 0x2B2D32 : 0xF0F1F4) }
+    static var userBubble: Color { Color(hex: dark ? 0x28394F : 0xE4EEFC) }
     static var ornament: Color { sub }
     static var online: Color { accent }
     static var warning: Color { Color(hex: dark ? 0xDDBB7F : 0x8E651F) }
     static var info: Color { accent }
     static var danger: Color { Color(hex: dark ? 0xE6A99E : 0xB05346) }
-    static var actionText: Color { Color(hex: dark ? 0x15261A : 0xFFFFFF) }
+    static var actionText: Color { Color(hex: dark ? 0x202228 : 0xFFFFFF) }
     static var canvas: Color { background }
     static var selection: Color { userBubble }
-    static var sidebar: Color { Color(hex: dark ? 0x151E18 : 0xF0F4ED) }
+    static var sidebar: Color { Color(hex: dark ? 0x1B1D21 : 0xEEF0F4) }
     static var bodySize: CGFloat { 15 }
     static var secondarySize: CGFloat { 13 }
     static func font(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font { .system(size: size, weight: weight, design: design) }
-    static func titleFont(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font { font(size: size, weight: weight) }
+    static func titleFont(_ size: CGFloat, weight: Font.Weight = .medium) -> Font { font(size: size, weight: weight) }
     static var categories: [(dir: String, name: String, icon: String, color: Color)] {
         [("profile","总档","person.text.rectangle",ink),("work","工作","briefcase",ink),("project","项目","folder",ink),
          ("life","生活","house",ink),("health","健康","heart",ink),("people","人际","person.2",ink),
@@ -90,12 +90,12 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Theme.font(size: 14, weight: .semibold))
+            .font(Theme.font(size: 14, weight: .medium))
             .foregroundStyle(Theme.actionText)
             .padding(.horizontal, 20)
             .frame(height: height)
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.action))
-            .shadow(color: Theme.action.opacity(enabled ? 0.12 : 0), radius: 8, y: 3)
+            .shadow(color: .black.opacity(enabled ? 0.05 : 0), radius: 3, y: 1)
             .opacity(enabled ? (configuration.isPressed ? 0.88 : 1) : 0.4)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
@@ -168,7 +168,7 @@ struct PageTitle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(Theme.titleFont(28)).foregroundStyle(Theme.ink)
+            Text(title).font(Theme.titleFont(26)).foregroundStyle(Theme.ink)
             if !subtitle.isEmpty { Text(subtitle).font(Theme.font(size: 13)).foregroundStyle(Theme.sub) }
         }
     }
@@ -180,7 +180,7 @@ struct SectionTitle: View {
 
     var body: some View {
         HStack {
-            Text(text).font(Theme.titleFont(20)).foregroundStyle(Theme.ink)
+            Text(text).font(Theme.titleFont(17)).foregroundStyle(Theme.ink)
             Spacer()
             trailing
         }

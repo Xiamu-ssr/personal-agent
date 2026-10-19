@@ -56,7 +56,7 @@ fun FeedScreen(bottom: Dp) {
         }
     }
     LazyColumn(state=list,modifier=Modifier.fillMaxSize(),contentPadding=pagePadding(bottom)) {
-        item { Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) { Text("动态",style=Type.title(23),color=Pal.Ink,modifier=Modifier.weight(1f)); QuietButton("刷新") { scope.launch { runCatching { Api.postJson("/api/feed/refresh") }.onSuccess { notice=if(it.optString("mode")=="skipped") "正在查看，稍后会有新动态" else "豆豆正在看最新消息" }.onFailure { notice=it.message ?: "刷新失败" } } } } }
+        item { Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) { Text("最近更新",style=Type.body(13),color=Pal.Muted,modifier=Modifier.weight(1f)); QuietButton("刷新") { scope.launch { runCatching { Api.postJson("/api/feed/refresh") }.onSuccess { notice=if(it.optString("mode")=="skipped") "正在查看，稍后会有新动态" else "豆豆正在看最新消息" }.onFailure { notice=it.message ?: "刷新失败" } } } } }
         item { OutlinedTextField(request,{request=it},placeholder={Text("想看什么")},singleLine=true,shape=RoundedCornerShape(28.dp),modifier=Modifier.fillMaxWidth().padding(bottom=20.dp),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={if(request.isNotBlank()) { Draft.send(context,request,includeDraft=false); request="" }}),trailingIcon={IconButton(onClick={ if(request.isNotBlank()) { Draft.send(context,request,includeDraft=false); request="" } }) { Icon(Icons.Outlined.ArrowUpward,"发送想看的内容") }}) }
         if(notice.isNotBlank()) item { FooterNote(notice) }
         var date=""

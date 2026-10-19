@@ -121,9 +121,9 @@ internal fun ChatRow(item: ChatItem,highlight: Boolean = false,mediaActive: Bool
         is ChatItem.User -> Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
             Spacer(Modifier.width(42.dp))
             Column(Modifier.weight(1f,fill=false).widthIn(max=310.dp).clip(RoundedCornerShape(21.dp,21.dp,5.dp,21.dp)).background(Pal.UserBubble).padding(horizontal=15.dp,vertical=11.dp)) {
-                item.quote?.let { FeedQuoteCard(it,Modifier.fillMaxWidth().padding(bottom=8.dp),onOpen={Nav.showQuote(it)}) }
+                item.quote?.let { ChatQuoteCard(it,Modifier.fillMaxWidth().padding(bottom=8.dp),onOpen={Nav.showQuote(it)}) }
                 Attachments(item.attachments,mediaActive)
-                if(item.text.isNotBlank()) SelectionContainer { Text(item.text,style=Type.body(15),color=Pal.UserText) }
+                if(item.text.isNotBlank()) SelectionContainer { Text(item.text,style=Type.body(16),color=Pal.UserText) }
             }
         }
         is ChatItem.Assistant -> {

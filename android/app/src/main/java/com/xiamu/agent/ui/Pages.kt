@@ -79,7 +79,8 @@ sealed interface Route {
     data object Memory : Route
     data object Capabilities : Route
     data class GoalDetail(val name: String) : Route
-    data class FeedDetail(val quote: com.xiamu.agent.FeedQuote) : Route
+    data class FeedDetail(val quote: com.xiamu.agent.ChatQuote) : Route
+    data class IdeaDetail(val quote: com.xiamu.agent.ChatQuote) : Route
     data class RuntimeSettings(val permissions: Boolean = false) : Route
     data class ProviderForm(val id: String? = null) : Route
     data class ActivityDetail(val id: String,val title: String) : Route
@@ -100,8 +101,11 @@ object Nav {
     val console=mutableStateOf(false)
     val drawer=mutableStateOf(false)
     val feedSettings=mutableStateOf(false)
-    val feedTarget=mutableStateOf<com.xiamu.agent.FeedQuote?>(null)
-    fun showQuote(quote: com.xiamu.agent.FeedQuote) { home(1); feedTarget.value=quote }
+    val feedTarget=mutableStateOf<com.xiamu.agent.ChatQuote?>(null)
+    fun showQuote(quote: com.xiamu.agent.ChatQuote) {
+        if(quote.kind == "feed") { home(1); feedTarget.value=quote }
+        else { home(2); open(Route.IdeaDetail(quote)) }
+    }
     fun open(r: Route) { console.value=false; drawer.value=false; stack.add(r) }
     fun back() { stack.removeLastOrNull() }
     fun home(tab: Int) { stack.clear(); console.value=false; drawer.value=false; this.tab.intValue=tab }
@@ -145,6 +149,7 @@ fun RoutePage(r: Route) {
         Route.Capabilities -> SubPage("本机能力") { item { EnableAllCapabilities() }; item { LocalCapabilities() } }
         is Route.GoalDetail -> GoalDetailScreen(r.name)
         is Route.FeedDetail -> FeedDetailScreen(r.quote)
+        is Route.IdeaDetail -> IdeaDetailScreen(r.quote)
         is Route.RuntimeSettings -> RuntimeSettingsScreen(r.permissions)
         is Route.ProviderForm -> ProviderFormScreen(r.id)
         is Route.ActivityDetail -> ActivityDetailScreen(r)

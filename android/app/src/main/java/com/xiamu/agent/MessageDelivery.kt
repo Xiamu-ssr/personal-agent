@@ -10,15 +10,28 @@ data class AttachmentDraft<T>(val items: List<T> = emptyList()) {
     fun remove(values: List<T>) = copy(items = items.filterNot { it in values })
 }
 
-data class FeedQuote(val path: String, val title: String, val emoji: String, val source: String) {
-    fun json() = JSONObject().put("kind", "feed").put("path", path).put("title", title).put("emoji", emoji).put("source", source)
+data class ChatQuote(val kind: String, val title: String, val emoji: String, val source: String,
+    val path: String = "", val id: String = "", val revision: String = "", val description: String = "", val reply: String = "") {
+    fun reference() = JSONObject().put("kind", kind).apply {
+        if(kind == "feed") put("path", path) else { put("id", id); put("revision", revision) }
+    }
+    fun json() = reference().put("title", title).put("emoji", emoji).put("source", source).apply {
+        if(kind == "idea") { put("description", description); put("reply", reply) }
+    }
     companion object {
-        fun from(post: FeedPost) = FeedQuote(post.path, post.title, post.icon, post.source)
-        fun from(j: JSONObject?): FeedQuote? {
-            if (j == null || j.optString("kind") != "feed") return null
+        fun from(post: FeedPost) = ChatQuote("feed", post.title, post.icon, post.source, path = post.path)
+        fun from(idea: Idea, revision: String, group: String) = ChatQuote("idea", idea.title, idea.icon, group, id = idea.id, revision = revision, description = idea.description, reply = idea.reply)
+        fun from(j: JSONObject?): ChatQuote? {
+            if (j == null || j.optString("title").isBlank()) return null
+            val kind = j.optString("kind")
             val path = j.optString("path")
-            if (!isDataFile(path) || !path.startsWith("data/feed/") || j.optString("title").isBlank()) return null
-            return FeedQuote(path, j.getString("title"), j.optString("emoji"), j.optString("source"))
+            if (kind == "feed") {
+                if (!isDataFile(path) || !path.startsWith("data/feed/")) return null
+            } else if (kind == "idea") {
+                if(j.optString("id").isBlank() || j.optString("revision").isBlank() || j.optString("reply").isBlank()) return null
+            } else return null
+            return ChatQuote(kind, j.getString("title"), j.optString("emoji"), j.optString("source"), path,
+                j.optString("id"), j.optString("revision"), j.optString("description"), j.optString("reply"))
         }
     }
 }
@@ -39,11 +52,11 @@ class SendAttempt(private val uuid: () -> String = { UUID.randomUUID().toString(
     fun reset() { sending = false; payload = null; clientId = null }
 }
 
-data class OutgoingMessage(val text: String, val attachments: List<Attachment>, val clientId: String, val quote: FeedQuote? = null) {
-    val path: String get() = if (quote == null) "/api/send" else "/api/feed/feedback"
+data class OutgoingMessage(val text: String, val attachments: List<Attachment>, val clientId: String, val quote: ChatQuote? = null) {
+    val path: String get() = "/api/send"
     fun json(): JSONObject = JSONObject().put("clientId", clientId).put("text", text).apply {
-        if (quote != null) { put("path", quote.path); put("action", "discuss") }
-        else put("attachments", JSONArray(attachments.map { it.toJson() }))
+        put("attachments", JSONArray(attachments.map { it.toJson() }))
+        if (quote != null) put("quote", quote.reference())
     }
 }
 

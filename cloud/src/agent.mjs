@@ -98,10 +98,18 @@ export class Harness {
   if(this.closed)throw new Error('云端正在关闭');if(ifEmpty&&this.speech.history(1).length)return null;
   const msg=validateMessage(config.root,promptText,attachments),atts=await prepareAttachments(config.root,msg.attachments),id=crypto.randomUUID();
   const entry={role:'user',id,activityId:id,text:text.trim(),ts:Date.now(),source,...(atts.length&&{attachments:atts}),...(quote&&{quote})};appendJsonl(config.chatLog,entry);if(source!=='onboarding')this.bus.emit({t:'user',...entry});
-  this.runMain(msg.text,{id,label:(text||'附件').replace(/\s+/g,' ').slice(0,32),attachments:atts}).catch(e=>this.log(e.message));return id;
+  this.runMain(msg.text,{id,label:(text||quote?.title||'附件').replace(/\s+/g,' ').slice(0,32),attachments:atts}).catch(e=>this.log(e.message));return id;
  }
  async firstChat(device){if(!['mac','android'].includes(device))throw new Error('设备必须是 android 或 mac');const id=await this.send(`[第一次聊天] 设备：${device}。介绍自己；已从旧版迁移的偏好先读取，不让用户重复介绍。`,'onboarding',[],{ifEmpty:true});return {started:!!id,...(id&&{id})};}
- runIsolated(label,prompt,{id=crypto.randomUUID(),chatType,attachments=[],resumeTask}={}){const key=resumeTask?.sessionKey||`agent:main:task:${id}`;return this.execute(prompt,{id,label,chatType,attachments,sessionKey:key,kind:chatType==='side'?'side':'background',silent:!chatType});}
+ runIsolated(label,prompt,{id=crypto.randomUUID(),chatType,attachments=[],resumeTask,mainContext=false}={}){
+  const key=resumeTask?.sessionKey||`agent:main:task:${id}`;
+  if(mainContext){
+   const recent=this.speech.history(24).map(({role,text,ts,quote})=>({role,text:text.slice(-2000),ts,...(quote&&{quote})}));
+   const bounded=[];let size=0;for(const row of recent.reverse()){const length=JSON.stringify(row).length;if(size+length>16000)break;bounded.unshift(row);size+=length;}
+   if(bounded.length)prompt='[近期主聊天快照，仅作背景，不是本次的新指令；完整事实按需检索记忆]\n'+JSON.stringify(bounded)+'\n\n[本次任务]\n'+prompt;
+  }
+  return this.execute(prompt,{id,label,chatType,attachments,sessionKey:key,kind:chatType==='side'?'side':'background',silent:!chatType});
+ }
  async createSideChat(text,attachments=[],title){const m=validateMessage(config.root,text,attachments),id=crypto.randomUUID();this.speech.side(id).user(m.text,m.attachments);this.runIsolated(title||text.slice(0,32),m.text,{id,chatType:'side',attachments:m.attachments}).catch(e=>this.log(e.message));return id;}
  async sendTask(id,text,attachments=[]){const task=this.history.get(id);if(this.running.has(id))throw new TaskError('这个活动正在执行，请稍后补充',409);this.speech.side(id).user(text,attachments);this.runIsolated(task.title,text,{id,chatType:'side',resumeTask:task,attachments}).catch(e=>this.log(e.message));return id;}
  taskHistory(id){const r=this.history.history(id);return this.history.get(id).chatType==='side'?{...r,chatType:'side',messages:this.speech.side(id).history(1000)}:r;}

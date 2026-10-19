@@ -9,7 +9,7 @@ struct PageScaffold<Content:View>:View {
             VStack(alignment:.leading,spacing:24) {
                 PageTitle(title:title,subtitle:subtitle).verificationAction("page-title-"+title)
                 content()
-            }.frame(maxWidth:740,alignment:.leading).padding(.horizontal,40).padding(.top,168).padding(.bottom,38).frame(maxWidth:.infinity)
+            }.frame(maxWidth:740,alignment:.leading).padding(.horizontal,40).padding(.top,36).padding(.bottom,38).frame(maxWidth:.infinity)
         }.scrollContentBackground(.hidden)
     }
 }
@@ -52,6 +52,7 @@ struct RouteView:View {
         case .activity(let id,let t):ActivityPage(id:id,title:t)
         case .goal(let n):GoalDetailPage(name:n)
         case .feedPost(let p):FeedPostDetailPage(path:p)
+        case .ideaQuote(let q):IdeaQuotePage(quote:q)
         case .memoryItem(let t,let p):
             if p == "data/health/days.json" { HealthMemoryPage() } else { MemoryEditor(title:t,path:p) }
         }

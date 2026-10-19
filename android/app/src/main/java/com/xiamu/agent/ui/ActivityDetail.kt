@@ -51,7 +51,7 @@ fun ActivityDetailScreen(route: Route.ActivityDetail, draft: MessageDraft = reme
     }
     DisposableEffect(draft) { onDispose { draft.reset(); Voice.cancel() } }
     val data = history
-    BindConversationScroll(list, scroll, data?.items?.count { it.kind != ActivityItemKind.Tool } ?: 0,
+    BindConversationScroll(list, scroll, data?.items?.size ?: 0,
         data?.items, draft.sentVersion.intValue, ime)
     Screen {
         Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
@@ -66,7 +66,7 @@ fun ActivityDetailScreen(route: Route.ActivityDetail, draft: MessageDraft = reme
                     if (data == null && loadError.isBlank()) item { Loading() }
                     itemsIndexed(data?.items.orEmpty(), key = { index, item -> "${item.kind}:${item.time}:$index" }) { index, item ->
                         when {
-                            item.kind == ActivityItemKind.Tool -> ToolRow(item.tool ?: "工具", item.text, tag = "activity-tool:$index")
+                            item.kind == ActivityItemKind.Tool || item.kind == ActivityItemKind.ToolResult -> ToolRow((if(item.kind == ActivityItemKind.ToolResult) "执行结果 · " else "") + (item.tool ?: "工具"), item.text, tag = "activity-tool:$index")
                             item.isUser -> ChatRow(ChatItem.User(item.text, item.attachments, ts = item.time, id = "activity:$index"), mediaActive = index in visible)
                             else -> Column {
                                 if (index == 0 && item.isInstruction) Text("豆豆交代的", style = Type.body(12), color = Pal.Muted,

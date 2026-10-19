@@ -96,19 +96,15 @@ struct AvatarHeader:View {
     var body:some View {
         Button { Nav.shared.console=true } label: {
             VStack(spacing:0) {
-                AgentAvatar(size:88, expressive:true)
-                    .overlay(alignment:.bottom) {
-                        Text(ProfileStore.shared.agentName).font(Theme.font(size:12,weight:.medium)).lineLimit(1)
-                            .padding(.horizontal,12).padding(.vertical,5).background(Theme.card,in:Capsule())
-                            .overlay(Capsule().strokeBorder(Theme.line,lineWidth:0.5)).offset(y:10)
-                    }
+                AgentAvatar(size:44, expressive:true)
+                Text(ProfileStore.shared.agentName).font(Theme.font(size:13,weight:.medium)).lineLimit(1).padding(.top,5)
                 if !status.isEmpty {
                     HStack(spacing: 5) {
                         Circle().fill(ChatClient.shared.avatarState == .error ? Theme.danger : Theme.accent).frame(width: 5, height: 5)
                         Text(status).lineLimit(1)
-                    }.font(Theme.font(size:11)).foregroundStyle(Theme.sub).padding(.top,20)
+                    }.font(Theme.font(size:11)).foregroundStyle(Theme.sub).padding(.top,4)
                 }
-            }.foregroundStyle(Theme.ink).frame(height:146,alignment:.top)
+            }.foregroundStyle(Theme.ink).frame(height:82,alignment:.top)
         }.buttonStyle(.plain).help("打开控制台").verificationAction("floating-avatar")
     }
 }

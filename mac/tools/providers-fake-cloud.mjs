@@ -21,10 +21,20 @@ let model = {provider:'zenmux',id:builtin.models[0].id};
 const events = [], requests = [];
 const settings = () => ({model,kernel:'openclaw',providers,providerPresets:listProviderPresets()});
 let avatar = {state:'idle'};
-const state = () => ({version:'1.1.0',busy:false,chatEmpty:false,avatar,activities:[],devices:[]});
-const history = [{id:'hello-demo',role:'assistant',source:'say',text:'你好，模型服务可以在设置里添加。',ts:Date.now()}];
+const state = () => ({version:'1.3.0',busy:false,chatEmpty:false,avatar,activities:[],devices:[]});
+const history = [
+ {id:'hello-demo',role:'assistant',source:'say',text:'今晚没有新的安排。你昨天说想早点休息，散步可以轻松一点。',ts:Date.now()-240000},
+ {id:'fixture-user',role:'user',text:'七点去走一小圈，回来整理周末的照片。',ts:Date.now()-180000},
+ {id:'fixture-reply',role:'assistant',source:'say',text:'好，先走 30 分钟。照片不用一次整理完，回来挑 10 张喜欢的就够了。',ts:Date.now()-120000},
+ {id:'fixture-followup',role:'user',text:'别催我。',ts:Date.now()-60000},
+ {id:'fixture-last',role:'assistant',source:'say',text:'好，到点提醒一次。没做完就留到明天。',ts:Date.now()},
+];
+const idea={id:'idea',icon:'🌱',title:'用豆豆安排一次短途散步',description:'最近几次你都想早点结束工作。挑一个有空的傍晚，走十分钟也好。',reply:'帮我安排一次散步'};
+const activity={id:'fixture-activity',title:'找一条散步路线',summary:'已经看过天气，找到一条河边路线。',status:'done',ts:Date.now()-30000};
+const activityItems=[{kind:'prompt',from:'user',text:'附近有没有适合散步的地方？',time:Date.now()-90000},{kind:'tool',tool:'amap.search_places',text:'查询附近的步行路线',time:Date.now()-70000},{kind:'tool_result',tool:'amap.search_places',text:'找到一条适合傍晚步行的河边路线',time:Date.now()-60000},{kind:'result',text:'河边走一小圈，大约 30 分钟。',time:Date.now()-30000}];
+const goals=[{name:'散步',path:'data/goals/散步.md',title:'每周留三晚出去走走',domain:'健康',cadence:'0 19 * * 1,3,5',status:'进行中',progress:40,body:'每次 30 分钟，按自己的节奏。',nextCheckin:new Date(Date.now()+3600000).toISOString()},{name:'照片',path:'data/goals/照片.md',title:'把周末的照片整理成一本小册子',domain:'兴趣',status:'等待条件',progress:20,body:'先挑 10 张喜欢的。'}];
 const server = http.createServer(async (req, res) => {
-  const p = new URL(req.url, 'http://127.0.0.1').pathname;
+  const p = decodeURI(new URL(req.url, 'http://127.0.0.1').pathname);
   const send = (code, body) => { res.writeHead(code, {'content-type':'application/json;charset=utf-8'}); res.end(JSON.stringify(body)); };
   let body = {}; if (['POST','PUT','PATCH'].includes(req.method)) { let raw = ''; for await (const part of req) raw += part; try { body = JSON.parse(raw || '{}'); } catch { return send(400,{error:'JSON 格式错误'}); } }
   // Record only public metadata and whether a key was supplied. Never record the value.
@@ -37,13 +47,24 @@ const server = http.createServer(async (req, res) => {
     }
     return send(200, settings());
   }
+  if (p === '/api/pair' && req.method === 'POST') return send(body.code === '123456' ? 200 : 403,body.code === '123456' ? {token:'local-android-demo-only'} : {error:'配对码不对'});
   if (p === '/api/state') return send(200,state());
   if (p === '/api/history') return send(200,{items:history});
-  if (p === '/api/activities') return send(200,{running:[],recent:[],next:null});
+  if (p === '/api/activities') return send(200,{running:[],recent:[activity],next:null});
+  if (p === '/api/activities/fixture-activity/history') return send(200,{...activity,items:activityItems});
   if (p === '/api/memory') return send(200,{kernel:'openclaw',soul:{name:'豆豆',path:'SOUL.md'},items:[{name:'关于你',path:'USER.md'},{name:'长期记忆',path:'MEMORY.md'},{name:'今天',path:'memory/2026-10-19.md'}],health:'data/health/days.json'});
   if (p === '/api/memory/item') return send(200,{path:'MEMORY.md',text:'# 长期记忆\n\n演示数据。来源：本地界面验收；2026-10-19。',readOnly:false});
-  if(p==='/api/goals')return send(200,{items:[],errors:[]});
-  if(p==='/api/ideas')return send(200,{revision:'fixture',groups:[{name:'最近可以试试',items:[{id:'idea',icon:'🌱',title:'用豆豆安排一次短途散步',description:'根据天气与空闲时间选路线。',reply:'帮我安排一次散步'}]}]});
+  if(p==='/api/feed')return send(200,{days:['2026-10-19'],items:[{path:'data/feed/2026-10-19/1600-salon.md',date:'2026-10-19',title:'你收藏的摄影沙龙开放报名了',source:'演示邮件 · 周末相册',url:'https://example.test/salon',published:'2026-10-19 16:00',icon:'📷',body:'下周三晚上有一场关于日常摄影的小型交流。你之前说想把周末的照片整理成小册子，这次的主题正好是照片叙事。'}],next:null});
+  if(p==='/api/goals')return send(200,{items:goals,errors:[]});
+  if(p==='/api/goals/item')return send(200,goals[0]);
+  if(p==='/api/ideas')return send(200,{revision:'fixture',groups:[{name:'最近可以试试',items:[idea]}]});
+  if (p === '/api/send' && req.method === 'POST') {
+    requests.push({method:req.method,path:p,quoteKind:body.quote?.kind,text:body.text || '',clientId:body.clientId});
+    const id=crypto.randomUUID(),quote=body.quote?.kind==='idea'?{kind:'idea',id:idea.id,revision:'fixture',title:idea.title,emoji:idea.icon,source:'最近可以试试',description:idea.description,reply:idea.reply}:undefined;
+    const user={role:'user',id,text:body.text || '',quote,ts:Date.now()},answer={role:'assistant',id:crypto.randomUUID(),text:'好，先按十分钟来安排。',ts:Date.now()+1};
+    history.push(user,answer);for(const client of ws.clients) if(client.readyState===1){client.send(JSON.stringify({t:'user',...user}));client.send(JSON.stringify({t:'say',...answer}));}
+    return send(200,{ok:true,id});
+  }
   if (p === '/api/profile') return send(200,{name:'豆豆',userName:'演示用户'});
   if (p === '/api/providers' && req.method === 'POST' || p.startsWith('/api/providers/') && req.method === 'PATCH') {
     const old = req.method === 'PATCH' ? providers.find(v => v.id === decodeURIComponent(p.split('/').pop())) : undefined;
@@ -66,7 +87,7 @@ const server = http.createServer(async (req, res) => {
     return send(200,{ok:true});
   }
   if (p === '/__review/select' && req.method === 'POST') { model = body.model; changed(); return send(200,{ok:true}); }
-  send(200,{});
+  send(404,{error:"验收服务没有这个接口"});
 });
 const ws = new WebSocketServer({server});
 ws.on('connection', client => { client.send(JSON.stringify({t:'hello',...state(),history})); });

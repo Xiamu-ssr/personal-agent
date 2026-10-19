@@ -21,10 +21,10 @@ import SwiftUI
         check(Nav.shared.tab == .chat && Nav.shared.sideChat == nil && c.quote == quote && c.focusRevision == 1,"discuss navigates to main composer and requests focus")
         check(requests.isEmpty && c.hasContent,"discussion selection sends no request and allows empty text")
         MockTransport.respond={ r in
-            check(r.url!.path == "/api/feed/feedback","quote uses discuss endpoint")
+            check(r.url!.path == "/api/send","quote uses the main send endpoint")
             let b=try body(r);requests.append(b)
-            check(b["path"] as? String == post.path && b["action"] as? String == "discuss" && b["text"] as? String == "","discuss preserves original path and empty user text")
-            check(b["attachments"] == nil,"discuss does not use ordinary send payload")
+            check((b["quote"] as? [String:Any])?["path"] as? String == post.path && b["text"] as? String == "","discuss preserves original path and empty user text")
+            check((b["attachments"] as? [Any])?.isEmpty == true,"quoted messages use the unified attachment payload")
             if requests.count == 1 {throw URLError(.timedOut)}
             return (200,["ok":true,"id":"discussion"])
         }
@@ -35,6 +35,22 @@ import SwiftUI
         c.discuss(post);c.quote=nil;c.text="取消引用后普通发送"
         MockTransport.respond={r in check(r.url!.path == "/api/send","cancelled quote sends normally");return (200,["ok":true,"id":"ordinary"])}
         check(await c.sendContents(),"ordinary send after cancelling quote")
+
+        let idea=Idea(["id":"idea-1","icon":"🌱","title":"饭后散步","description":"从十分钟开始","reply":"帮我安排饭后散步"])!
+        let ideaQuote=ChatQuote(idea,revision:"revision-1",group:"最近可以试试")
+        check(ChatQuote(ideaQuote.json) == ideaQuote,"Idea history preserves its full snapshot")
+        let ideaComposer=Composer();ideaComposer.reference(ideaQuote)
+        check(ideaComposer.hasContent && ideaComposer.text.isEmpty && ideaComposer.focusRevision == 1,"Idea selection stages a quote without sending")
+        var ideaSends=0
+        ideaComposer.delivery={message in
+            ideaSends += 1;check(message.endpoint == "/api/send","Idea sends to the main conversation")
+            let reference=message.body["quote"] as! [String:Any]
+            check(reference["id"] as? String == "idea-1" && reference["revision"] as? String == "revision-1" && reference["reply"] == nil,"cloud resolves the selected Idea by identity and revision")
+        }
+        check(ideaSends == 0,"staging an Idea does not send")
+        check(await ideaComposer.sendContents(),"quote-only Idea can be sent")
+        ideaComposer.reference(ideaQuote);ideaComposer.text="只走十分钟"
+        check(await ideaComposer.sendContents() && ideaSends == 2,"Idea accepts an optional comment")
 
         var ids:[String]=[];let retry=Composer();retry.text="只发一次"
         MockTransport.respond={r in ids.append(try body(r)["clientId"] as! String);if ids.count == 1 {throw URLError(.networkConnectionLost)};return (200,["ok":true,"id":"one"])}

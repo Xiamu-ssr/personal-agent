@@ -158,6 +158,35 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         _ = try await Api.json("/__review/avatar",method:"POST",body:["state":"idle"])
         Nav.shared.go(.settings); try await shot("34-settings-dark")
         AppearanceStore.shared.select(.light); try await shot("35-settings-light")
+        Nav.shared.go(.goals); try await shot("36-goals-light")
+        Nav.shared.go(.ideas)
+        try await until("personalized Idea row") {VerificationActionAnchor.views.object(forKey:"idea-idea")?.window != nil}
+        try await shot("37-ideas-light")
+        let beforeIdea=try await Api.json("/__review/state")
+        let beforeCount=(beforeIdea["requests"] as! [[String:Any]]).filter{$0["path"] as? String == "/api/send"}.count
+        try await press("idea-idea")
+        try await until("Idea quote staged") {Composer.shared.quote?.kind == "idea" && Nav.shared.tab == .chat}
+        let staged=try await Api.json("/__review/state")
+        try check((staged["requests"] as! [[String:Any]]).filter{$0["path"] as? String == "/api/send"}.count == beforeCount,"clicking an Idea only stages a quote and sends no request")
+        try check(Composer.shared.hasContent && Composer.shared.text.isEmpty,"quoted Idea can be sent without extra words")
+        try await shot("38-idea-quote-composer")
+        try await press("composer-send")
+        try await until("Idea receipt") {Composer.shared.quote == nil && ChatClient.shared.items.contains{$0.quote?.kind == "idea"}}
+        try check(ChatClient.shared.items.last(where:{$0.quote?.kind == "idea"})?.text == "","quote-only Idea remains a visible chat message")
+        try await shot("39-idea-quote-message")
+        Nav.shared.go(.ideas);try await press("idea-idea")
+        Composer.shared.text="只走十分钟";try await press("composer-send")
+        try await until("Idea with comment receipt") {Composer.shared.quote == nil && ChatClient.shared.items.contains{$0.quote?.kind == "idea" && $0.text == "只走十分钟"}}
+        try check(true,"optional comment travels with the Idea quote")
+        ChatClient.shared.stop();ChatClient.shared.start()
+        try await until("quote history reconnect") {ChatClient.shared.connected && ChatClient.shared.items.contains{$0.quote?.kind == "idea" && $0.quote?.reply == "帮我安排一次散步"}}
+        try check(true,"reconnection preserves the adopted Idea snapshot")
+        Nav.shared.go(.chat);Nav.shared.push(.activity(id:"fixture-activity",title:"找一条散步路线"))
+        window.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true);try await pause(1000)
+        try await shot("40-activity-before-expand")
+        try await press("activity-step-2")
+        try check(true,"activity detail renders a tool_result record")
+        try await shot("40-activity-tool-result")
         let result:[String:Any] = ["checks":checks,"screenshots":shots.sorted(),"capture":captureMethod,"isolatedUserData":true,"fixture":"scripted contract cloud","keyLogged":false,"requests":requests]
         try JSONSerialization.data(withJSONObject:result,options:[.prettyPrinted,.sortedKeys]).write(to:output.appendingPathComponent("providers-acceptance.json"))
     }

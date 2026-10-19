@@ -12,7 +12,7 @@ enum Route: Hashable {
     case web(title:String,path:String), doc(title:String,path:String)
     case connectors(tab:Int,focus:String?=nil), connector(String), connectorForm(name:String,accountID:String?)
     case modelProvider(String?)
-    case devices, skills, agentSetting(AgentSetting), activity(id:String,title:String), goal(String), memoryItem(title:String,path:String), feedPost(String)
+    case devices, skills, agentSetting(AgentSetting), activity(id:String,title:String), goal(String), memoryItem(title:String,path:String), feedPost(String), ideaQuote(ChatQuote)
 }
 @Observable final class Nav {
     static let shared=Nav()
@@ -50,6 +50,7 @@ enum Route: Hashable {
         }
     }
     @MainActor func openQuote(_ quote:ChatQuote) {
+        if quote.kind == "idea" {stacks[.ideas]=[];push(.ideaQuote(quote),in:.ideas);console=false;AppDelegate.openMain?();MenuController.shared.close();return}
         stacks[.feed]=[];tab = .feed;console=false
         if FeedStore.shared.items.contains(where:{$0.path == quote.path}) {feedTarget=quote.path}
         else {push(.feedPost(quote.path),in:.feed)}

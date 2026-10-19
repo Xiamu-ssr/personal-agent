@@ -153,7 +153,7 @@ struct BackgroundActivity: Identifiable, Equatable {
             guard response["ok"] as? Bool == true,let id=response["id"] as? String,!id.isEmpty else {throw ApiError(code:0,message:"消息还没有确认，请重试")}
             // The websocket echo may have arrived before this acknowledgement. Both use the server ID.
             var row:[String:Any]=["id":id,"role":"user","text":text,"attachments":attachments.map(\.json),"clientId":clientID,"ts":Date().timeIntervalSince1970*1000]
-            if let quote {row["quote"]=["kind":"feed","path":quote.path,"title":quote.title,"emoji":quote.emoji,"source":quote.source]}
+            if let quote {row["quote"]=quote.json}
             if !items.contains(where:{$0.serverID == id}) {transcript.receive(row)}
             transcript.sentRevision += 1;error=""
         } catch {self.error=error.localizedDescription;throw error}

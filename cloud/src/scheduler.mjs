@@ -119,7 +119,7 @@ export class Schedules {
       const success = readJson(this.successFile, {});
       const prompt = ["feed", "goal", "ideas", "heartbeat"].includes(job.kind) ? schedulePrompt(job.kind, { lastSuccess: success[job.id], goal: job.goal, prompts: this.prompts }) : job.prompt;
       if (typeof prompt !== "string" || !prompt.trim()) throw new Error("定时安排缺少提示词");
-      done = ["goal","heartbeat","reminder"].includes(job.kind) ? this.harness.runMain(prompt, { id, label: triggerTitle(prompt), reportError: false }) : this.harness.runIsolated(label, prompt, { id });
+      done = ["goal","heartbeat","reminder"].includes(job.kind) ? this.harness.runMain(prompt, { id, label: triggerTitle(prompt), reportError: false }) : this.harness.runIsolated(label, prompt, { id, mainContext: true });
     }
     this.active.set(job.id, { id, done });
     const finished = done.then((result) => {

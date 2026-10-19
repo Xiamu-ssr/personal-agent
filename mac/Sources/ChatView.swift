@@ -178,7 +178,7 @@ struct ChatPage:View {
     @Environment(\.interactiveWindow) private var active
     var body:some View {
         VStack(spacing:0) {
-            ChatMessages(transcript:transcript,emptyText:thread == nil ? "豆豆正在准备第一次聊天…" : "在这里聊一个新的话题。",topInset:154)
+            ChatMessages(transcript:transcript,emptyText:thread == nil ? "豆豆正在准备第一次聊天…" : "在这里聊一个新的话题。",topInset:82)
             if let error=[thread?.error ?? chat.error,transcript.error].first(where:{!$0.isEmpty}) {
                 HStack {Text(error).font(Theme.font(size:12)).foregroundStyle(Theme.sub)
                     if !chat.connected {Button("重连"){chat.reconnect()}.buttonStyle(.plain)}
@@ -235,9 +235,9 @@ struct MessageRow:View {
                         if let quote=item.quote {
                             Button {Nav.shared.openQuote(quote)} label: {QuoteCard(quote:quote)}.buttonStyle(.plain).verificationAction("quote-"+item.serverID)
                         }
-                        if !item.text.isEmpty {MarkdownView(text:item.text,size:compact ? 13 : 15).textSelection(.enabled)}
+                        if !item.text.isEmpty {MarkdownView(text:item.text,size:compact ? 13 : 16).textSelection(.enabled)}
                     }.padding(.horizontal,16).padding(.vertical,13)
-                        .background(item.kind == .user ? Theme.userBubble : Theme.card,in:RoundedRectangle(cornerRadius:22,style:.continuous))
+                        .background(item.kind == .user ? Theme.userBubble : Theme.card,in:RoundedRectangle(cornerRadius:18,style:.continuous))
                 }
                 if !item.attachments.isEmpty { MessageAttachments(attachments:item.attachments,compact:compact) }
                 ForEach(Array(item.cards.enumerated()),id:\.offset) { SayCardView(card:$0.element,compact:compact) }

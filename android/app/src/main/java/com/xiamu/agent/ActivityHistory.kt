@@ -8,7 +8,7 @@ enum class ActivityStatus(val wire: String, val label: String) {
     companion object { fun from(value: String) = entries.firstOrNull { it.wire == value } ?: error("活动状态无法识别") }
 }
 enum class ActivityItemKind(val wire: String) {
-    Prompt("prompt"), Text("text"), Tool("tool"), Result("result");
+    Prompt("prompt"), Text("text"), Tool("tool"), ToolResult("tool_result"), Result("result");
     companion object { fun from(value: String) = entries.firstOrNull { it.wire == value } ?: error("活动记录无法识别") }
 }
 data class ActivityHistoryItem(val kind: ActivityItemKind, val text: String, val tool: String?, val time: Long,
@@ -31,7 +31,7 @@ data class ActivityHistoryItem(val kind: ActivityItemKind, val text: String, val
 }
 data class ActivityHistory(val id: String, val title: String, val status: ActivityStatus, val items: List<ActivityHistoryItem>) {
     val prompts: List<ActivityHistoryItem> get() = items.filter { it.kind == ActivityItemKind.Prompt }
-    val steps: List<ActivityHistoryItem> get() = items.filter { it.kind == ActivityItemKind.Tool || it.kind == ActivityItemKind.Text }
+    val steps: List<ActivityHistoryItem> get() = items.filter { it.kind in setOf(ActivityItemKind.Tool, ActivityItemKind.ToolResult, ActivityItemKind.Text) }
     val results: List<ActivityHistoryItem> get() = items.filter { it.kind == ActivityItemKind.Result }
 
     companion object {

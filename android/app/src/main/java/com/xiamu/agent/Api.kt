@@ -33,7 +33,7 @@ object Api {
 
     private val slow: OkHttpClient = http.newBuilder().writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build()
 
-    val authHeader: Map<String, String> get() = mapOf("Authorization" to "Bearer ${Prefs.token}","X-Doudou-Protocol" to "1")
+    val authHeader: Map<String, String> get() = mapOf("Authorization" to "Bearer ${Prefs.token}","X-Doudou-Protocol" to "2")
 
     internal fun serverUri(server: String = Prefs.server): URI? {
         val parsed = server.toHttpUrlOrNull() ?: return null
@@ -58,10 +58,10 @@ object Api {
     fun socketRequest(path: String): Request? {
         val base = serverUri()?.toASCIIString()?.trimEnd('/')
             ?.replaceFirst("https://", "wss://")?.replaceFirst("http://", "ws://") ?: return null
-        return Request.Builder().header("X-Doudou-Protocol", "1").url("$base$path").header("Authorization", "Bearer ${Prefs.token}").build()
+        return Request.Builder().header("X-Doudou-Protocol", "2").url("$base$path").header("Authorization", "Bearer ${Prefs.token}").build()
     }
 
-    private fun req(path: String) = Request.Builder().header("X-Doudou-Protocol", "1").url(url(path)).header("Authorization", "Bearer ${Prefs.token}")
+    private fun req(path: String) = Request.Builder().header("X-Doudou-Protocol", "2").url(url(path)).header("Authorization", "Bearer ${Prefs.token}")
 
     private suspend fun <T> fetch(r: Request, client: OkHttpClient, read: (Response) -> T): T = suspendCancellableCoroutine { cont ->
         val call = client.newCall(r)
@@ -141,7 +141,6 @@ object Api {
     suspend fun saveFeedSettings(value: FeedSettings): FeedSettings { value.validate(); return FeedSettings.from(putJson("/api/feed/settings",value.json())) }
     suspend fun feedback(path: String,action: String) = postJson("/api/feed/feedback",JSONObject().put("path",path).put("action",action))
     suspend fun ideas() = Ideas.from(getJson("/api/ideas"))
-    suspend fun clickIdea(id: String,revision: String) = postJson("/api/ideas/click",JSONObject().put("id",id).put("revision",revision))
     suspend fun goals() = getJson("/api/goals")
     suspend fun goal(name: String) = Goal.from(getJson("/api/goals/item?name=${encode(name)}"))
     suspend fun library() = Library.from(getJson("/api/library"))
@@ -177,7 +176,7 @@ object Api {
         dest.parentFile?.mkdirs()
         val temp = File.createTempFile("download-", ".part", dest.parentFile)
         try {
-            val request = Request.Builder().header("X-Doudou-Protocol", "1").url(fileUrl(dataPath)).apply { authHeader.forEach { (key, value) -> header(key, value) } }.build()
+            val request = Request.Builder().header("X-Doudou-Protocol", "2").url(fileUrl(dataPath)).apply { authHeader.forEach { (key, value) -> header(key, value) } }.build()
             fetch(request, http) { response ->
                 val body = response.body ?: throw IOException("文件不可用")
                 body.byteStream().use { input -> temp.outputStream().use { output -> input.copyTo(output) } }
@@ -220,9 +219,9 @@ object Api {
         val pw = password.trim()
         val token = if (pw.matches(Regex("\\d{6}"))) {
             val body = JSONObject().put("code", pw).toString().toRequestBody("application/json".toMediaType())
-            JSONObject(call(Request.Builder().header("X-Doudou-Protocol", "1").url("$base/api/pair").post(body).build())).getString("token")
+            JSONObject(call(Request.Builder().header("X-Doudou-Protocol", "2").url("$base/api/pair").post(body).build())).getString("token")
         } else pw
-        val state = JSONObject(call(Request.Builder().header("X-Doudou-Protocol", "1").url("$base/api/state").header("Authorization", "Bearer $token").build()))
+        val state = JSONObject(call(Request.Builder().header("X-Doudou-Protocol", "2").url("$base/api/state").header("Authorization", "Bearer $token").build()))
         Prefs.server = base
         Prefs.token = token
         return state

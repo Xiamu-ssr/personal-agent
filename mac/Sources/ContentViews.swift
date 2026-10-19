@@ -41,9 +41,9 @@ struct FeedPage:View {
     private func refresh() {
         refreshing=true; Task { defer { refreshing=false }; do { let r=try await Api.json("/api/feed/refresh",method:"POST"); Nav.shared.show(r["mode"] as? String == "skipped" ? "豆豆已经在更新动态了" : "豆豆开始找新动态了") } catch { Nav.shared.show(error.localizedDescription) } }
     }
-    private func act(_ p:FeedPost,_ action:String,text:String="") async -> Bool {
+    private func act(_ p:FeedPost,_ action:String) async -> Bool {
         guard !sending.contains(p.path) else { return false }; sending.insert(p.path); defer { sending.remove(p.path) }
-        do { _ = try await Api.json("/api/feed/feedback",method:"POST",body:["path":p.path,"action":action,"text":text]); if action != "discuss" { feedback[p.path]=action }; return true }
+        do { _ = try await Api.json("/api/feed/feedback",method:"POST",body:["path":p.path,"action":action]); feedback[p.path]=action; return true }
         catch { Nav.shared.show(error.localizedDescription); return false }
     }
     private func post(_ p:FeedPost)->some View {
@@ -107,7 +107,7 @@ struct IdeasPage:View {
                     Text(group.name).font(Theme.font(size:12,weight:.medium)).foregroundStyle(Theme.sub).padding(.bottom,6)
                     ForEach(group.items) { idea in Button { choose(idea) } label: {
                         HStack(alignment:.top,spacing:15) { Text(idea.icon).font(.system(size:28)); VStack(alignment:.leading,spacing:8) {
-                            Text(idea.title).font(Theme.font(size:16,weight:.semibold))
+                            Text(idea.title).font(Theme.font(size:16,weight:.medium))
                             Text(idea.description).font(Theme.font(size:13)).foregroundStyle(Theme.sub).fixedSize(horizontal:false,vertical:true)
                         }; Spacer(); Image(systemName:"arrow.up.left").font(.system(size:11)).foregroundStyle(Theme.sub) }.padding(.vertical,20).contentShape(Rectangle())
                     }.buttonStyle(.plain).verificationAction("idea-"+idea.id).disabled(working); Rectangle().fill(Theme.line).frame(height:1) }
@@ -122,10 +122,7 @@ struct IdeasPage:View {
         catch { self.error=error.localizedDescription }
     }
     private func choose(_ idea:Idea) {
-        working=true; Task { defer { working=false }; do { _ = try await Api.json("/api/ideas/click",method:"POST",body:["id":idea.id,"revision":revision]); Nav.shared.go(.chat) }
-            catch let e as ApiError where e.code == 409 { error="点子刚刚更新了，请重新选择"; await load() }
-            catch { self.error=error.localizedDescription }
-        }
+        Composer.shared.reference(ChatQuote(idea,revision:revision,group:groups.first{$0.items.contains{$0.id == idea.id}}?.name ?? "点子"))
     }
     private func refresh() { working=true; Task { defer { working=false }; do { _ = try await Api.json("/api/ideas/refresh",method:"POST"); Nav.shared.show("豆豆开始想新点子了") } catch { self.error=error.localizedDescription } } }
 }
@@ -138,11 +135,11 @@ struct GoalsPage:View {
             SectionTitle(text:"正在跟进")
             if goals.isEmpty { Note(text:"还没有目标，聊聊你想改变的事") }
             ForEach(goals) { goal in Button { Nav.shared.push(.goal(goal.name)) } label: {
-                VStack(alignment:.leading,spacing:12) {
+                VStack(alignment:.leading,spacing:10) {
                     HStack { Text(goal.title).font(Theme.font(size:16,weight:.medium)); Spacer(); Text("\(goal.progress.formatted(.number.precision(.fractionLength(0...1))))%").font(Theme.font(size:12)) }
-                    ProgressView(value:Double(goal.progress),total:100).tint(Theme.ink)
-                    Text(goal.nextCheckin.map { "下次跟进 · "+Fmt.when($0) } ?? (goal.status == "正在跟进" ? "跟进已停用" : goal.status)).font(Theme.font(size:12)).foregroundStyle(Theme.sub)
-                }.card(radius:18,padding:20).contentShape(Rectangle())
+                    ProgressView(value:Double(goal.progress),total:100).tint(Theme.accent)
+                    Text(goal.status + (goal.nextCheckin.map { " · 下次跟进 "+Fmt.when($0) } ?? "")).font(Theme.font(size:12)).foregroundStyle(Theme.sub)
+                }.padding(.vertical,16).contentShape(Rectangle())
             }.buttonStyle(.plain) }
             SectionTitle(text:"创建目标").padding(.top,8)
             Text("先一起把目标聊清楚，再约定计划和跟进频率。").font(Theme.font(size:13)).foregroundStyle(Theme.sub)

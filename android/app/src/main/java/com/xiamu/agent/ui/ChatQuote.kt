@@ -15,14 +15,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiamu.agent.Api
-import com.xiamu.agent.FeedQuote
+import com.xiamu.agent.ChatQuote
 
 @Composable
-fun FeedQuoteCard(quote: FeedQuote, modifier: Modifier = Modifier, onCancel: (() -> Unit)? = null, onOpen: (() -> Unit)? = null) {
+fun ChatQuoteCard(quote: ChatQuote, modifier: Modifier = Modifier, onCancel: (() -> Unit)? = null, onOpen: (() -> Unit)? = null) {
     Row(modifier.clip(RoundedCornerShape(14.dp)).background(Pal.Quiet)
         .then(if(onOpen!=null) Modifier.tap(onClick=onOpen) else Modifier).padding(start=12.dp,end=6.dp,top=10.dp,bottom=10.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-        Text(quote.emoji.ifBlank { "📰" },fontSize=23.sp)
+        Text(quote.emoji.ifBlank { if(quote.kind == "idea") "💡" else "📰" },fontSize=23.sp)
         Column(Modifier.weight(1f)) {
             Text(quote.title,style=Type.title(13),color=Pal.Ink,maxLines=2,overflow=TextOverflow.Ellipsis)
             if(quote.source.isNotBlank()) Text(quote.source,style=Type.body(11),color=Pal.Muted,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -34,11 +34,20 @@ fun FeedQuoteCard(quote: FeedQuote, modifier: Modifier = Modifier, onCancel: (()
 }
 
 @Composable
-fun FeedDetailScreen(quote: FeedQuote) {
+fun FeedDetailScreen(quote: ChatQuote) {
     val (post,error)=load("feed-item:${quote.path}",cacheValue=false) { Api.feedItem(quote.path) }
     SubPage("动态详情") {
         if(post!=null) item { FeedPostView(post) }
         else if(error.isBlank()) item { Loading() }
-        else item { FeedQuoteCard(quote,Modifier.fillMaxWidth()); ErrorNote(error) }
+        else item { ChatQuoteCard(quote,Modifier.fillMaxWidth()); ErrorNote(error) }
+    }
+}
+
+@Composable
+fun IdeaDetailScreen(quote: ChatQuote) {
+    SubPage("引用的点子") {
+        item { BigTitle(quote.title, quote.source) }
+        if(quote.description.isNotBlank()) item { Markdown(quote.description) }
+        item { SectionTitle("可以这样开始"); Markdown(quote.reply) }
     }
 }

@@ -22,7 +22,7 @@ fun IdeasScreen(bottom: Dp) {
     var sending by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=pagePadding(bottom)) {
         item { Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
-            Text("点子",style=Type.title(23),color=Pal.Ink,modifier=Modifier.weight(1f))
+            Text("新想法",style=Type.body(13),color=Pal.Muted,modifier=Modifier.weight(1f))
             QuietButton("换一批") { if(!sending) { sending=true; scope.launch {
                 try { val r=Api.postJson("/api/ideas/refresh"); notice=if(r.optString("mode")=="skipped") "正在想新点子" else "豆豆正在想新点子，准备好会放在这里" }
                 catch(e: CancellationException) { throw e } catch(e: Exception) { notice=e.message ?: "换批失败" } finally { sending=false }
@@ -33,18 +33,14 @@ fun IdeasScreen(bottom: Dp) {
         ideas?.groups?.forEach { group ->
             item { SectionTitle(group.name) }
             group.items.forEach { idea -> item(key=idea.id) {
-                Row(Modifier.fillMaxWidth().padding(bottom=10.dp).card().tap(!sending) {
-                    sending=true
-                    scope.launch {
-                        try { Api.clickIdea(idea.id,ideas.revision); Nav.home(0) }
-                        catch(e: CancellationException) { throw e }
-                        catch(e: Exception) { notice=if(e is Api.ApiError && e.code==409) "这批点子已更新，请重新打开" else e.message ?: "发送失败"; Chat.filesVersion.intValue++ }
-                        finally { sending=false }
-                    }
-                }.padding(16.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Text(idea.icon.ifBlank { "💡" },fontSize=26.sp)
-                    Column { Text(idea.title,style=Type.title(15),color=Pal.Ink); Text(idea.description,style=Type.body(13),color=Pal.Muted,modifier=Modifier.padding(top=6.dp)) }
+                Row(Modifier.fillMaxWidth().tap {
+                    Draft.reference(ChatQuote.from(idea, ideas.revision, group.name))
+                }.padding(horizontal=4.dp,vertical=18.dp),horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+                    Text(idea.icon.ifBlank { "💡" },fontSize=23.sp)
+                    Column(Modifier.weight(1f)) { Text(idea.title,style=Type.title(16),color=Pal.Ink); Text(idea.description,style=Type.body(13),color=Pal.Muted,modifier=Modifier.padding(top=5.dp)) }
+                    Icon(Icons.Outlined.NorthWest,null,tint=Pal.Muted,modifier=Modifier.padding(top=4.dp).size(15.dp))
                 }
+                Hairline()
             } }
         }
         if(notice.isNotBlank()) item { FooterNote(notice) }
@@ -60,15 +56,16 @@ fun GoalsScreen(bottom: Dp) {
     var domain by remember { mutableStateOf<String?>(null) }
     val context=ctx()
     LazyColumn(Modifier.fillMaxSize(),contentPadding=pagePadding(bottom)) {
-        item { Text("目标",style=Type.title(23),color=Pal.Ink,modifier=Modifier.padding(top=8.dp,bottom=8.dp)); SectionTitle("正在跟进") }
+        item { SectionTitle("正在跟进") }
         if(json==null) item { if(error.isBlank()) Loading() else ErrorNote(error) }
         if(json!=null && goals.orEmpty().none { it.status !in listOf("已完成","取消") }) item { EmptyNote("从一个小目标开始，豆豆陪你跟进。") }
         goals.orEmpty().filter { it.status !in listOf("已完成","取消") }.forEach { goal -> item(key=goal.name) {
-            Column(Modifier.fillMaxWidth().padding(bottom=10.dp).card().tap { Nav.open(Route.GoalDetail(goal.name)) }.padding(17.dp)) {
+            Column(Modifier.fillMaxWidth().tap { Nav.open(Route.GoalDetail(goal.name)) }.padding(horizontal=4.dp,vertical=18.dp)) {
                 Row { Text(goal.title,style=Type.title(16),color=Pal.Ink,modifier=Modifier.weight(1f)); Text("${goal.progress}%",style=Type.body(13),color=Pal.Muted) }
-                LinearProgressIndicator(progress={goal.progress/100f},color=Pal.Ink,trackColor=Pal.Line,modifier=Modifier.fillMaxWidth().padding(top=14.dp,bottom=10.dp).height(4.dp))
-                Text("下次跟进 · ${checkinLabel(goal.nextCheckin)}",style=Type.body(12),color=Pal.Muted)
+                LinearProgressIndicator(progress={goal.progress/100f},color=Pal.Accent,trackColor=Pal.Line,modifier=Modifier.fillMaxWidth().padding(top=12.dp,bottom=9.dp).height(3.dp))
+                Text("${goal.status} · 下次跟进 ${checkinLabel(goal.nextCheckin)}",style=Type.body(12),color=Pal.Muted)
             }
+            Hairline()
         } }
         val errors=json?.optJSONArray("errors").objects()
         if(errors.isNotEmpty()) item { ErrorNote(errors.joinToString("\n") { "${it.optString("name")}：${it.optString("error")}" }) }
@@ -106,7 +103,7 @@ fun LibraryScreen(bottom: Dp) {
     val scope=rememberCoroutineScope()
     var selected by remember { mutableStateOf<Artifact?>(null) }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=pagePadding(bottom)) {
-        item { Text("资源库",style=Type.title(23),color=Pal.Ink,modifier=Modifier.padding(top=8.dp)); SectionTitle("构件") }
+        item { SectionTitle("页面与文档") }
         if(library==null) item { if(error.isBlank()) Loading() else ErrorNote(error) }
         if(library?.artifacts?.isEmpty()==true) item { EmptyNote("豆豆做的页面和文档会放在这里。") }
         library?.artifacts?.chunked(2)?.forEach { row -> item { Row(Modifier.padding(bottom=14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {

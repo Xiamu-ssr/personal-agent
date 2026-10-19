@@ -107,15 +107,38 @@ export class Content {
     if (added.length) this.bus.emit({ t: "feed_new", items: added.map(({ path, title, date }) => ({ path, title, date })) });
     return added;
   }
-  async feedback({ path: rel, action, text = "" }, send) {
-    const types = { like: "赞", dislike: "踩", discuss: "讨论" };
-    if (!types[action] || typeof text !== "string" || text.length > 8000) throw problem("反馈必须是 like、dislike 或 discuss");
-    const post = this.post(rel), record = { path: rel, title: post.title, action: types[action], text: text.trim(), ts: this.clock().getTime() };
-    const quote = { kind: "feed", path: rel, title: post.title, emoji: post.icon, source: post.source };
-    const promptText = `[讨论动态]\n${post.title}\n来源：${post.source}\n${post.url}\n帖子路径：${rel}\n${post.body}\n\n${text.trim() || "聊聊这条动态。"}`;
-    const id = action === "discuss" ? await send(text.trim(), "feed", [], { quote, promptText }) : undefined;
-    appendJsonl(path.join(this.root, "data/feed/反馈.jsonl"), record);
-    return { ok: true, ...(id && { id }) };
+  feedback({ path: rel, action }) {
+    const types = { like: "赞", dislike: "踩" };
+    if (!types[action]) throw problem("反馈必须是 like 或 dislike");
+    const post = this.post(rel);
+    appendJsonl(path.join(this.root, "data/feed/反馈.jsonl"), { path: rel, title: post.title, action: types[action], ts: this.clock().getTime() });
+    return { ok: true };
+  }
+  async sendMessage({ text = "", attachments = [], quote: reference }, send) {
+    if (!reference) return { ok: true, id: await send(text, "http", attachments) };
+    if (typeof text !== "string" || text.length > 8000) throw problem("引用附言限 8000 字");
+    let quote, promptText, feedbackFile, record;
+    if (reference.kind === "feed") {
+      const rel = reference.path;
+      const post = this.post(rel);
+      quote = { kind: "feed", path: rel, title: post.title, emoji: post.icon, source: post.source };
+      promptText = `[讨论动态]\n${post.title}\n来源：${post.source}\n${post.url}\n帖子路径：${rel}\n${post.body}\n\n${text.trim() || "聊聊这条动态。"}`;
+      feedbackFile = "data/feed/反馈.jsonl";
+      record = { path: rel, title: post.title, action: "讨论" };
+    } else if (reference.kind === "idea") {
+      const current = this.ideas();
+      if (reference.revision !== current.revision) throw problem("点子已经换了一批，请重新选择；附言已保留", 409);
+      const group = current.groups.find(g => g.items.some(i => i.id === reference.id));
+      const item = group?.items.find(i => i.id === reference.id);
+      if (!item) throw problem("没有这个点子，请重新选择", 404);
+      quote = { kind: "idea", id: item.id, revision: current.revision, title: item.title, emoji: item.icon, source: group.name, description: item.description, reply: item.reply };
+      promptText = `[用户引用点子]\n${item.title}\n${item.description}\n用户采纳的建议：${item.reply}\n\n用户附言：${text.trim() || "按这个点子开始。"}`;
+      feedbackFile = "data/ideas/反馈.jsonl";
+      record = { id: item.id, revision: current.revision, title: item.title, reply: item.reply, action: "采纳" };
+    } else throw problem("引用类型必须是 feed 或 idea");
+    const id = await send(text.trim(), quote.kind, attachments, { quote, promptText });
+    appendJsonl(path.join(this.root, feedbackFile), { ...record, text: text.trim(), ts: this.clock().getTime() });
+    return { ok: true, id };
   }
   feedSettings() {
     const saved = readJson(path.join(this.root, "system/feed-settings.json"), {});
@@ -135,17 +158,6 @@ export class Content {
   }
   ideas() {
     try { return parseIdeas(this.read("data/ideas/点子.md")); } catch { return parseIdeas(""); }
-  }
-  async clickIdea({ id, revision }, send) {
-    const current = this.ideas();
-    if (revision !== undefined && revision !== current.revision) throw problem("点子已经换了一批，请刷新", 409);
-    for (const group of current.groups) {
-      const item = group.items.find((i) => i.id === id);
-      if (!item) continue;
-      appendJsonl(path.join(this.root, "data/ideas/点击.jsonl"), { id, revision: current.revision, group: group.name, title: item.title, reply: item.reply, ts: this.clock().getTime() });
-      return { ok: true, id: await send(item.reply, "idea") };
-    }
-    throw problem("没有这个点子，请刷新", 404);
   }
   goal(name, done = false) {
     return readGoal(this.root, name, { done, timezone: this.timezone, now: this.clock() });

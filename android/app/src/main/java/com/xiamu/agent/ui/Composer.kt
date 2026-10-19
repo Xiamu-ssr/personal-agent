@@ -96,7 +96,7 @@ import com.xiamu.agent.Attachment
 import com.xiamu.agent.Chat
 import com.xiamu.agent.AttachmentDraft
 import com.xiamu.agent.FeedPost
-import com.xiamu.agent.FeedQuote
+import com.xiamu.agent.ChatQuote
 import com.xiamu.agent.OutgoingMessage
 import com.xiamu.agent.SendAttempt
 import org.json.JSONObject
@@ -126,7 +126,7 @@ open class MessageDraft(private val taskId: String? = null,private val sendMessa
     val text = mutableStateOf("")
     private val selection = mutableStateOf(AttachmentDraft<Picked>())
     val picked get() = selection.value.items
-    val quote = mutableStateOf<FeedQuote?>(null)
+    val quote = mutableStateOf<ChatQuote?>(null)
     val focusVersion = mutableIntStateOf(0)
     val sending = mutableStateOf(false)
     val voiceMode = mutableStateOf(false)
@@ -141,7 +141,10 @@ open class MessageDraft(private val taskId: String? = null,private val sendMessa
 
     fun add(p: Picked) { selection.value = selection.value.add(listOf(p)) }
     fun discuss(post: FeedPost) {
-        quote.value = FeedQuote.from(post)
+        reference(ChatQuote.from(post))
+    }
+    fun reference(value: ChatQuote) {
+        quote.value = value
         voiceMode.value = false
         focusVersion.intValue++
         Nav.home(0)
@@ -162,10 +165,10 @@ open class MessageDraft(private val taskId: String? = null,private val sendMessa
     /** Wait for the cloud receipt; failed uploads and sends retain the same selection and UUID. */
     fun send(ctx: Context, text: String = this.text.value.trim(), extra: List<Picked> = emptyList(), includeDraft: Boolean = true, onDone: () -> Unit = {}): Boolean {
         val discussion = if(includeDraft) quote.value else null
-        // Feed feedback accepts text. An existing attachment draft stays intact while discussing.
-        val files = (if (includeDraft && discussion==null) picked.toList() else emptyList()) + extra
+        // A quote and its optional comment use the same delivery path as other messages.
+        val files = (if (includeDraft) picked.toList() else emptyList()) + extra
         if (sending.value || (text.isBlank() && files.isEmpty() && discussion==null)) { onDone(); return false }
-        val key=JSONObject().put("text",text).put("files",JSONArray(files.map { it.id })).put("quote",discussion?.path).toString()
+        val key=JSONObject().put("text",text).put("files",JSONArray(files.map { it.id })).put("quote",discussion?.reference()).toString()
         val clientId=attempt.begin(key) ?: return false
         if (taskId == null && sendMessage == null) Nav.home(0)
         sending.value = true
@@ -316,10 +319,10 @@ fun MessageComposer(draft: MessageDraft, hint: String) {
             Text(note, fontSize = Type.Secondary, color = Pal.Danger, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
         }
         draft.quote.value?.let { quote ->
-            FeedQuoteCard(quote,Modifier.fillMaxWidth().padding(bottom=8.dp),onCancel={if(!draft.sending.value) draft.quote.value=null})
+            ChatQuoteCard(quote,Modifier.fillMaxWidth().padding(bottom=8.dp),onCancel={if(!draft.sending.value) draft.quote.value=null})
             if(draft.picked.isNotEmpty()) Text("附件保留在草稿中",style=Type.body(11),color=Pal.Muted,modifier=Modifier.padding(start=12.dp,bottom=6.dp))
         }
-        if (draft.quote.value==null && draft.picked.isNotEmpty()) PickedRow(draft)
+        if (draft.picked.isNotEmpty()) PickedRow(draft)
         InputPill(draft, hint)
     }
 }
@@ -427,7 +430,7 @@ private fun InputPill(draft: MessageDraft, hint: String) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            PillIcon(Icons.Outlined.Add, "添加", enabled = !sending && draft.quote.value==null) { menu = true }
+            PillIcon(Icons.Outlined.Add, "添加", enabled = !sending) { menu = true }
             DropdownMenu(
                 expanded = menu, onDismissRequest = { menu = false },
                 shape = RoundedCornerShape(18.dp), containerColor = Pal.Card, shadowElevation = 6.dp,

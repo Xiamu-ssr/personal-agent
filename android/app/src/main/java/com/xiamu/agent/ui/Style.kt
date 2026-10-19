@@ -74,17 +74,17 @@ object ThemeState {
 }
 object Pal {
     private val dark get()=ThemeState.dark.value
-    val Background get()=if(dark) Color(0xFF111714) else Color(0xFFF8FAF7)
-    val Ink get()=if(dark) Color(0xFFE8F0E9) else Color(0xFF202B24)
-    val Muted get()=if(dark) Color(0xFFA4B2A8) else Color(0xFF69766D)
+    val Background get()=if(dark) Color(0xFF151618) else Color(0xFFF6F7F9)
+    val Ink get()=if(dark) Color(0xFFF0F1F3) else Color(0xFF24262B)
+    val Muted get()=if(dark) Color(0xFFA3A6AE) else Color(0xFF737780)
     val Faint get()=Muted
     val Line get()=Ink.copy(alpha=if(dark) .12f else .075f)
-    val Card get()=if(dark) Color(0xFF1B2520) else Color.White
+    val Card get()=if(dark) Color(0xFF222428) else Color.White
     val CardSolid get()=Card
-    val Field get()=if(dark) Color(0xFF202E26) else Color(0xFFF0F4EE)
-    val Accent get()=if(dark) Color(0xFFA5C9AC) else Color(0xFF476D52)
-    val Action get()=if(dark) Color(0xFFB0D1B5) else Color(0xFF314D3A)
-    val ActionText get()=if(dark) Color(0xFF15261A) else Color.White
+    val Field get()=if(dark) Color(0xFF2B2D32) else Color(0xFFF0F1F4)
+    val Accent get()=if(dark) Color(0xFF9BBDF4) else Color(0xFF426DA9)
+    val Action get()=if(dark) Color(0xFFEBEDF0) else Color(0xFF292C32)
+    val ActionText get()=if(dark) Color(0xFF202228) else Color.White
     val Icon get()=Ink
     val Link get()=if(dark) Color(0xFF69AFFF) else Color(0xFF0668CE)
     val GoldInk get()=Ink
@@ -92,14 +92,14 @@ object Pal {
     val Danger get()=if(dark) Color(0xFFE6A99E) else Color(0xFFB05346)
     val Online get()=Accent
     val Info get()=Accent
-    val UserBubble get()=if(dark) Color(0xFF2B3D30) else Color(0xFFE8EFE5)
+    val UserBubble get()=if(dark) Color(0xFF28394F) else Color(0xFFE4EEFC)
     val UserText get()=Ink
-    val Quiet get()=UserBubble
+    val Quiet get()=Field
     val QuietText get()=Ink
 }
 
 object Type {
-    val Large = 28.sp
+    val Large = 26.sp
     val Page = 20.sp
     val CardTitle = 17.sp
     val Body = 15.sp
@@ -113,8 +113,8 @@ object Type {
     val titleFamily get() = androidx.compose.ui.text.font.FontFamily.SansSerif
     val bodyWeight get() = FontWeight.Normal
     fun body(size: Int) = TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif, fontSize = size.sp,
-        lineHeight = (size * 1.45f).sp, fontWeight = bodyWeight, fontFeatureSettings = "tnum", color = Pal.Ink)
-    fun title(size: Int) = body(size).copy(fontFamily = titleFamily, fontWeight = FontWeight.SemiBold)
+        lineHeight = (size * 1.5f).sp, fontWeight = bodyWeight, fontFeatureSettings = "tnum", color = Pal.Ink)
+    fun title(size: Int) = body(size).copy(fontFamily = titleFamily, fontWeight = FontWeight.Medium)
 }
 
 val GoldBrush get() = Brush.linearGradient(listOf(Pal.Quiet, Pal.Quiet))
@@ -160,7 +160,7 @@ fun AgentTheme(content: @Composable () -> Unit) {
 }
 
 fun Modifier.canvasBackground() = background(Pal.Background)
-fun Modifier.card(radius: Dp = 22.dp, color: Color = Pal.Card): Modifier =
+fun Modifier.card(radius: Dp = 16.dp, color: Color = Pal.Card): Modifier =
     background(color, RoundedCornerShape(radius)).border(.5.dp,Pal.Line,RoundedCornerShape(radius))
 fun Modifier.gold(shape: Shape = CircleShape) = clip(shape).background(Pal.Quiet)
 
@@ -179,7 +179,7 @@ fun Screen(content: @Composable BoxScope.() -> Unit) {
 fun PageHeader(title: String, sub: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Column(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, top = 18.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = Type.title(28), color = Pal.Ink, modifier = Modifier.weight(1f))
+            Text(title, style = Type.title(26), color = Pal.Ink, modifier = Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), content = actions)
         }
         if (sub != null) Text(sub, fontSize = 13.sp, color = Pal.Muted, modifier = Modifier.padding(top = 4.dp))
@@ -190,7 +190,7 @@ fun PageHeader(title: String, sub: String? = null, actions: @Composable RowScope
 @Composable
 fun SubHeader(title: String, onBack: () -> Unit) {
     Box(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp).height(52.dp)) {
-        Box(Modifier.align(Alignment.CenterStart).size(44.dp).clip(CircleShape).background(Pal.Card).tap(onClick = onBack), contentAlignment = Alignment.Center) {
+        Box(Modifier.align(Alignment.CenterStart).size(44.dp).clip(CircleShape).tap(onClick = onBack), contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Outlined.ArrowBackIos, "返回", tint = Pal.Icon, modifier = Modifier.size(18.dp).offset(x = 3.dp))
         }
         Text(title, style = Type.title(17), color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -201,7 +201,7 @@ fun SubHeader(title: String, onBack: () -> Unit) {
 @Composable
 fun BigTitle(title: String, sub: String? = null) {
     Column(Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp, bottom = 8.dp)) {
-        Text(title, style = Type.title(28), color = Pal.Ink)
+        Text(title, style = Type.title(26), color = Pal.Ink)
         if (sub != null) Text(sub, fontSize = 13.sp, color = Pal.Muted, modifier = Modifier.padding(top = 6.dp))
     }
 }
@@ -209,7 +209,7 @@ fun BigTitle(title: String, sub: String? = null) {
 @Composable
 fun CircleButton(icon: ImageVector, desc: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(42.dp).clip(CircleShape).background(Pal.Card).tap(onClick = onClick),
+        Modifier.size(42.dp).clip(CircleShape).tap(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, desc, tint = Pal.Icon, modifier = Modifier.size(20.dp)) }
 }

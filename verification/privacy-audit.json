@@ -4,17 +4,7 @@
   "removedScreenshots": [
     "android/verification/v0.4.0/connector-account-added.png",
     "android/verification/v0.4.0/connector-form-failure.png",
-    "android/verification/v0.4.0/dou-bean-mist.png",
-    "android/verification/v0.4.0/dou-boy-mist.png",
-    "android/verification/v0.4.0/dou-cat-mist.png",
-    "android/verification/v0.4.0/dou-girl-mist.png",
-    "android/verification/v0.4.0/memory-folders.png",
-    "android/verification/v0.4.0/memory-health.png",
-    "android/verification/v0.4.0/memory-no-health.png",
-    "android/verification/v0.4.0/memory-profile.png",
-    "android/verification/v0.4.0/settings-membership.png",
-    "android/verification/v0.5.0/diagnostics/failure-completedTaskOpensFromListShowsBriefAndContinuesSameTask.png",
-    "docs/images/phone-devices.jpg"
+    "android/verification/v0.5.0/diagnostics/failure-completedTaskOpensFromListShowsBriefAndContinuesSameTask.png"
   ],
   "removedEmptyImages": 1,
   "textHistoryBlobsReviewed": 1491,
@@ -22,7 +12,8 @@
   "textHistoryRecognizedApiKeyOrPrivateKeyMatches": 0,
   "textHistoryPersonalPathMatches": 0,
   "binaryHistoryRewritten": false,
-  "note": "Pattern and OCR checks do not prove absence of all personal content. Old image versions remain reachable until history is separately rewritten.",
+  "note": "Normal conversation, nicknames and emulator addresses are acceptable under the owner clarification. Two old account screenshots remain removed from the current tree; Git history is unchanged. Pattern and OCR checks do not prove absence of all personal content.",
   "imageGpsOrOwnerMetadataMatches": 0,
-  "currentTreeIpLikeFindings": "Emulator version numbers in old logs; one removed screenshot contained only an emulator loopback address."
+  "currentTreeIpLikeFindings": "Emulator version numbers in old logs; one removed screenshot contained only an emulator loopback address.",
+  "restoredBenignScreenshots": 10
 }

@@ -1,0 +1,32 @@
+{
+  "clientVersion": "1.3.0",
+  "cloudVersion": "1.3.0",
+  "backend": "production HTTPS",
+  "shippingSignedApk": true,
+  "checks": [
+    "release app reconnects to production HTTPS using protocol 2",
+    "previously failing production activity now displays tool_result records",
+    "console 设备归属",
+    "console 设备",
+    "console 定时",
+    "console 记忆",
+    "console 活动",
+    "side drawer loads",
+    "main tab 动态",
+    "main tab 点子",
+    "main tab 目标",
+    "main tab 资源库",
+    "main tab 聊天",
+    "settings",
+    "model providers",
+    "clicking a personalized Idea stages a quote without sending",
+    "quoted Idea can be cancelled without sending",
+    "native Idea send preserves the optional comment and trusted quote snapshot in production history",
+    "Idea quote survives restart and history reload"
+  ],
+  "checksPassed": 19,
+  "fatalExceptions": 0,
+  "physicalDevice": false,
+  "activityErrorReproducedBeforeFix": true,
+  "activityErrorAbsentAfterFix": true
+}

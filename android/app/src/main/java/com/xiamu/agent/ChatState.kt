@@ -3,13 +3,13 @@ package com.xiamu.agent
 import org.json.JSONObject
 
 sealed class ChatItem {
-    data class User(val text: String,val attachments: List<Attachment> = emptyList(),val ts: Long = 0,val id: String = "",val quote: FeedQuote? = null) : ChatItem()
+    data class User(val text: String,val attachments: List<Attachment> = emptyList(),val ts: Long = 0,val id: String = "",val quote: ChatQuote? = null) : ChatItem()
     data class Assistant(val text: String,val ts: Long = 0,val media: List<ReplyMedia> = emptyList(),val id: String = "",val options: List<SayOption> = emptyList(),val cards: List<SayCard> = emptyList(),val optionsUsed: Boolean = false,val choosing: Boolean = false,val activityId: String? = null) : ChatItem() {
         val displayMedia: List<ReplyMedia> get() = (cards.filterIsInstance<SayCard.Media>().map { it.file } + media).distinctBy { it.path }
     }
 }
 internal fun historyItem(h: JSONObject): ChatItem? = when(h.optString("role")) {
-    "user" -> if(h.optString("source")=="onboarding") null else ChatItem.User(h.optString("text"),h.optJSONArray("attachments").objects().map(Attachment::from),ts=h.optLong("ts"),id=h.optString("id"),quote=FeedQuote.from(h.optJSONObject("quote")))
+    "user" -> if(h.optString("source")=="onboarding") null else ChatItem.User(h.optString("text"),h.optJSONArray("attachments").objects().map(Attachment::from),ts=h.optLong("ts"),id=h.optString("id"),quote=ChatQuote.from(h.optJSONObject("quote")))
     "assistant" -> ChatItem.Assistant(h.optString("text"),h.optLong("ts"),replyMedia(h),h.optString("id"),sayOptions(h),sayCards(h),h.optBoolean("optionsUsed"),activityId=h.optString("activityId").takeIf { it.isNotBlank() })
     else -> null
 }

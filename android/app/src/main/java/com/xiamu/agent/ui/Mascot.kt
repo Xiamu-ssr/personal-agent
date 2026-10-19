@@ -115,17 +115,17 @@ fun Avatar(size: Dp = 76.dp,state: String = Chat.avatar.value.state,expressive: 
 
 @Composable
 fun AvatarLabel(subtitle: String? = null,onClick: () -> Unit) {
-    Box(Modifier.widthIn(min=96.dp,max=190.dp).height(124.dp),contentAlignment=Alignment.TopCenter) {
-        Avatar(84.dp,expressive=true)
-        Text(Chat.agentName.value,style=Type.title(11),color=Pal.Ink,maxLines=1,
-            modifier=Modifier.padding(top=74.dp).clip(CircleShape).background(Pal.Card).border(.5.dp,Pal.Line,CircleShape).padding(horizontal=11.dp,vertical=4.dp))
+    Box(Modifier.widthIn(min=96.dp,max=190.dp).height(80.dp),contentAlignment=Alignment.TopCenter) {
+        Avatar(44.dp,expressive=true)
+        Text(Chat.agentName.value,style=Type.title(13),color=Pal.Ink,maxLines=1,
+            modifier=Modifier.padding(top=48.dp))
         val avatar=Chat.avatar.value
         val status=avatar.takeIf { it.state!="idle" }?.text?.ifBlank {
             when(avatar.state) { "working" -> "正在处理";"waiting" -> "等你回应";"happy" -> "这件事办好了";"error" -> "需要看一眼";else -> "" }
         }?.takeIf { it.isNotBlank() }
         val label=listOfNotNull(subtitle,status).joinToString(" · ")
         if(label.isNotBlank()) Text(label,style=Type.body(10),color=Pal.Muted,maxLines=1,
-            modifier=Modifier.padding(top=105.dp).clip(CircleShape).background(Pal.Background).padding(horizontal=5.dp))
+            modifier=Modifier.padding(top=68.dp).background(Pal.Background).padding(horizontal=5.dp))
         // Keep the hit target above TextureView, which can otherwise consume video touches.
         Box(Modifier.matchParentSize().tap(onClick=onClick).semantics {
             contentDescription=listOf("打开头像控制台",subtitle,status).filterNotNull().filter { it.isNotBlank() }.joinToString("，")

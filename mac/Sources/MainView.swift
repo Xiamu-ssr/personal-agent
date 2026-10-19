@@ -15,7 +15,7 @@ struct MainView:View {
                     Rectangle().fill(Theme.line).frame(width:1)
                     content.frame(maxWidth:.infinity,maxHeight:.infinity)
                         .overlay(alignment:.top) {
-                            if nav.stacks[nav.tab]?.isEmpty != false {AvatarHeader(sideChat:nav.tab == .chat && nav.sideChat != nil).padding(.top,14)}
+                            if nav.tab == .chat && nav.stacks[nav.tab]?.isEmpty != false {AvatarHeader(sideChat:nav.sideChat != nil).frame(maxWidth:.infinity).padding(.top,14).padding(.bottom,8).background(Theme.background)}
                         }
                         .onDrop(of:[.fileURL,.image],isTargeted:$dropping) { (nav.tab == .chat ? nav.sideChat?.composer ?? .shared : .shared).drop($0) }
                         .overlay { if dropping { RoundedRectangle(cornerRadius:20).strokeBorder(Theme.ink,style:StrokeStyle(lineWidth:2,dash:[6])).padding(18).allowsHitTesting(false) } }
@@ -58,15 +58,15 @@ struct Sidebar:View {
     var body:some View {
         VStack(alignment:.leading,spacing:7) {
             Button { nav.console=true } label: {
-                HStack(spacing:11) { AgentAvatar(size:42); VStack(alignment:.leading,spacing:4) {
+                HStack(spacing:11) { AgentAvatar(size:28); VStack(alignment:.leading,spacing:4) {
                     Text(ProfileStore.shared.agentName).font(Theme.font(size:15,weight:.semibold))
                     Text(ChatClient.shared.connected ? "你的个人助手" : "连接中…").font(Theme.font(size:11)).foregroundStyle(Theme.sub)
                 }; Spacer() }
-            }.buttonStyle(.plain).padding(.vertical,24).padding(.horizontal,10)
+            }.buttonStyle(.plain).padding(.vertical,18).padding(.horizontal,10)
             ForEach([Tab.chat,.feed,.ideas,.goals,.library],id:\.self) { t in
                 Button { nav.go(t) } label: {
                     HStack(spacing:13) { Image(systemName:t.icon).font(.system(size:18)).frame(width:23)
-                        Text(t.title).font(Theme.font(size:14,weight:nav.tab == t && (t != .chat || nav.sideChat == nil) ? .semibold : .regular)); Spacer()
+                        Text(t.title).font(Theme.font(size:14,weight:nav.tab == t && (t != .chat || nav.sideChat == nil) ? .medium : .regular)); Spacer()
                         if t == .feed && FeedBadge.shared.unread { Circle().fill(.red).frame(width:6,height:6).accessibilityLabel("有新动态") }
                     }.padding(.horizontal,13).frame(height:43).background(nav.tab == t && (t != .chat || nav.sideChat == nil) ? Theme.card : .clear,in:RoundedRectangle(cornerRadius:12)).contentShape(Rectangle())
                 }.buttonStyle(.plain).verificationAction("tab-"+t.rawValue)

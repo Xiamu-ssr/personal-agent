@@ -85,7 +85,10 @@ final class Composer {
     }
 
     func discuss(_ post: FeedPost) {
-        quote = ChatQuote(post); voiceMode = false; focusRevision += 1
+        reference(ChatQuote(post))
+    }
+    func reference(_ value: ChatQuote) {
+        quote = value; voiceMode = false; focusRevision += 1
         Nav.shared.go(.chat); Nav.shared.stacks[.chat] = []; Nav.shared.console = false
     }
 
@@ -192,7 +195,6 @@ final class Composer {
         let text = self.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let drafts = self.drafts
         let quote = self.quote
-        guard quote == nil || drafts.isEmpty else { fail("讨论动态时，请先移除附件再发送"); return false }
         let clientID = submissionIdentity.id(for: .init(text:text,draftIDs:drafts.map(\.id),quote:quote))
         if !canDeliver { fail("还没连上，稍等再发"); return false }
         sending = true

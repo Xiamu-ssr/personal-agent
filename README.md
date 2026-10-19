@@ -1,11 +1,11 @@
 <p align="center"><em>A personal AI companion on your own server.</em></p>
 
 <p align="center">
-  <img src="docs/images/v0.8.3/hero.jpg" alt="豆豆 Personal Agent：实际 Mac 聊天界面与 AR 眼镜讨论，私人会话名称已遮挡。" width="1100">
+  <img src="docs/images/v1.3.0/mac-chat-light.png" alt="豆豆 1.3 原生 Mac 聊天界面；本机隔离服务与合成示例。" width="1100">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.2.0"><img src="https://img.shields.io/badge/Release-v1.2.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.2.0"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.3.0"><img src="https://img.shields.io/badge/Release-v1.3.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.3.0"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=101612" alt="Android · macOS · Cloud">
   <a href="https://github.com/openclaw/openclaw"><img src="https://img.shields.io/badge/Built%20with-OpenClaw-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with OpenClaw"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=101612" alt="MIT License"></a>
@@ -27,17 +27,17 @@
 
 ## 开始使用
 
-**当前版本：[v1.2.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.2.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
+**当前版本：[v1.3.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.3.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
-| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.2.0/doudou-1.2.0.apk) | Android 9 或更新版本 |
-| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.2.0/doudou-1.2.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
+| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.3.0/doudou-1.3.0.apk) | Android 9 或更新版本 |
+| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.3.0/doudou-1.3.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
 | 云端 | [部署指南](docs/deployment.md) | Linux、Node.js 24.16+ 或 26.1+、systemd、Nginx、HTTPS |
 
 先[部署云端](#部署)，生成一次性配对码，再在 App 填入自己的服务器地址。第一次聊天，豆豆会问怎么称呼你、自己叫什么，再推荐需要连接的应用和本机能力。
 
-1.2 统一 Android 和 Mac 的控件与明暗外观，调整按钮、输入焦点、卡片与状态反馈。芽豆在完成和等待时短暂探出底座，Mac 还可悬停回应；开启系统减少动态效果时保持静态。客户端继续连接 cloud 1.1，无需重新配对或迁移数据。 [查看两端界面](docs/images/v1.2.0/README.md)。
+1.3 重做两端排版与灰蓝配色，缩小头像，减少重复标题和装饰卡片。点子和动态讨论先引用到输入框，可以补话或直接发送；修复活动时间与工具结果解析。Android、Mac 与 cloud 一起升级，已有配对、记忆与原生 Session 保留。 [查看两端界面](docs/images/v1.3.0/README.md)。
 
 **1.0 是不兼容升级，云端与 App 必须一起更新。** 原有配对可继续使用；停服备份并迁移持久化数据，旧聊天与 Session 不导入。Claude Code / Agent SDK 和云端交互浏览器已删除。详见[迁移说明](docs/deployment.md#从-08-升级)。
 
@@ -74,7 +74,7 @@
 
 | 栏目 | 你可以怎么用 |
 | --- | --- |
-| **点子** | 根据记忆、目标和最近聊过的事，看看豆豆现在能帮上什么忙；点一条就开聊。 |
+| **点子** | 根据记忆、目标和最近聊过的事，看看豆豆现在能帮上什么忙；点一条先引用到输入框，可以补话或直接发送。 |
 | **目标** | 在聊天里定目标，约定跟进频率，持续看进度和下一小步。 |
 | **资源库** | 反复打开做好的网页、文档、图片和影音；构件与媒体分别收好。 |
 
@@ -206,7 +206,7 @@ App 填写自己的地址，例如 `https://agent.example.com/agent`，以及配
 
 模型在 App 设置里选择。添加服务时选供应商、填 Key，即可使用预填的接口和模型；内置硅基流动、DeepSeek、智谱、百炼、Kimi、MiniMax、豆包、ZenMux、OpenAI、Anthropic、Gemini、OpenRouter 共 12 家预设。支持修改地址和模型 ID，也可完全自定义。各端共享账号清单与当前模型，切换不新建主 Session。见[模型服务说明](docs/model-providers.md)。
 
-<p align="center"><img src="docs/images/v1.2.0/model-provider-presets.png" alt="1.1 Mac 供应商预设：硅基流动接口与 10 个常用模型自动填好；本地假服务界面，未录入真实 Key" width="900"></p>
+<p align="center"><img src="docs/images/v1.3.0/model-provider-presets.png" alt="1.3 Mac 供应商预设：硅基流动接口与 10 个常用模型自动填好；本地假服务界面，未录入真实 Key" width="900"></p>
 
 ## Spec
 
@@ -226,7 +226,7 @@ node spec/build.mjs
 
 ## 验证与已知限制
 
-1.2 的[验收记录](verification/v1.2.0/result.json)包含两端明暗界面、原生控件操作、头像探出效果与签名安装包。界面检查使用隔离数据和本机假服务；模型接入、原生工具循环与主会话重启续接的实测见 [1.1 发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.1.0)。
+1.3 的[验收记录](verification/v1.3.0/result.json)区分隔离界面检查与真实云端：包含签名 APK 在 Android 模拟器连接生产 HTTPS 的活动详情、点子引用与历史恢复，以及 Mac 原生界面操作。原生工具循环与主会话重启续接的实测见 [1.1 发布记录](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.1.0)。
 
 - 本版 Android 已构建签名安装包，尚未进行真机验收；健康数据和手机权限仍需要真机验证。
 - 手机和电脑的应用操作需要实际设备在线、授权；模型、搜索和第三方服务的费用另计。
@@ -251,7 +251,7 @@ cd android
 # 首次构建创建自己的本地签名身份，可能弹出钥匙串授权
 bash mac/tools/make-signing-identity.sh
 VERSION=1.1.0 bash mac/build.sh
-# 产物：mac/build/doudou-1.2.0.dmg；Apple 芯片 + Intel 通用
+# 产物：mac/build/doudou-1.3.0.dmg；Apple 芯片 + Intel 通用
 ```
 
 Mac 安装包采用本地签名，未做 Apple 公证；首次安装的打开方式见[发布说明](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v0.8.3)。
