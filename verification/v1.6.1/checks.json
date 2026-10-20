@@ -1,0 +1,27 @@
+{
+  "cloud": {
+    "passed": 130,
+    "failed": 0
+  },
+  "android": {
+    "unitPassed": 169,
+    "failed": 0,
+    "deviceTests": 2,
+    "layoutCases": 8,
+    "feedPixelBands": 3,
+    "actualScreenChecks": 5
+  },
+  "mac": {
+    "coreAssertions": 223,
+    "fullImage": [
+      320,
+      480
+    ],
+    "nativeFeedLoaded": true
+  },
+  "privacy": {
+    "scannedChangedFiles": 58,
+    "privateValuesFound": 0,
+    "syntheticScreenshotsOnly": true
+  }
+}

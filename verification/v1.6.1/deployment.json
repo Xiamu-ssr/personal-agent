@@ -1,0 +1,74 @@
+{
+  "cloud": {
+    "version": "1.6.1",
+    "fullBackup": true,
+    "protectedFiles": 358,
+    "changedProtectedFiles": 0,
+    "sameMainSession": true,
+    "sourceCommit": "aef73a8e48015d51399d6e207b38cbdccb4f7e07",
+    "externalHTTPS": {
+      "status": 200,
+      "ready": true
+    },
+    "initialCutover": {
+      "rolledBack": true,
+      "cause": "deployment directory permissions",
+      "resolved": true
+    }
+  },
+  "release": {
+    "assets": [
+      {
+        "digest": "sha256:477a53794090dddbe95e77cf141b6fd251167e7e6f21d697253f4febce21d748",
+        "name": "doudou-1.6.1.apk",
+        "size": 9524018
+      },
+      {
+        "digest": "sha256:e460d613a98bc706e1e8de17918af5c9affa0e786c0add6d3d8fb49e382bc4ed",
+        "name": "doudou-1.6.1.dmg",
+        "size": 10861343
+      },
+      {
+        "digest": "sha256:5e52913a1e8796640d9d537bb7491a48f440bb51f0ef4601afd7e0679ad87019",
+        "name": "SHA256SUMS",
+        "size": 166
+      }
+    ],
+    "draft": false,
+    "html_url": "https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.6.1",
+    "id": 418249777,
+    "tag_name": "v1.6.1",
+    "target_commitish": "aef73a8e48015d51399d6e207b38cbdccb4f7e07"
+  },
+  "assetsRedownloadedAndVerified": true,
+  "android": {
+    "versionCode": 24,
+    "versionName": "1.6.1",
+    "signed": true,
+    "certificateSHA256": "8081fba0d3ac49eac2ed4fb9fbc4e3fde23daf601ebfecc3e6adcfecd65e9b50",
+    "emulatorUpgradeInstalled": true
+  },
+  "mac": {
+    "version": "1.6.1",
+    "build": 12,
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "signatureVerified": true,
+    "imageVerified": true,
+    "appleNotarized": false
+  },
+  "cleanup": {
+    "emulatorStopped": true,
+    "fixturePortsClosed": true,
+    "oldReleasesDeleted": true
+  },
+  "realFeedRetry": {
+    "status": "done",
+    "elapsedSeconds": 453,
+    "toolCalls": 39,
+    "failedCalls": 0,
+    "nativeTaskSession": true
+  }
+}

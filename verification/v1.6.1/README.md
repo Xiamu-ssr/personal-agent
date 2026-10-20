@@ -23,3 +23,16 @@ Wind 显示简短的可用性状态，不生成数值进度；一个账号耗尽
 先设置 `DOUDOU_UI_FIXTURE=verification/v1.6.1/fixture.json`，运行 `node cloud/test/usage-ui-fixture.mjs`。调试包安装到临时模拟器，反向代理 18770 端口后运行 `ImageLayoutDeviceTest` 与 `android/tools/review-v161.py`。脚本拒绝实体设备。
 
 Mac 使用 `mac/tools/compile-check.sh` 编译 `mac/Tests/V161Review.swift`，设置隔离的 `DOUDOU_DATA_DIR` 与截图目录 `DOUDOU_REVIEW_OUTPUT`，以 `-server http://127.0.0.1:18770` 运行。所有页面数据均为合成信息。
+
+## 主要文件
+
+- `cloud/src/openclaw-runtime.mjs`、`gateway-chat.mjs`：统一运行入口和就绪检测；删除 `openresponses.mjs`。
+- `cloud/src/usage.mjs`：Wind 状态与多账号汇总。
+- Android `ui/ContentImage.kt`、`ChatScreen.kt`、`Feed.kt`：图片测量与显示；`UsageView.kt`、`ConnectorDetail.kt`、`ModelSettings.kt`：额度状态、操作换行和字体适配。
+- Mac `Sources/ChatView.swift`、`ContentViews.swift`、`Usage.swift`、`ModelProviders.swift`：完整图片、查看入口和简洁的额度展示。
+
+## 生产与发布
+
+云端 1.6.1 外网 HTTPS 检查通过；完整备份后比对 358 个持久文件无内容变化，原生主会话 ID 保留。首次切换因部署目录读取权限失败并自动回滚；修正权限并以服务账号预检后重新切换成功。
+
+真实动态重试在新 Gateway 通道完成，耗时 453 秒、39 次工具调用、0 次失败调用。正式签名 APK 升级安装为 versionCode 24；通用 DMG 签名与磁盘校验通过。GitHub 两个安装包重新下载后哈希一致，仅保留 v1.6.1 Release。模拟器与本地服务均已关闭。完整回执见 `deployment.json`。
