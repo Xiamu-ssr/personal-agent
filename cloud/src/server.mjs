@@ -180,7 +180,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
       }
       if (p === "/api/library" && req.method === "GET") return json(res, 200, content.library());
       if (p === "/api/library/thumbnail" && req.method === "GET") {
-        const image = await harness.pages.screenshot({ path: url.searchParams.get("path") });
+        const image = await harness.pages.thumbnail({ path: url.searchParams.get("path") });
         res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "private, max-age=60" }); return res.end(image.data);
       }
       if (p === "/api/memory" && req.method === "GET") return json(res, 200, content.memory());

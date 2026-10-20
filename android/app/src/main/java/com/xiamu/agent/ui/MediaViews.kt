@@ -63,6 +63,7 @@ import com.xiamu.agent.media.Images
 import com.xiamu.agent.media.ReplyPlayer
 import com.xiamu.agent.media.openSystemFile
 import com.xiamu.agent.media.saveFile
+import com.xiamu.agent.media.fileMime
 import com.xiamu.agent.playbackTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -113,7 +114,7 @@ private fun fileActions(media: ReplyMedia): FileActions {
 @Composable
 private fun ActionsMenu(actions: FileActions) {
     var expanded by remember { mutableStateOf(false) }
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(actions.media.mime)) { uri ->
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(fileMime(actions.media.path,actions.media.mime))) { uri ->
         if (uri != null) actions.save(uri)
     }
     Box {
@@ -124,6 +125,14 @@ private fun ActionsMenu(actions: FileActions) {
             DropdownMenuItem(text = { Text("另存为") }, onClick = { expanded = false; save.launch(actions.media.path.substringAfterLast('/')) })
         }
     }
+}
+
+@Composable
+fun FileMenu(path: String,title: String,mime: String = "") {
+    val context=ctx()
+    val actions=fileActions(ReplyMedia(path,title,"file",fileMime(path,mime),0))
+    LaunchedEffect(actions.error) {if(actions.error.isNotBlank())android.widget.Toast.makeText(context,actions.error,android.widget.Toast.LENGTH_SHORT).show()}
+    ActionsMenu(actions)
 }
 
 @Composable

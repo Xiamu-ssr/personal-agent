@@ -192,7 +192,7 @@ fun ConnectorFormScreen(route: Route.ConnectorForm, gateway: ConnectorGateway = 
     BackHandler(busy) { }
     Screen {
         Column(Modifier.fillMaxSize().imePadding()) {
-            SubHeader(if (editing) "编辑账号" else "添加账号") { if (!busy) Nav.back() }
+            SubHeader(if (editing) "编辑账号" else "添加账号",onBack={ if (!busy) Nav.back() })
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp)) {
                 item {
                     BigTitle(if (editing) "编辑账号" else "添加${connector.title}账号", route.account?.label ?: connector.description)

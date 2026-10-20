@@ -5,7 +5,7 @@ import { defineTool } from "./product-tools.mjs";
 import { appendJsonl, readJson, tailJsonl } from "./store.mjs";
 import { writePrivateJson } from "./private-json.mjs";
 import { localFile } from "./local-paths.mjs";
-import { replyMedia } from "./media.mjs";
+import { replyMedia, nativeReplyMedia, mediaFile } from "./media.mjs";
 import { taskId } from "./task-history.mjs";
 import { readGoal } from "./content.mjs";
 import { VERSION } from "./config.mjs";
@@ -49,11 +49,11 @@ export class Speech {
     const last = this.history(1)[0];
     return last?.role === "assistant" && !!last.options?.length && !last.optionsUsed;
   }
-  emit(args, { id = crypto.randomUUID(), activityId = this.activityId, chatType, error = false, silent = false } = {}) {
+  emit(args, { id = crypto.randomUUID(), activityId = this.activityId, chatType, error = false, silent = false, nativeMedia = [] } = {}) {
     if (silent) throw new Error("后台运行不能对用户说话");
-    if (chatType === "side" && !this.activityId) return this.side(activityId).emit(args, { id, error });
+    if (chatType === "side" && !this.activityId) return this.side(activityId).emit(args, { id, error, nativeMedia });
     const value = z.object(saySchema).parse(args);
-    if (!value.text.trim() && !value.options?.length && !value.cards?.length) throw new Error("说话内容不能为空");
+    if (!value.text.trim() && !value.options?.length && !value.cards?.length && !nativeMedia.length) throw new Error("说话内容不能为空");
     for (const card of value.cards || []) if (card.path) localFile(this.root, card.path, "data");
     for (const card of value.cards || []) if (card.type === "goal") {
       try { readGoal(this.root, card.name); }
@@ -62,8 +62,8 @@ export class Speech {
     const entry = { role: "assistant", id, text: this.redact(value.text), ts: Date.now(),
       ...(activityId && { activityId }), ...(this.activityId && { chatType: "side" }), ...(error && { error: true }) };
     if (value.options?.length) entry.options = value.options.map((o, i) => ({ id: String(i), label: this.redact(o.label), reply: this.redact(o.reply ?? o.label) }));
-    if (value.cards?.length) entry.cards = value.cards.map((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, typeof v === "string" ? this.redact(v) : v])));
-    const media = replyMedia(this.root, entry.text);
+    if (value.cards?.length) entry.cards = value.cards.map(c=>c.path?{...c,...mediaFile(this.root,c.path,c.name)}:c).map((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, typeof v === "string" ? this.redact(v) : v])));
+    const media = [...nativeReplyMedia(this.root,nativeMedia),...replyMedia(this.root, entry.text)].filter((m,i,a)=>a.findIndex(n=>n.path===m.path)===i);
     if (media.length) entry.media = media;
     appendJsonl(this.log, entry);
     this.bus.emit({ t: this.activityId ? "activity_message" : "say", ...entry });

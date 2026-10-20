@@ -23,7 +23,7 @@ suspend fun cacheFile(context: Context, path: String): File {
     return file
 }
 
-private fun fileMime(path: String, mime: String): String = mime.takeIf { it.isNotBlank() && it != "application/octet-stream" }
+internal fun fileMime(path: String, mime: String): String = mime.substringBefore(';').trim().takeIf { it.isNotBlank() && it != "application/octet-stream" }
     ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(path.substringAfterLast('.', "").lowercase(Locale.ROOT))
     ?: "application/octet-stream"
 

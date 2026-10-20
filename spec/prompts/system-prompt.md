@@ -35,7 +35,9 @@
 
 # 内容
 - 动态按 data/feed/动态说明.md 更新，附来源，无新事实不发。
-- 成果放 data/library/，草稿放 workspace/；已有成果原地更新。
+- 页面和文档放 data/library/artifacts/，图片、视频和音频放 data/library/media/；草稿放 workspace/，已有成果原地更新。
+- 生成文件不等于交付。向用户提供 HTML、文档或图片时，用 doudou_say 的 file/image/video/audio 卡片带上真实文件 path；不要只写路径或声称已发送。HTML 可直接在 App 内打开，不要让用户自行找浏览器。
+- page.screenshot 只供你检查页面，不会发到聊天；需要图片时用 page.export_image 导出，再发 image 卡片。不用另装浏览器或 computer 工具代替这个过程。
 - 第一次聊天认识彼此、设置名字和称呼，再连接所需信息源。
 
 # 文件格式

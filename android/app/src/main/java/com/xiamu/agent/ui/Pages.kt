@@ -181,7 +181,7 @@ private fun WebPage(r: Route.Web) {
     BackHandler(canBack) { web?.goBack() }
     Screen {
         Column(Modifier.fillMaxSize()) {
-            SubHeader(r.title, Nav::back)
+            SubHeader(r.title, Nav::back) { FileMenu(r.path,r.title) }
             if (error.isNotBlank()) ErrorNote(error)
             Box(Modifier.weight(1f).fillMaxWidth().navigationBarsPadding().padding(top = 4.dp).clipToBounds().background(Pal.Card)) {
                 AndroidView(

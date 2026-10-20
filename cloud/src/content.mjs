@@ -5,6 +5,7 @@ import { appendJsonl, readJson } from "./store.mjs";
 import { writePrivateJson } from "./private-json.mjs";
 import { inside, localFile, resolvedPath } from "./local-paths.mjs";
 import { fileType } from "./media.mjs";
+import { artifactRevision } from "./page-screenshot.mjs";
 import { cronFields, nextCron } from "./cron.mjs";
 
 const digest = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 20);
@@ -184,10 +185,18 @@ export class Content {
     for (const e of dirs(this.root, "data/library/artifacts")) if (e.isDirectory()) {
       const rel = `data/library/artifacts/${e.name}`, contents = [];
       files(rel, contents);
-      const page = contents.find((f) => f.path === `${rel}/index.html`);
+      const page = contents.find((f) => f.path === `${rel}/index.html`) || contents.find(f=>/\.html?$/i.test(f.path));
       const document = contents.find((f) => f.path === `${rel}/index.md`) || contents[0];
       artifacts.push({ name: e.name, directory: rel, path: page?.path || document?.path || rel, kind: page ? "page" : "document", mtime: Math.max(fs.statSync(path.join(this.root, rel)).mtimeMs, ...contents.map((f) => f.mtime)), files: contents,
-        ...(page && { thumbnail: `/api/library/thumbnail?path=${encodeURIComponent(page.path)}` }) });
+        ...(page && { thumbnail: `/api/library/thumbnail?path=${encodeURIComponent(page.path)}&rev=${artifactRevision(this.root,page.path)}` }) });
+    } else if(e.isFile()) {
+      const rel=`data/library/artifacts/${e.name}`,file=localFile(this.root,rel,"data/library/artifacts"),st=fs.statSync(file),type=fileType(file);
+      const item={path:rel,name:e.name,size:st.size,mtime:st.mtimeMs,...type};
+      if(type.kind!=="file"){media.push(item);continue;}
+      if(!/\.(?:html?|md|markdown|pdf|txt|csv|json|docx|xlsx|pptx|zip)$/i.test(rel))continue;
+      const page=/\.html?$/i.test(rel);
+      artifacts.push({name:e.name.replace(/\.[^.]+$/,""),path:rel,kind:page?"page":"document",mtime:st.mtimeMs,files:[item],
+        ...(page&&{thumbnail:`/api/library/thumbnail?path=${encodeURIComponent(rel)}&rev=${artifactRevision(this.root,rel)}`})});
     }
     files("data/library/media", media);
     return { artifacts: artifacts.sort((a, b) => b.mtime - a.mtime), media: media.sort((a, b) => b.mtime - a.mtime) };

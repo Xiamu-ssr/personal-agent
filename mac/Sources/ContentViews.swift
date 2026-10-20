@@ -210,8 +210,9 @@ struct AuthenticatedThumbnail:View {
     var icon="photo"
     @State private var image:NSImage?
     var body:some View {
-        ZStack { Theme.field; if let image { Image(nsImage:image).resizable().scaledToFit() } else { Image(systemName:icon).font(.system(size:35,weight:.light)).foregroundStyle(Theme.sub) } }
-            .task(id:endpoint) { guard let e=endpoint, e.hasPrefix("/api/library/thumbnail?") else { return }; if let d=try? await Api.data(e) { image=NSImage(data:d) } }
+        GeometryReader { geometry in
+            ZStack { Theme.field; if let image { Image(nsImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height,alignment:.top).clipped().verificationAction("library-image-"+(endpoint ?? "")) } else { Image(systemName:icon).font(.system(size:35,weight:.light)).foregroundStyle(Theme.sub) } }
+        }.task(id:endpoint) { image=nil;guard let e=endpoint, e.hasPrefix("/api/library/thumbnail?") else { return }; if let d=try? await Api.data(e),!Task.isCancelled { image=NSImage(data:d) } }
     }
 }
 

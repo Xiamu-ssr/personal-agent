@@ -63,12 +63,15 @@ struct WebRoute:View {
     let path:String
     @State private var loading=true
     @State private var failed=""
+    @State private var fileFailed=false
     var body:some View {
         SubPage(title:title,scrolls:false,trailing:{
             if loading { ActiveProgress().controlSize(.small) }
+            Menu {FileCommands(path:path,failed:$fileFailed)} label: {Image(systemName:"ellipsis").frame(width:28,height:28)}.menuStyle(.borderlessButton).accessibilityLabel("文件操作")
         },content:{
             ZStack { WebPage(path:path,loading:$loading,failed:$failed)
                 if !failed.isEmpty { Note(text:failed,icon:"exclamationmark.triangle").card() }
+                if fileFailed {Note(text:"文件暂不可用，请重试",icon:"exclamationmark.triangle").card()}
             }.padding(.horizontal,24).padding(.bottom,24)
         })
     }

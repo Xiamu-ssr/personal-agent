@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import sharp from "sharp";
@@ -8,7 +9,24 @@ import { defineTool } from "./product-tools.mjs";
 import { localFile, inside } from "./local-paths.mjs";
 
 const WIDTH=390,SCREEN=844,MAX_BYTES=300*1024;
-let active=false; // Shared by all queries and instances: one browser for this entire process.
+// All consumers share one renderer. A grid is a batch of work, not an error.
+let renderTail=Promise.resolve();
+const previews=new Map(),pendingPreviews=new Map();
+let previewBytes=0;
+const CACHE_BYTES=16*1024*1024;
+export function artifactRevision(root,rel) {
+  const target=screenshotTarget(root,rel),parts=target.rel.split("/");
+  const directory=parts.length>4?parts.slice(0,4).join("/"):"data/library/artifacts";
+  const entries=[];
+  const visit=dir=>{for(const e of fs.readdirSync(path.join(root,dir),{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))) {
+    if(e.isSymbolicLink()||e.name.startsWith("."))continue;
+    const file=dir+"/"+e.name;
+    if(e.isDirectory())visit(file);
+    else if(e.isFile()){const s=fs.statSync(localFile(root,file,"data/library/artifacts"));entries.push([file,s.size,s.mtimeMs,s.ctimeMs]);}
+  }};
+  visit(directory);
+  return crypto.createHash("sha256").update(JSON.stringify(["preview-v2",target.rel,entries])).digest("hex").slice(0,24);
+}
 export function screenshotTarget(root,rel) {
   if (typeof rel !== "string" || !/^data\/library\/artifacts\/[^/]+(?:\/|$)/.test(rel)) throw new Error("页面截图只允许 data/library/artifacts/ 下的本地页面");
   if (rel.split(/[\\/]/).includes("..") || path.isAbsolute(rel)) throw new Error("页面截图路径不能越出构件目录");
@@ -26,12 +44,29 @@ export function browserExecutable() {
 const TYPES={".html":"text/html; charset=utf-8",".css":"text/css",".js":"text/javascript",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".woff2":"font/woff2",".woff":"font/woff"};
 export class PageScreenshot {
   constructor({root,executablePath,timeoutMs=30_000,browserProvider,terminateBrowser}={}) {Object.assign(this,{root,executablePath,timeoutMs,browserProvider,terminateBrowser});}
-  async screenshot({path:rel}) {
+  screenshot(args) {
+    const job=renderTail.then(()=>this.render(args));
+    renderTail=job.catch(()=>{});
+    return job;
+  }
+  async thumbnail({path:rel}) {
+    const revision=artifactRevision(this.root,rel),key=this.root+":"+rel+":"+revision;
+    const cached=previews.get(key);
+    if(cached){previews.delete(key);previews.set(key,cached);return cached;}
+    if(pendingPreviews.has(key))return pendingPreviews.get(key);
+    const job=this.screenshot({path:rel}).then(image=>{
+      if(artifactRevision(this.root,rel)===revision){
+        previews.set(key,image);previewBytes+=image.data.length;
+        while(previewBytes>CACHE_BYTES&&previews.size){const k=previews.keys().next().value;previewBytes-=previews.get(k).data.length;previews.delete(k);}
+      }
+      return image;
+    }).finally(()=>pendingPreviews.delete(key));
+    pendingPreviews.set(key,job);return job;
+  }
+  async render({path:rel}) {
     const target=screenshotTarget(this.root,rel);
-    if(active)throw new Error("已有页面正在截图，请等它结束后再试");
     const executablePath=this.executablePath??browserExecutable();
     if(!this.browserProvider&&(!executablePath||!fs.existsSync(executablePath)))throw new Error("页面截图暂不可用：浏览器尚未安装，请管理员运行 install-screenshot.sh");
-    active=true;
     let browserServer,browser,context,timer,timedOut=false,closing;
     const deadline=Date.now()+this.timeoutMs;
     const cleanupBudget=Math.min(1000,this.timeoutMs/10);
@@ -55,7 +90,7 @@ export class PageScreenshot {
       if(timedOut){void killBrowser();throw new Error("页面截图超时");}
       context=await browser.newContext({viewport:{width:WIDTH,height:SCREEN},deviceScaleFactor:1,serviceWorkers:"block",acceptDownloads:false});
       await context.routeWebSocket("**/*",(socket)=>socket.close());
-      const siteRoot=path.join(this.root,"data/library/artifacts",target.rel.split("/")[3]);
+      const siteRoot=path.join(this.root,target.rel.split("/").length>4?target.rel.split("/").slice(0,4).join("/"):"data/library/artifacts");
       // All requests are handled here; there is never a route.continue() to HTTP.
       // A synthetic origin maps relative site resources to local files without granting file:// access to system/.
       const localOrigin="https://page.localhost";
@@ -121,15 +156,25 @@ export class PageScreenshot {
           try{process.platform==="win32"?proc.kill("SIGKILL"):process.kill(-proc.pid,"SIGKILL");}catch{}
         }
       }
-      active=false;
     }
   }
   tools() {
-    return [defineTool("screenshot","按 390px 手机宽度检查资源库里的页面。仅本地构件，禁止联网，最多三屏。",{
+    return [defineTool("screenshot","检查资源库页面的渲染。截图只返回给你检查，不会发给用户。要交付图片请用 page.export_image，再用 doudou_say 发送图片卡片。",{
       path:z.string().max(1024),
     },async(args)=> {
-      try {const result=await this.screenshot(args);return {content:[{type:"image",mimeType:"image/jpeg",data:result.data.toString("base64")},{type:"text",text:JSON.stringify({path:result.path,width:result.width,height:result.height})}]};}
+      try {const result=await this.screenshot(args);return {content:[{type:"image",mimeType:"image/jpeg",data:result.data.toString("base64")},{type:"text",text:JSON.stringify({path:result.path,width:result.width,height:result.height,delivered:false})}]};}
       catch(e){return {isError:true,content:[{type:"text",text:e.message}]};}
+    }),defineTool("export_image","将本地 HTML 导出为图片并保存到资源库。返回文件 path；随后用 doudou_say 的 image 卡片交付，导出本身不会发送消息。",{path:z.string().max(1024)},async(args)=>{
+      try {
+        const image=await this.screenshot(args),hash=crypto.createHash("sha256").update(image.data).digest("hex").slice(0,20);
+        const rel=`data/library/media/exports/${hash}.jpg`,dir=path.join(this.root,"data/library/media/exports");
+        fs.mkdirSync(dir,{recursive:true,mode:0o700});
+        if(!inside(fs.realpathSync(dir),fs.realpathSync(path.join(this.root,"data/library/media"))))throw new Error("导出目录不正确");
+        const file=path.join(this.root,rel);
+        try{fs.writeFileSync(file,image.data,{mode:0o600,flag:"wx"});}
+        catch(e){if(e.code!=="EEXIST")throw e;localFile(this.root,rel,"data/library/media");if(!fs.readFileSync(file).equals(image.data))throw new Error("导出文件冲突");}
+        return {content:[{type:"text",text:JSON.stringify({path:rel,width:image.width,height:image.height,mime:"image/jpeg",size:image.data.length,delivered:false,next:{tool:"doudou_say",cards:[{type:"image",path:rel}]}})}]};
+      }catch(e){return {isError:true,content:[{type:"text",text:e.message}]};}
     })];
   }
 }

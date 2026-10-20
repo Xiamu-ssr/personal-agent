@@ -253,17 +253,25 @@ private struct MediaFileActions: ViewModifier {
     let item: MediaItem
     @Binding var failed: Bool
     func body(content: Content) -> some View {
-        content.contextMenu {
+        content.contextMenu { FileCommands(path:item.path,failed:$failed) }
+    }
+}
+
+struct FileCommands: View {
+    let path:String
+    @Binding var failed:Bool
+    var body:some View {
+        Group {
             Button("用默认应用打开") {
-                Task { @MainActor in do { try await Api.openExternally(item.path) } catch { failed = true } }
+                Task { @MainActor in do { try await Api.openExternally(path) } catch { failed = true } }
             }
             Button("存储到…") {
                 let panel = NSSavePanel()
-                panel.nameFieldStringValue = (item.path as NSString).lastPathComponent
+                panel.nameFieldStringValue = (path as NSString).lastPathComponent
                 guard panel.runModal() == .OK, let destination = panel.url else { return }
                 Task { @MainActor in
                     do {
-                        let file = try await Api.download(item.path)
+                        let file = try await Api.download(path)
                         let staging = destination.deletingLastPathComponent().appendingPathComponent(".doudou-\(UUID())")
                         defer { try? FileManager.default.removeItem(at: staging) }
                         try FileManager.default.copyItem(at: file, to: staging)

@@ -11,6 +11,9 @@ import org.junit.Test
 import java.util.Locale
 
 class ReplyMediaTest {
+    @Test fun fileIntentsUseBareMimeWithoutHttpCharsetParameters() {
+        assertEquals("text/html",com.xiamu.agent.media.fileMime("poster.html","text/html; charset=utf-8"))
+    }
     private fun outputs() = JSONArray("""[
         {"path":"data/library/media/2026-10-13/睡眠 图.png","name":"睡眠曲线","kind":"image","mime":"image/png","size":20311},
         {"path":"data/library/media/2026-10-13/demo 1.mp4","name":"演示视频","kind":"video","mime":"video/mp4","size":1834201},

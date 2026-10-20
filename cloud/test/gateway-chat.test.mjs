@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {GatewayChat} from '../src/gateway-chat.mjs';
+import {GatewayChat,runFailureText} from '../src/gateway-chat.mjs';
 
 test('gateway admits busy input immediately and correlates a steered receipt independently from the active answer',async()=>{
  const requests=[],chat=new GatewayChat({request:async(method,args)=>{requests.push({method,...args});return {runId:args.idempotencyKey,status:'started'};}});
@@ -29,4 +29,26 @@ test('rejected and interrupted inputs are explicit errors and are never silently
  const done=chat.respond('input',{id:'input',sessionKey:'main'});chat.close();await assert.rejects(done,/不会自动重发/);assert.equal(submissions,1);assert.equal(chat.pending.size,0);
  const controller=new AbortController(),stopped=chat.respond('stop',{id:'stop',sessionKey:'main',signal:controller.signal});
  controller.abort(new Error('Stopped'));await assert.rejects(stopped,/Stopped/);assert.equal(chat.pending.size,0);
+});
+
+test('a model connection failure remains a failure without sending users to a disabled Control UI',()=>{
+ const error=new Error('Lost the connection to the AI service. Check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow`.');
+ assert.equal(runFailureText(error),'模型服务连接中断，消息已保留。稍后可以继续。');assert.equal(runFailureText(new Error('Specific API error')),'Specific API error');
+});
+
+test('native image and attachment blocks survive text snapshots and an empty final event',async()=>{
+ const chat=new GatewayChat({request:async()=>({})}),options={sessionKey:'agent:main:main',id:'media'};
+ const done=chat.respond('Render a picture',options),image={type:'input_image',image_url:'data:image/png;base64,aGVsbG8='},attachment={type:'attachment',attachment:{url:'/work/data/library/media/song.mp3',kind:'audio',label:'Song'}};
+ const event=(state,content)=>chat.event({event:'chat',payload:{sessionKey:options.sessionKey,runId:options.id,state,message:content&&{content}}});
+ event('delta',[{type:'text',text:'Here it is'},image]);event('delta',[{type:'text',text:'Here it is'},image,attachment]);event('final');
+ assert.deepEqual(await done,{text:'Here it is',media:[image,attachment]});
+});
+
+test('native assistant mediaUrls belong to the pending run even when the terminal chat event contains only text',async()=>{
+ const chat=new GatewayChat({request:async()=>({})}),options={sessionKey:'agent:main:main',id:'native-media'};
+ const done=chat.respond('Send a generated image',options),url='/work/data/library/media/image.png';
+ chat.event({event:'agent',payload:{...options,runId:options.id,stream:'assistant',data:{mediaUrls:[url]}}});
+ chat.event({event:'agent',payload:{...options,runId:options.id,stream:'assistant',data:{mediaUrl:url}}});
+ chat.event({event:'chat',payload:{...options,runId:options.id,state:'final',message:{content:[{type:'text',text:'Ready'}]}}});
+ assert.deepEqual(await done,{text:'Ready',media:[{type:'attachment',attachment:{url}}]});
 });

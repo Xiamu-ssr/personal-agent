@@ -17,7 +17,7 @@ import com.xiamu.agent.media.Images
 import kotlinx.coroutines.*
 
 @Composable
-fun ContentImage(path: String,modifier: Modifier = Modifier,scale: ContentScale = ContentScale.Fit) {
+fun ContentImage(path: String,modifier: Modifier = Modifier,scale: ContentScale = ContentScale.Fit,alignment: Alignment = Alignment.Center) {
     var bitmap by remember(path) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(path) {
         bitmap=Images.load(path,900)
@@ -28,7 +28,7 @@ fun ContentImage(path: String,modifier: Modifier = Modifier,scale: ContentScale 
     val frame=if(scale==ContentScale.Fit) modifier.aspectRatio(ratio) else modifier
     Box(frame.testTag("content-image:$path").background(Pal.Card),contentAlignment=Alignment.Center) {
         val b=bitmap
-        if(b!=null) Image(b.asImageBitmap(),null,Modifier.fillMaxSize(),contentScale=scale)
+        if(b!=null) Image(b.asImageBitmap(),null,Modifier.fillMaxSize(),contentScale=scale,alignment=alignment)
         else Icon(Icons.Outlined.Image,null,tint=Pal.Muted,modifier=Modifier.size(28.dp))
     }
 }

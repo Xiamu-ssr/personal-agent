@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { localFile } from "./local-paths.mjs";
+import crypto from "node:crypto";
+import { localFile, inside } from "./local-paths.mjs";
 
 const TYPES = {
   ".png": ["image", "image/png"], ".jpg": ["image", "image/jpeg"], ".jpeg": ["image", "image/jpeg"],
@@ -21,6 +22,40 @@ const TYPES = {
 export function fileType(file) {
   const [kind, mime] = TYPES[path.extname(file).toLowerCase()] || ["file", "application/octet-stream"];
   return { kind, mime };
+}
+
+export function mediaFile(root,rel,name) {
+  const file=localFile(root,rel,"data");
+  return {path:path.relative(root,file),name:name||path.basename(file),...fileType(file),size:fs.statSync(file).size};
+}
+
+// Native webchat media arrives as typed blocks, independently of its text.
+// Store those bytes once and publish the same file envelope used by cards.
+export function nativeReplyMedia(root,blocks=[]) {
+  const media=[];
+  for(const block of blocks.slice(0,20)) {
+    const source=block.type==='input_image'?block.image_url:block.type==='image'?
+      (block.source?.type==='base64'?`data:${block.source.media_type};base64,${block.source.data}`:block.url):block.attachment?.url;
+    if(typeof source!=="string")continue;
+    let rel,name=block.attachment?.label;
+    const inline=source.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/);
+    if(inline) {
+      if(inline[2].length>28*1024*1024)throw new Error("返回图片超过 20MB");
+      const bytes=Buffer.from(inline[2],"base64");
+      if(!bytes.length||bytes.length>20*1024*1024)throw new Error("返回图片大小不正确");
+      const ext=inline[1].split('/')[1].replace('jpeg','jpg'),hash=crypto.createHash('sha256').update(bytes).digest('hex');
+      rel=`data/library/media/replies/${hash}.${ext}`;name=`图片.${ext}`;
+      const dir=path.dirname(path.join(root,rel));fs.mkdirSync(dir,{recursive:true,mode:0o700});
+      if(!inside(fs.realpathSync(dir),fs.realpathSync(path.join(root,'data'))))throw new Error("返回图片目录不正确");
+      try{fs.writeFileSync(path.join(root,rel),bytes,{mode:0o600,flag:'wx'});}catch(e){if(e.code!=='EEXIST')throw e;localFile(root,rel,'data');}
+    } else {
+      rel=path.isAbsolute(source)?path.relative(root,source):source;
+      if(!rel.startsWith('data/'))throw new Error("返回附件不在 data/ 内");
+    }
+    const file=mediaFile(root,rel,name);
+    if(!media.some(m=>m.path===file.path))media.push(file);
+  }
+  return media;
 }
 
 const unescape = (s) => s.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, "$1");

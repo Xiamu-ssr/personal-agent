@@ -5,7 +5,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import WebSocket from "ws";
-import { replyMedia, fileType } from "../src/media.mjs";
+import { replyMedia, fileType, nativeReplyMedia } from "../src/media.mjs";
+import { Speech } from "../src/say.mjs";
 import { Harness } from "../src/agent.mjs";
 import { TaskHistory } from "../src/task-history.mjs";
 import { DeviceHub } from "../src/devices.mjs";
@@ -36,6 +37,16 @@ async function serve(t, { harness = { busy: false, connectors: new ConnectorMana
 }
 const auth = { "X-Doudou-Protocol":"2", Authorization: "Bearer " + config.token };
 const fileUrl = (rel) => "/files/" + rel.split("/").map(encodeURIComponent).join("/");
+
+test("native output images are durable files, deduplicated across restart and available in chat history",t=>{
+ const root=fixture(t),events=[],bus={emit:e=>events.push(e)},speech=new Speech({root,bus});
+ const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
+ const image={type:'input_image',image_url:'data:image/png;base64,'+bytes.toString('base64')};
+ const sent=speech.emit({text:'图片在这里'},{nativeMedia:[image,image]});assert.equal(sent.media.length,1);assert.equal(sent.media[0].mime,'image/png');
+ assert.deepEqual(fs.readFileSync(path.join(root,sent.media[0].path)),bytes);assert.deepEqual(new Speech({root,bus}).history()[0].media,sent.media);
+ assert.equal(nativeReplyMedia(root,[image])[0].path,sent.media[0].path);assert.equal(events[0].media[0].path,sent.media[0].path);
+ assert.throws(()=>nativeReplyMedia(root,[{type:'attachment',attachment:{url:path.join(root,'system/private.txt')}}]),/data/);
+});
 
 test("reply media uses case-insensitive extensions, matching MIME, measured size, link names and filename fallback", (t) => {
   const root = fixture(t);

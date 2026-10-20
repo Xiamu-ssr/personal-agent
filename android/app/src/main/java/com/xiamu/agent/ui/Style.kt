@@ -188,13 +188,14 @@ fun PageHeader(title: String, sub: String? = null, actions: @Composable RowScope
 
 /** Nav bar for pushed pages: back chevron + small centered caption. Pair with [BigTitle] as the first list item. */
 @Composable
-fun SubHeader(title: String, onBack: () -> Unit) {
+fun SubHeader(title: String, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit = {}) {
     Box(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp).height(52.dp)) {
         Box(Modifier.align(Alignment.CenterStart).size(44.dp).clip(CircleShape).tap(onClick = onBack), contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Outlined.ArrowBackIos, "返回", tint = Pal.Icon, modifier = Modifier.size(18.dp).offset(x = 3.dp))
         }
         Text(title, style = Type.title(17), color = Pal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 56.dp))
+        Row(Modifier.align(Alignment.CenterEnd),verticalAlignment=Alignment.CenterVertically,content=actions)
     }
 }
 

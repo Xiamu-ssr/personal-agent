@@ -1,0 +1,16 @@
+{
+  "version": "1.6.2",
+  "androidVersionCode": 25,
+  "macBuild": 13,
+  "assets": {
+    "doudou-1.6.2.apk": {
+      "bytes": 9540402,
+      "sha256": "2db90859c755274c5abc5be65e4925068e09668d812be35d5f9851d64ebd075d"
+    },
+    "doudou-1.6.2.dmg": {
+      "bytes": 10872439,
+      "sha256": "eef13503e5d73ecd58e1bf9da3caf12a89a0b305772dcf69ccd7c42b04003595"
+    }
+  },
+  "macNotarized": false
+}

@@ -1,0 +1,15 @@
+{
+  "fixture": "real product HTTP with synthetic files",
+  "physicalDevice": false,
+  "checks": [
+    "actual chat displays generated native media and an HTML file card",
+    "HTML opens inside the app and JavaScript interaction works",
+    "Android document picker saves the HTML and its bytes match the original",
+    "library shows standalone HTML and page previews without indexing support assets",
+    "standalone library page opens successfully",
+    "large system font keeps preview and title separate"
+  ],
+  "downloadBytes": 577,
+  "downloadSHA256": "230709defca73204a9eeb0469136555346333182291a7d23ad4cca0ba41f5e4e",
+  "downloadMatches": true
+}

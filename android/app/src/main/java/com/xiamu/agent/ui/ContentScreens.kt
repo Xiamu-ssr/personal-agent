@@ -10,6 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.*
 import com.xiamu.agent.*
 import kotlinx.coroutines.*
@@ -107,12 +110,12 @@ fun LibraryScreen(bottom: Dp) {
         if(library==null) item { if(error.isBlank()) Loading() else ErrorNote(error) }
         if(library?.artifacts?.isEmpty()==true) item { EmptyNote("豆豆做的页面和文档会放在这里。") }
         library?.artifacts?.chunked(2)?.forEach { row -> item { Row(Modifier.padding(bottom=14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-            row.forEach { a -> Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Pal.Card).tap {
+            row.forEach { a -> Column(Modifier.weight(1f).testTag("library-artifact:${a.path}").clip(RoundedCornerShape(20.dp)).background(Pal.Card).tap {
                 if(a.kind=="document" && a.files.size>1) selected=a
                 else if(a.path.isNotBlank()) scope.launch { runCatching { openFile(context,a.path,a.name) }.onFailure { Chat.error.value="文件暂不可用" } }
             }) {
-                if(a.thumbnail!=null) ContentImage(a.thumbnail,Modifier.fillMaxWidth().height(132.dp)) else Box(Modifier.fillMaxWidth().height(132.dp),contentAlignment=Alignment.Center) { Icon(Icons.Outlined.Description,null,tint=Pal.Muted,modifier=Modifier.size(36.dp)) }
-                Text(a.name,style=Type.title(14),color=Pal.Ink,modifier=Modifier.padding(start=12.dp,end=12.dp,top=10.dp))
+                if(a.thumbnail!=null) ContentImage(a.thumbnail,Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(topStart=20.dp,topEnd=20.dp)),scale=ContentScale.Crop,alignment=Alignment.TopCenter) else Box(Modifier.fillMaxWidth().height(132.dp),contentAlignment=Alignment.Center) { Icon(Icons.Outlined.Description,null,tint=Pal.Muted,modifier=Modifier.size(36.dp)) }
+                Text(a.name,style=Type.title(14),color=Pal.Ink,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=12.dp,end=12.dp,top=10.dp).testTag("artifact-title:${a.path}"))
                 Text(if(a.kind=="page") "页面" else "文档",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(start=12.dp,end=12.dp,top=3.dp,bottom=12.dp))
             } }
             if(row.size==1) Spacer(Modifier.weight(1f))

@@ -16,6 +16,7 @@ import { defineTool } from './product-tools.mjs';
 import { appendJsonl, readJson } from './store.mjs';
 import { writePrivateJson } from './private-json.mjs';
 import { validateMessage, prepareAttachments, userContent } from './attachments.mjs';
+import { runFailureText } from './gateway-chat.mjs';
 const quiet=text=>!text||/^(?:HEARTBEAT_OK|NO_REPLY|NONE)[.!。\s]*$/.test(text);
 const result=value=>({content:[{type:'text',text:JSON.stringify(value)}]});
 export class Harness {
@@ -92,13 +93,13 @@ export class Harness {
    const response=await this.runtime.respond(input,{sessionKey,signal:controller.signal,id,onAccepted});
    if(pendingSnapshot.length){this.pending=this.pending.filter(x=>!pendingSnapshot.includes(x));writePrivateJson(this.pendingFile,this.pending);}
    if(response.text)this.step(id,'result',response.text);
-   if(!silent&&!run.said&&!quiet(response.text))this.speech.emit({text:response.text},{activityId:id,chatType});
+   if(!silent&&(!run.said||response.media?.length)&&(!quiet(response.text)||response.media?.length))this.speech.emit({text:response.text},{activityId:id,chatType,nativeMedia:response.media});
    if(sessionKey!==MAIN_SESSION&&response.text){this.pending.push({label,text:response.text.slice(-12000)});this.pending=this.pending.slice(-20);writePrivateJson(this.pendingFile,this.pending);}
    await this.drainMain(run);
    const latest=run.latestResponse||response.text;
    this.history.put(id,{status:'done',endedAt:Date.now(),summary:quiet(latest)?'已检查，无新变化':latest.slice(0,180),latestResult:latest,usage:response.usage});ok=true;
    return {ok:true,text:response.text};
-  }catch(e){onAccepted?.(null,e);await this.drainMain(run);const stopped=controller.signal.aborted;this.history.put(id,{status:stopped?'stopped':'error',endedAt:Date.now(),summary:stopped?'已停止':this.connectors.redact(e.message)});if(!silent&&!stopped&&reportError)this.speech.emit({text:'这次没完成：'+this.connectors.redact(e.message)},{activityId:id,chatType,error:true});return {ok:false,error:e.message};
+  }catch(e){onAccepted?.(null,e);await this.drainMain(run);const stopped=controller.signal.aborted,message=this.connectors.redact(runFailureText(e));if(!stopped)this.log('OpenClaw run failed',id,e.message);this.history.put(id,{status:stopped?'stopped':'error',endedAt:Date.now(),summary:stopped?'已停止':message});if(!silent&&!stopped&&reportError)this.speech.emit({text:'这次没完成：'+message},{activityId:id,chatType,error:true});return {ok:false,error:e.message};
   }finally{
    this.running.delete(id);this.sessionRuns.delete(sessionKey);this.busy=[...this.running.values()].some(r=>r.sessionKey===MAIN_SESSION);
    this.bus.emit({t:'status',busy:this.busy});this.bus.emit({t:'activity',phase:'done',id,title:label,status:this.history.get(id).status,summary:this.history.get(id).summary,ts:Date.now()});
@@ -115,9 +116,9 @@ export class Harness {
   const done=(async()=>{
    try{
     const response=await this.runtime.respond(userContent(config.root,prompt,options.attachments||[]),{sessionKey:MAIN_SESSION,signal:run.controller.signal,id,onAccepted:options.onAccepted});
-    if(response.text){run.latestResponse=response.text;this.step(run.id,'result',response.text);if(!quiet(response.text))this.speech.emit({text:response.text},{activityId:run.id});}
+    if(response.text||response.media?.length){run.latestResponse=response.text;this.step(run.id,'result',response.text);if(!quiet(response.text)||response.media?.length)this.speech.emit({text:response.text},{activityId:run.id,nativeMedia:response.media});}
     return {ok:true,text:response.text};
-   }catch(e){options.onAccepted?.(null,e);if(!run.controller.signal.aborted&&options.reportError!==false)this.speech.emit({text:'这条消息没完成：'+this.connectors.redact(e.message)},{activityId:run.id,error:true});return {ok:false,error:e.message};}
+   }catch(e){options.onAccepted?.(null,e);if(!run.controller.signal.aborted){this.log('OpenClaw steered input failed',id,e.message);if(options.reportError!==false)this.speech.emit({text:'这条消息没完成：'+this.connectors.redact(runFailureText(e))},{activityId:run.id,error:true});}return {ok:false,error:e.message};}
   })();
   run.incoming.add(done);done.finally(()=>run.incoming.delete(done));
   const mainTask=this.mainTask;return done.then(reply=>reply.ok?mainTask:reply);

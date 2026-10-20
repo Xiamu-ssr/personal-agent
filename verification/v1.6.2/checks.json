@@ -1,0 +1,21 @@
+{
+  "cloudUnitTests": 135,
+  "androidUnitTests": 170,
+  "androidLibraryInstrumentedTests": 1,
+  "androidLibraryLayouts": 12,
+  "androidActualAppChecks": 6,
+  "macCoreAssertions": 223,
+  "nativeOpenClawDelivery": {
+    "ok": true,
+    "kernel": "openclaw",
+    "syntheticModel": true,
+    "requests": 5,
+    "exportSaved": true,
+    "imageCardDelivered": true,
+    "htmlCardDelivered": true,
+    "nativeMediaDelivered": true,
+    "authenticatedDownloads": true,
+    "mainSessionPreserved": true
+  },
+  "fixtureCookieTransport": "HTTP loopback at /; Secure and /agent attributes adapted only in the synthetic host"
+}
