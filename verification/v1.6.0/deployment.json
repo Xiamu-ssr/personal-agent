@@ -1,0 +1,41 @@
+{
+  "version": "1.6.0",
+  "sourceCommit": "9e43bc8d01311ee74a8bee9183a2ea28dd6c9c1a",
+  "externalHTTPS": 200,
+  "ready": true,
+  "fullPrivateBackup": true,
+  "persistentFilesCompared": 367,
+  "unchangedContentFiles": 364,
+  "connectorManagedMetadataUpdated": 3,
+  "metadataChangedFields": [
+    "appVersion",
+    "installedAt"
+  ],
+  "sameMainSession": true,
+  "sameSelectedModel": true,
+  "providerSchema": 2,
+  "liveMainHeartbeatCompleted": true,
+  "tavilyUsage": "ok",
+  "tavilyAccounts": 3,
+  "windUsage": "unsupported",
+  "amapUsage": "unsupported",
+  "release": "https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.6.0",
+  "downloadHashesVerified": true,
+  "assets": [
+    {
+      "name": "doudou-1.6.0.apk",
+      "size": 9507634,
+      "digest": "sha256:14904e32dcd928e933fd0e01b4bb8ec42fa62f51ae334d08d16d401f79f5e1d8"
+    },
+    {
+      "name": "doudou-1.6.0.dmg",
+      "size": 10839572,
+      "digest": "sha256:c5f85bdf538456df336f8c36d6c53583cf5f32f3d5bb07f86d38d0de2ff7fb62"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 166,
+      "digest": "sha256:8ec5d4e252c27d6e352e68ff5a78f6f24b35140e97203d7852335df0578ff144"
+    }
+  ]
+}
