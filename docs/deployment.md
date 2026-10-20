@@ -92,6 +92,8 @@ sudo -u agent /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node \
 
 主聊天通过 Gateway `chat.send` 的 `steer` 模式即时接收输入，原生内核负责持久接收和单 Session 调度；App 发送接口等待原生接收确认。工具执行期间的补充在下一次模型决策前进入上下文，不在豆豆外层排队。活动详情同时记录这些补充。工具入口的 `args_json` 是 JSON 对象字符串，字段按目录参数填写；工具校验失败记录真实原因，开启 OpenClaw 原生重复调用检测。
 
+1.6.1 将动态、点子和支线任务也统一到同一 Gateway 通道，以不同的原生 Session Key 隔离；删除 OpenResponses 执行路径。切换模型时，已接收的后台任务继续执行，不再被旧 HTTP 请求的权限快照中断。
+
 搜索走已连接的 Tavily 账号，`web_fetch` 直接抓取网页；模型供应商订阅不承担第三方搜索额度。
 
 用户设备默认读取上下文，明确任务可用 Computer Use / Phone Use，范围由提示词约束；豆豆专用设备可操作系统。操作系统本身的能力授权仍在各设备完成。

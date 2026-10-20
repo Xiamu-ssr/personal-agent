@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -62,6 +64,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGateway = CloudConnectors) {
     val (data, loadError) = connectionData(gateway)
     val connector = data?.connector(route.connector.name) ?: route.connector
@@ -128,8 +131,8 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
                             }
                             if (account.status != "ok") Text(account.error?.takeIf { it.isNotBlank() } ?: "尚未通过验证", fontSize = Type.Secondary, lineHeight = Type.SecondaryLine,
                                 color = Pal.Danger, modifier = Modifier.padding(top = 8.dp))
-                            account.usage?.let { Box(Modifier.fillMaxWidth().padding(top=12.dp,bottom=6.dp)) { UsageView(it) } }
-                            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
+                            account.usage?.takeIf { it.visible }?.let { Box(Modifier.fillMaxWidth().padding(top=12.dp,bottom=6.dp)) { UsageView(it) } }
+                            FlowRow(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
                                 if (connector.fields != null) TextButton(enabled = busy == null, onClick = { Nav.open(Route.ConnectorForm(connector, account)) }) { Text("编辑", color = Pal.Ink) }
                                 TextButton(enabled = busy == null, onClick = {
                                     if (busy == null) {

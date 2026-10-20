@@ -96,7 +96,7 @@ internal fun FeedPostView(post: FeedPost) {
             Text(post.title,style=Type.title(15),color=Pal.Ink,modifier=Modifier.padding(top=5.dp,bottom=5.dp))
             Markdown(post.body,fontSize=13,lineHeightMultiplier=1.65f)
             if(post.showOriginalLink) Text("阅读原文 ↗",style=Type.body(12),color=Pal.Link,modifier=Modifier.tap { openBrowser(context,post.url) }.padding(vertical=7.dp))
-            post.image?.let { ContentImage(it,Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(15.dp))) }
+            post.image?.let { image -> ContentImage(image,Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).tap { Nav.open(Route.Image(image)) }) }
             Row(Modifier.fillMaxWidth().padding(top=8.dp),verticalAlignment=Alignment.CenterVertically) {
                 IconButton(onClick={feedback("like")},enabled=!sending,modifier=Modifier.size(36.dp)) { Icon(if(reaction=="like") Icons.Outlined.ThumbUpAlt else Icons.Outlined.ThumbUpOffAlt,"赞",tint=if(reaction=="like") Pal.Ink else Pal.Muted,modifier=Modifier.size(19.dp)) }
                 IconButton(onClick={feedback("dislike")},enabled=!sending,modifier=Modifier.size(36.dp)) { Icon(if(reaction=="dislike") Icons.Outlined.ThumbDownAlt else Icons.Outlined.ThumbDownOffAlt,"踩",tint=if(reaction=="dislike") Pal.Ink else Pal.Muted,modifier=Modifier.size(19.dp)) }

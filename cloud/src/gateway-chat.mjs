@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 const textOf=message=>(message?.content||[]).filter(c=>c.type==='text').map(c=>c.text||'').join('\n').trim();
 
-// Submit every main-chat input to OpenClaw immediately. The gateway owns durable
+// Submit every input to its native session immediately. The gateway owns durable
 // acceptance, same-turn steering, fallback turns and session serialization.
 export class GatewayChat {
  constructor(client){this.client=client;this.pending=new Map();}

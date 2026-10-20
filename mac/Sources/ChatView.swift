@@ -44,6 +44,7 @@ struct RemoteImage: View {
     var maxSide: CGFloat = 220
     var maxHeight: CGFloat? = nil
     var failureText: String? = nil
+    var fullWidth = false
     @State private var image: NSImage? = nil
     @State private var failed = false
 
@@ -52,8 +53,11 @@ struct RemoteImage: View {
             if let image {
                 let s = image.size
                 let k = min(1, maxSide / max(s.width, s.height, 1), (maxHeight ?? .greatestFiniteMagnitude) / max(1,s.height))
-                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                if fullWidth {
+                    Image(nsImage:image).resizable().aspectRatio(contentMode:.fit).frame(maxWidth:maxSide)
+                } else { Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
                     .frame(width: max(40, s.width * k), height: max(40, s.height * k))
+                }
             } else {
                 RoundedRectangle(cornerRadius: 14).fill(Theme.field)
                     .frame(width: maxSide * 0.7, height: maxSide * 0.5)

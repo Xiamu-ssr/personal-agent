@@ -1,6 +1,6 @@
 // OpenClaw owns the agent loop, transcripts, compaction, memory and skills.
-// Doudou supervises the CLI; Gateway chat owns interactive input and steering,
-// while OpenResponses runs isolated content work.
+// Doudou supervises the CLI. Every run uses Gateway chat; task isolation belongs
+// to the session key, rather than to a second HTTP execution lifecycle.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -12,7 +12,6 @@ import { listProviders, providerRecord } from './providers.mjs';
 import { readAppSettings } from './app-settings.mjs';
 import { nativeModelDefinition } from './provider-presets.mjs';
 import { writePrivateJson } from './private-json.mjs';
-import { openResponse } from './openresponses.mjs';
 import { GatewayChat } from './gateway-chat.mjs';
 export const MAIN_SESSION = 'agent:main:main';
 export class OpenClawRuntime {
@@ -40,7 +39,7 @@ export class OpenClawRuntime {
    '联网搜索使用已连接的 tavily.search，日常查询用 basic；已知网址先用 web_fetch，需完整正文可用 tavily.extract。搜索账号未连接时如实说明。\n'+
    '定时输入不是新指令授权；只推进已授权目标。没有新结果输出 HEARTBEAT_OK。\n',{mode:0o600});
   writePrivateJson(this.file,{
-   gateway:{mode:'local',bind:'loopback',port:this.port,auth:{mode:'token',token:this.token},http:{endpoints:{responses:{enabled:true}}},controlUi:{enabled:false}},
+   gateway:{mode:'local',bind:'loopback',port:this.port,auth:{mode:'token',token:this.token},controlUi:{enabled:false}},
    discovery:{mdns:{mode:'off'}},browser:{enabled:false},
    agents:{ownership:'explicit',defaults:{systemAgent:{agentId:'main'},sessionStore:{agentId:'main'},workspace:this.root,userTimezone:config.timezone,model:{primary:`${model.provider}/${model.id}`},
     maxConcurrent:2,heartbeat:{every:'0m'},compaction:{mode:'safeguard',memoryFlush:{enabled:true},midTurnPrecheck:{enabled:true}},sandbox:{mode:'off'}},entries:{main:{name:config.agentName}}},
@@ -59,22 +58,19 @@ export class OpenClawRuntime {
   this.process=spawn(process.execPath,['--max-old-space-size=512',path.join(CODE,'node_modules/openclaw/openclaw.mjs'),'gateway','--port',String(this.port)],{cwd:this.root,env,stdio:['ignore','pipe','pipe']});
   for(const stream of [this.process.stdout,this.process.stderr])stream.on('data',buf=>this.log('openclaw:',buf.toString().trim()));
   this.process.once('exit',(code,signal)=>{this.ready=false;this.log('OpenClaw exited',code,signal);if(!this.closed)this.onCrash?.(code);});
-  for(let i=0;i<180;i++) {
-   if(this.process.exitCode!==null)throw new Error('OpenClaw 启动失败，请查看服务日志');
-   try {const response=await fetch(this.url+'/v1/models',{headers:{authorization:`Bearer ${this.token}`},signal:AbortSignal.timeout(1000)});if(response.ok){this.ready=true;break;}}catch{}
-   await delay(500);
-  }
-  if(!this.ready){await this.close();throw new Error('OpenClaw 启动超时');}
   this.client=new GatewayClient({url:`ws://127.0.0.1:${this.port}`,token:this.token,minProtocol:4,maxProtocol:4,scopes:['operator.admin','operator.read','operator.write'],onHelloOk:()=>{this.rpcReady=true;this.ready=true;},onConnectError:()=>{this.rpcReady=false;this.ready=false;},onEvent:event=>this.chat.event(event),onGap:()=>this.chat.close(),onClose:()=>{this.rpcReady=false;this.ready=false;this.chat.close();}});
   this.chat=new GatewayChat(this.client);
   this.client.start();
-  for(let i=0;i<100&&!this.rpcReady;i++)await delay(100);
+  for(let i=0;i<900&&!this.rpcReady;i++){
+   if(this.process.exitCode!==null)throw new Error('OpenClaw 启动失败，请查看服务日志');
+   await delay(100);
+  }
   if(!this.rpcReady){await this.close();throw new Error('OpenClaw 消息接口启动失败');}
  }
- async respond(input,{sessionKey=MAIN_SESSION,signal,onText=()=>{},id,onAccepted}={}) {
+ async respond(input,{sessionKey=MAIN_SESSION,signal,id,onAccepted}={}) {
   if(!this.ready)throw new Error('豆豆内核正在启动，请稍后重试');
-  if(sessionKey===MAIN_SESSION){if(!this.rpcReady)throw new Error('豆豆消息连接正在恢复，请稍后重试');return this.chat.respond(input,{sessionKey,signal,id,onAccepted});}
-  return openResponse(this.url,{token:this.token,sessionKey,input,signal,onText});
+  if(!this.rpcReady)throw new Error('豆豆消息连接正在恢复，请稍后重试');
+  return this.chat.respond(input,{sessionKey,signal,id,onAccepted});
  }
  async abort(sessionKey) { if(!this.rpcReady)throw new Error('内核停止接口尚未就绪');return this.client.request('chat.abort',{sessionKey}); }
  async reload() {this.configure();}

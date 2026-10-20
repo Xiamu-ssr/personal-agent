@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
+import okhttp3.Request
 
 /** AAC (ADTS) at 16 kHz mono: small, and what /api/transcribe takes as format=aac. */
 class Recorder(ctx: Context) {
@@ -129,7 +130,17 @@ object Images {
 
     suspend fun load(path: String, maxEdge: Int): Bitmap? {
         cached(path, maxEdge)?.let { return it }
-        val bytes = runCatching { Api.bytes(path) }.getOrNull() ?: return null
+        val bytes = try {
+            when {
+                path.startsWith("data/") -> Api.bytes(path)
+                path.startsWith("/api/") -> Api.pathBytes(path)
+                path.startsWith("https://") || path.startsWith("http://") -> withContext(Dispatchers.IO) {
+                    Api.http.newCall(Request.Builder().url(path).build()).execute().use { if(it.isSuccessful) it.body?.bytes() else null }
+                }
+                else -> null
+            }
+        } catch(e: kotlinx.coroutines.CancellationException) { throw e } catch(_: Exception) { null }
+        if(bytes==null || bytes.size>20*1024*1024) return null
         return withContext(Dispatchers.Default) {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)

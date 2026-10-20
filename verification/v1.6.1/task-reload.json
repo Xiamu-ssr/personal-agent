@@ -1,0 +1,16 @@
+{
+  "before": {
+    "ok": false,
+    "error": "Gateway requester authority changed",
+    "trigger": "model changed during background task"
+  },
+  "after": {
+    "ok": true,
+    "kernel": "openclaw",
+    "modelChangedDuringTask": true,
+    "backgroundCompleted": true,
+    "toolCallsAfterReload": 1,
+    "resultReturnedToMain": true,
+    "modelRequests": 3
+  }
+}

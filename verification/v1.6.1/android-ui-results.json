@@ -1,0 +1,11 @@
+{
+  "fixture": "loopback synthetic only",
+  "physicalDevice": false,
+  "checks": [
+    "actual chat shows the full portrait before its caption",
+    "actual feed uses the original portrait ratio",
+    "Wind shows compact normal/insufficient states per account",
+    "large text keeps account actions inside the card",
+    "supplier wallet grows with the system font scale"
+  ]
+}

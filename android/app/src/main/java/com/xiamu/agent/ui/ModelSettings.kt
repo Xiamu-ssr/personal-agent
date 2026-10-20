@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,7 +65,8 @@ fun ModelSettingsScreen() {
                     }
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth().padding(top=12.dp)) {
-                    HorizontalPager(state=pager,pageSpacing=12.dp,pageSize=PageSize.Fixed(maxWidth-20.dp),modifier=Modifier.height(224.dp).testTag("provider-wallet")) { index ->
+                    val cardHeight=(224*LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
+                    HorizontalPager(state=pager,pageSpacing=12.dp,pageSize=PageSize.Fixed(maxWidth-20.dp),modifier=Modifier.height(cardHeight).testTag("provider-wallet")) { index ->
                         current.providers.getOrNull(index)?.let { provider ->
                             ProviderCard(provider,current.model.provider==provider.id) { if(!provider.builtin) Nav.open(Route.ProviderForm(provider.id)) }
                         } ?: AddProviderCard { Nav.open(Route.ProviderForm()) }
@@ -112,14 +114,16 @@ private fun ProviderCard(provider: ModelProvider, selected: Boolean, edit: () ->
             Row(verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("DOUDOU  /  MODEL ACCESS",style=Type.body(9),color=CardInk.copy(alpha=.55f))
-                    Text(provider.name,style=Type.title(23),color=CardInk,modifier=Modifier.padding(top=8.dp),maxLines=1)
+                    Text(provider.name,style=Type.title(23),color=CardInk,modifier=Modifier.padding(top=8.dp),maxLines=1,overflow=TextOverflow.Ellipsis)
                 }
                 if(!provider.builtin) IconButton(onClick=edit,modifier=Modifier.size(32.dp).testTag("provider-edit:${provider.id}")) { Icon(Icons.Outlined.MoreHoriz,"编辑供应商",tint=CardInk) }
             }
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                    Text(provider.usage?.items?.firstOrNull()?.label ?: "可用额度",style=Type.body(10),color=CardInk.copy(alpha=.55f))
-                    Text(provider.usage?.headline ?: "正在查询额度",style=if(provider.usage?.items?.isNotEmpty()==true) Type.title(25) else Type.body(12),color=CardInk)
+                    if(provider.usage?.visible==true) {
+                        provider.usage.items.firstOrNull()?.let { Text(it.label,style=Type.body(10),color=CardInk.copy(alpha=.55f)) }
+                        Text(provider.usage.headline,style=if(provider.usage.items.isNotEmpty()) Type.title(25) else Type.body(13),color=CardInk)
+                    } else Text("已连接",style=Type.body(13),color=CardInk.copy(alpha=.75f))
                     provider.usage?.items?.drop(1)?.take(1)?.forEach { Text("${it.label} · ${it.amount}",style=Type.body(10),color=CardInk.copy(alpha=.6f)) }
                     provider.usage?.items?.firstOrNull()?.fraction?.let { fraction ->
                         Box(Modifier.width(146.dp).height(3.dp).clip(CircleShape).background(CardInk.copy(alpha=.12f))) {

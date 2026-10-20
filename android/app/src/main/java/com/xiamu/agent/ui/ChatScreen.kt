@@ -173,7 +173,7 @@ private fun SayCardView(card: SayCard,active: Boolean) {
         is SayCard.Goal -> CardList(Modifier.padding(top=10.dp)) { ListRow(card.name,"查看目标",Icons.Outlined.CheckBox,onClick={Nav.open(Route.GoalDetail(card.name))}) }
         is SayCard.Device -> CardList(Modifier.padding(top=10.dp)) { ListRow(if(card.capability=="health") "健康数据" else "开启本机能力","由你在这台设备上授权",leading={SystemCapabilityIcon(card.capability ?: "device")},onClick={Nav.open(Route.Connectors(0))}) }
         is SayCard.Link -> Column(Modifier.fillMaxWidth().padding(top=10.dp).clip(RoundedCornerShape(16.dp)).background(Pal.Background).tap { openBrowser(context,card.url) }) {
-            card.image?.let { ContentImage(it,Modifier.fillMaxWidth().height(140.dp)) }
+            card.image?.let { ContentImage(it,Modifier.fillMaxWidth().height(140.dp),scale=ContentScale.Crop) }
             Column(Modifier.padding(12.dp)) { Text(card.title,style=Type.title(15),color=Pal.Ink); if(card.description.isNotBlank()) Text(card.description,style=Type.body(13),color=Pal.Muted); Text(runCatching { java.net.URI(card.url).host }.getOrDefault(card.url),style=Type.body(12),color=Pal.Link,modifier=Modifier.padding(top=4.dp)) }
         }
         is SayCard.Media -> Unit
@@ -188,9 +188,15 @@ private fun Attachments(list: List<Attachment>, active: Boolean) {
     val scope = rememberCoroutineScope()
     val images=list.filter { it.kind=="image" }
     if(images.isNotEmpty()) Column(Modifier.padding(bottom=8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-        images.chunked(2).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-            row.forEach { a -> RemoteImage(a.path,Modifier.size(if(images.size==1) 220.dp else 118.dp).clip(RoundedCornerShape(12.dp)).tap { Nav.open(Route.Image(a.path)) }) }
-        } }
+        if(images.size==1) {
+            val a=images.single()
+            ContentImage(a.path,Modifier.widthIn(max=240.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).tap { Nav.open(Route.Image(a.path)) })
+        } else images.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.Top) {
+                row.forEach { a -> ContentImage(a.path,Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).tap { Nav.open(Route.Image(a.path)) }) }
+                if(row.size==1) Spacer(Modifier.weight(1f))
+            }
+        }
     }
     list.filter { it.kind!="image" }.forEach { a ->
         when (a.kind) {
@@ -228,22 +234,5 @@ private fun VoiceRow(a: Attachment, active: Boolean) {
             t ?: "正在转文字…", fontSize = Type.Secondary, lineHeight = Type.SecondaryLine, color = if (t == null) Pal.Faint else Pal.Ink,
             modifier = Modifier.padding(top = 8.dp, start = 2.dp),
         )
-    }
-}
-
-@Composable
-private fun RemoteImage(path: String, modifier: Modifier) {
-    var bmp by remember(path) { mutableStateOf<Bitmap?>(Images.cached(path, 720)) }
-    var failed by remember(path) { mutableStateOf(false) }
-    LaunchedEffect(path) { if (bmp == null) Images.load(path, 720).let { if (it == null) failed = true else bmp = it } }
-    val b = bmp
-    if (b != null) {
-        val ratio = b.width.toFloat() / b.height.coerceAtLeast(1)
-        Image(b.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = modifier.aspectRatio(ratio.coerceIn(0.5f, 2.5f)))
-    } else {
-        Box(modifier.size(160.dp, 120.dp).background(Pal.Card), contentAlignment = Alignment.Center) {
-            if (failed) Text("图片加载失败", fontSize = Type.Label, color = Pal.Faint)
-            else CircularProgressIndicator(Modifier.size(18.dp), color = Pal.Gold, strokeWidth = 2.dp)
-        }
     }
 }

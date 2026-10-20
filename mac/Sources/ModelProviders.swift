@@ -285,8 +285,10 @@ struct ModelSettingsPage: View {
                 Spacer()
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(provider.usage?.items.first?.label ?? "可用额度").font(Theme.font(size: 10)).foregroundStyle(ink.opacity(0.55))
-                        Text(provider.usage?.headline ?? "正在查询额度").font(Theme.font(size: provider.usage?.items.isEmpty == false ? 27 : 12, weight: .medium)).foregroundStyle(ink)
+                        if let usage=provider.usage,usage.visible {
+                            if let first=usage.items.first {Text(first.label).font(Theme.font(size:10)).foregroundStyle(ink.opacity(0.55))}
+                            Text(usage.headline).font(Theme.font(size:usage.items.isEmpty ? 13:27,weight:.medium)).foregroundStyle(ink)
+                        } else {Text("已连接").font(Theme.font(size:13)).foregroundStyle(ink.opacity(0.75))}
                         if let second = provider.usage?.items.dropFirst().first { Text(second.label + " · " + second.amount).font(Theme.font(size: 10)).foregroundStyle(ink.opacity(0.6)) }
                         if let fraction = provider.usage?.items.first?.fraction {
                             GeometryReader { proxy in Capsule().fill(ink.opacity(0.12)).overlay(alignment: .leading) { Capsule().fill(ink.opacity(0.65)).frame(width: proxy.size.width * fraction) } }.frame(width: 170, height: 3)

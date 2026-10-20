@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.health.WRITE_HEART_RATE_VARIABILITY" />
     <application android:networkSecurityConfig="@xml/local_checks_network">
         <activity android:name=".device.TouchProbeActivity" android:exported="false" />
+        <activity android:name=".ui.LayoutProbeActivity" android:exported="false" />
         <!-- Fixture packages must not reconnect a persisted test address automatically after boot. -->
         <receiver android:name=".device.BootReceiver" android:enabled="false" />
     </application>

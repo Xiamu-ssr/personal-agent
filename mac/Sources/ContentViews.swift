@@ -54,7 +54,7 @@ struct FeedPage:View {
                 Text(p.title).font(Theme.font(size:17,weight:.semibold)).fixedSize(horizontal:false,vertical:true)
                 MarkdownView(text:p.body,size:14)
                 if !p.hasSourceLink,let u=p.sourceLink {Link("阅读原文 ↗",destination:u).font(Theme.font(size:12)).foregroundStyle(Theme.link)}
-                if let image=p.image { RemoteImage(path:image,maxSide:570,maxHeight:320).frame(maxWidth:.infinity,alignment:.leading) }
+                if let image=p.image { RemoteImage(path:image,maxSide:570,fullWidth:true).verificationAction("feed-image-"+p.path).frame(maxWidth:.infinity,alignment:.leading).onTapGesture {Nav.shared.preview=image} }
                 HStack(spacing:23) {
                     Button { Task { _ = await act(p,"like") } } label:{ Image(systemName:feedback[p.path] == "like" ? "hand.thumbsup.fill" : "hand.thumbsup") }.verificationAction("feed-like-"+p.path).disabled(sending.contains(p.path))
                     Button { Task { _ = await act(p,"dislike") } } label:{ Image(systemName:feedback[p.path] == "dislike" ? "hand.thumbsdown.fill" : "hand.thumbsdown") }.verificationAction("feed-dislike-"+p.path).disabled(sending.contains(p.path))
@@ -226,7 +226,7 @@ struct FeedPostDetailPage: View {
                 Text(post.title).font(Theme.titleFont(23))
                 Text(post.source).font(Theme.font(size:11)).foregroundStyle(Theme.sub)
                 MarkdownView(text:post.body,size:14)
-                if let image=post.image {RemoteImage(path:image,maxSide:570,maxHeight:320)}
+                if let image=post.image {RemoteImage(path:image,maxSide:570,fullWidth:true).onTapGesture {Nav.shared.preview=image}}
                 if !post.hasSourceLink,let url=post.sourceLink {Link("阅读原文 ↗",destination:url).foregroundStyle(Theme.link)}
                 Button("讨论") {Composer.shared.discuss(post)}.buttonStyle(SoftButtonStyle())
             } else {Note(text:error.isEmpty ? "加载中…" : error)}

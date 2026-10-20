@@ -28,7 +28,11 @@ struct UsageSnapshot: Equatable {
         status = row["status"] as? String ?? ""; message = row["message"] as? String ?? ""
         items = (row["items"] as? [[String: Any]] ?? []).compactMap(Allowance.init)
     }
-    var headline: String { items.first?.amount ?? (message.isEmpty ? "余量暂不可用" : message) }
+    var visible: Bool { !items.isEmpty || ["ok","exhausted","error","partial"].contains(status) }
+    var headline: String {
+        if let first=items.first { return first.amount }
+        switch status {case "ok":return "额度正常";case "exhausted":return "额度不足";case "error":return "暂不可用";case "partial":return "部分可用";default:return ""}
+    }
 }
 
 struct UsageMeter: View {
@@ -36,8 +40,12 @@ struct UsageMeter: View {
     var compact = false
     var ink = Theme.ink
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            if usage.items.isEmpty { Text(usage.headline).font(Theme.font(size: compact ? 10 : 12)).foregroundStyle(ink.opacity(0.6)) }
+        if usage.visible { VStack(alignment: .leading, spacing: 7) {
+            if usage.items.isEmpty {
+                let color=usage.status == "ok" ? Theme.online : usage.status == "exhausted" ? Theme.danger : Theme.sub
+                HStack(spacing:5) { Circle().fill(color).frame(width:5,height:5);Text(usage.headline).font(Theme.font(size:12)).foregroundStyle(color) }
+                    .padding(.horizontal,8).padding(.vertical,5).background(color.opacity(0.09),in:RoundedRectangle(cornerRadius:9))
+            }
             ForEach(Array((compact ? Array(usage.items.prefix(1)) : usage.items).enumerated()), id: \.offset) { _, item in
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
@@ -55,7 +63,7 @@ struct UsageMeter: View {
                     }
                 }
             }
-            if usage.status == "partial" { Text(usage.message).font(Theme.font(size: 10)).foregroundStyle(ink.opacity(0.6)) }
-        }
+            if !compact && usage.status == "partial" && !usage.items.isEmpty { Text("部分账号暂不可用").font(Theme.font(size:12)).foregroundStyle(ink.opacity(0.6)) }
+        } }
     }
 }

@@ -234,7 +234,7 @@ struct ConnectorDetailPage: View {
                         }
                     }
                     Spacer(minLength: 4)
-                    if let usage = account.usage { UsageMeter(usage: usage).frame(width: 180) }
+                    if let usage = account.usage, usage.visible { UsageMeter(usage: usage).frame(width: 180) }
                     HStack(spacing: 8) {
                         if connector.fields != nil {
                             Button("编辑") { Nav.shared.push(.connectorForm(name: name, accountID: account.id)) }.buttonStyle(SoftButtonStyle())
@@ -395,7 +395,7 @@ struct ConnectorListRow: View {
                 }
                 Spacer(minLength: 10)
                 if connected {
-                    if let usage = connector.usage { UsageMeter(usage: usage, compact: true).frame(width: 115) }
+                    if let usage = connector.usage, usage.visible { UsageMeter(usage: usage, compact: true).frame(width: 115) }
                     StatusTag(text: "已连接")
                 }
                 else { Text("连接").font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.accent).padding(.horizontal, 14).frame(height: 28).background(Theme.field, in: Capsule()) }

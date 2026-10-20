@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "kernel": "openclaw",
+  "syntheticModel": true,
+  "initialInputReferencesOnly": true,
+  "nativeImageRead": true,
+  "nativeFileRead": true,
+  "images": 2,
+  "mixedAttachments": true,
+  "modelRequests": 2,
+  "singleDeviceEntry": true
+}

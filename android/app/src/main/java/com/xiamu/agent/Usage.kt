@@ -11,7 +11,10 @@ data class Allowance(val label: String, val unit: String, val remaining: Double,
     }
 }
 data class Usage(val status: String, val message: String, val items: List<Allowance>, val checkedAt: Long) {
-    val headline: String get() = items.firstOrNull()?.amount ?: message.ifBlank { "余量暂不可用" }
+    val visible: Boolean get() = items.isNotEmpty() || status in setOf("ok","exhausted","error","partial")
+    val headline: String get() = items.firstOrNull()?.amount ?: when(status) {
+        "ok" -> "额度正常"; "exhausted" -> "额度不足"; "error" -> "暂不可用"; "partial" -> "部分可用"; else -> ""
+    }
     companion object {
         fun from(j: JSONObject?): Usage? = j?.let { json ->
             Usage(json.optString("status"),json.optString("message"),json.optJSONArray("items").objects().mapNotNull { i ->

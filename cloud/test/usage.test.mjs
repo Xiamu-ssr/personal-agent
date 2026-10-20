@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { UsageService, tavilyUsage, totalUsage } from '../src/usage.mjs';
 import { ConnectorManager } from '../src/connectors.mjs';
 import { Providers, readProviders } from '../src/providers.mjs';
@@ -36,12 +37,19 @@ test('concurrent readers share requests; rotation invalidates cache; upstream er
   assert.equal(error.status,'error'); assert.doesNotMatch(JSON.stringify(error),/synthetic/);
 });
 
-test('unsupported connector quotas make no network calls and known Wind exhaustion remains explicit', async () => {
-  const usage=new UsageService({connectors:{readState:()=>({})},request:()=>assert.fail('no billing endpoint')});
-  for(const name of ['wind','amap']) {
-    const result=await usage.connector(name,{id:'a',values:{apiKey:'synthetic'}});
-    assert.equal(result.status,'unsupported'); assert.equal(result.items.length,0);
-  }
+test('Wind reports usable/exhausted availability without inventing a numeric balance or making requests', async () => {
+  const state={},a={id:'a',values:{apiKey:'synthetic-a'}},b={id:'b',values:{apiKey:'synthetic-b'}};
+  const usage=new UsageService({connectors:{readState:()=>state},request:()=>assert.fail('no billing endpoint')});
+  const normal=await usage.connector('wind',a);
+  assert.equal(normal.status,'ok');assert.equal(normal.message,'额度正常');assert.equal(normal.items.length,0);
+  state.queryAccounts={blocked:{a:{identity:crypto.createHash('sha256').update(a.values.apiKey).digest('hex'),retryAt:Date.now()+60_000}}};
+  const exhausted=await usage.connector('wind',a);
+  assert.equal(exhausted.status,'exhausted');assert.equal(exhausted.message,'额度不足');
+  assert.equal(totalUsage([exhausted,await usage.connector('wind',b)]).message,'额度正常');
+  assert.equal(totalUsage([exhausted,exhausted]).message,'额度不足');
+  assert.equal((await usage.connector('amap',a)).status,'unsupported');
+  state.queryAccounts.blocked.a.retryAt=Date.now()-1;
+  assert.equal((await usage.connector('wind',a)).status,'ok');
 });
 
 test('provider balances use official fixed hosts and never forward a key from a custom proxy', async () => {

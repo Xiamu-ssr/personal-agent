@@ -154,7 +154,7 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                                                 trailing = {
                                                     when {
                                                         c.usesSwitch -> Tag(if (c.enabled) "已连接" else "未开启", if (c.enabled) CapabilityEnabled else Pal.Muted)
-                                                        c.usage != null -> Column(Modifier.width(106.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                                        c.usage?.visible == true -> Column(Modifier.width(106.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                                                             Text("${c.accounts.size} 个账号",style=Type.body(10),color=Pal.Muted)
                                                             UsageView(c.usage,compact=true)
                                                         }

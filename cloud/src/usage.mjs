@@ -12,6 +12,10 @@ export function allowance(id, label, unit, remaining, limit = null, resetAt = nu
 }
 const snapshot = (status, message, items = [], extra = {}) => ({ status, message, items, checkedAt: Date.now(), ...extra });
 export function totalUsage(rows) {
+  if(rows.length && rows.every(r=>['ok','exhausted'].includes(r.status) && !r.items.length)) {
+    const available=rows.some(r=>r.status==='ok');
+    return snapshot(available?'ok':'exhausted',available?'额度正常':'额度不足');
+  }
   const known = rows.filter(r => r.status === 'ok');
   const groups = new Map();
   for (const row of known) for (const item of row.items) {
@@ -58,11 +62,11 @@ export class UsageService {
     return value;
   }
   async connector(name, account) {
-    if (name === 'wind' || name === 'amap') {
-      const exhausted = name === 'wind' && accountQuota(this.connectors.readState(name), account);
-      return snapshot(exhausted ? 'exhausted' : 'unsupported', exhausted ? '额度已耗尽' : '官方暂未提供余量接口', [], {
-        consoleUrl: name === 'wind' ? 'https://aifinmarket.wind.com.cn/#/user/overview' : 'https://console.amap.com/' });
+    if (name === 'wind') {
+      const exhausted = accountQuota(this.connectors.readState(name), account);
+      return snapshot(exhausted ? 'exhausted' : 'ok', exhausted ? '额度不足' : '额度正常');
     }
+    if (name === 'amap') return snapshot('unsupported', '');
     return this.cached(`connector:${name}:${account.id}`, account.values.apiKey, async () => tavilyUsage(await this.json('https://api.tavily.com/usage', account.values.apiKey)));
   }
   async connectorList(list) {

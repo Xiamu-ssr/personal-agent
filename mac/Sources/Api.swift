@@ -165,7 +165,14 @@ enum Api {
 
     static func cached(_ dataPath: String) async throws -> Data {
         if let d = cache.object(forKey: dataPath as NSString) { return d as Data }
-        let d = try await data(filePath(dataPath))
+        let d:Data
+        if dataPath.hasPrefix("/api/") {d=try await data(dataPath)}
+        else if let url=URL(string:dataPath),["https","http"].contains(url.scheme?.lowercased() ?? "") {
+            // An external image request never carries the cloud's bearer token.
+            let (bytes,response)=try await session.data(from:url)
+            guard (response as? HTTPURLResponse)?.statusCode==200,bytes.count<=20*1024*1024 else {throw ApiError(code:0,message:"图片加载失败")}
+            d=bytes
+        } else {d=try await data(filePath(dataPath))}
         cache.setObject(d as NSData, forKey: dataPath as NSString, cost: d.count)
         return d
     }
