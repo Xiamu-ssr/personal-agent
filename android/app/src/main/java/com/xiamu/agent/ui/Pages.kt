@@ -77,11 +77,10 @@ sealed interface Route {
     data object Health : Route
     data object Soul : Route
     data object Memory : Route
-    data object Capabilities : Route
     data class GoalDetail(val name: String) : Route
     data class FeedDetail(val quote: com.xiamu.agent.ChatQuote) : Route
     data class IdeaDetail(val quote: com.xiamu.agent.ChatQuote) : Route
-    data class RuntimeSettings(val permissions: Boolean = false) : Route
+    data object ModelSettings : Route
     data class ProviderForm(val id: String? = null) : Route
     data class ActivityDetail(val id: String,val title: String) : Route
     data class SideChat(val id: String? = null) : Route
@@ -146,11 +145,10 @@ fun RoutePage(r: Route) {
         Route.Health -> HealthScreen()
         Route.Soul -> SoulScreen()
         Route.Memory -> MemoryScreen(0.dp)
-        Route.Capabilities -> SubPage("本机能力") { item { EnableAllCapabilities() }; item { LocalCapabilities() } }
         is Route.GoalDetail -> GoalDetailScreen(r.name)
         is Route.FeedDetail -> FeedDetailScreen(r.quote)
         is Route.IdeaDetail -> IdeaDetailScreen(r.quote)
-        is Route.RuntimeSettings -> RuntimeSettingsScreen(r.permissions)
+        Route.ModelSettings -> ModelSettingsScreen()
         is Route.ProviderForm -> ProviderFormScreen(r.id)
         is Route.ActivityDetail -> ActivityDetailScreen(r)
         is Route.SideChat -> SideChatScreen(r)

@@ -47,7 +47,7 @@ struct RouteView:View {
         case .connectorForm(let n,let a):ConnectorFormPage(name:n,accountID:a)
         case .devices:DevicesPage()
         case .skills:SkillsPage()
-        case .agentSetting(let s):AgentSettingPage(setting:s)
+        case .models:ModelSettingsPage()
         case .modelProvider(let id):ModelProviderFormPage(providerID:id)
         case .activity(let id,let t):ActivityPage(id:id,title:t)
         case .goal(let n):GoalDetailPage(name:n)

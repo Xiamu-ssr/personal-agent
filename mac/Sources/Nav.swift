@@ -12,7 +12,7 @@ enum Route: Hashable {
     case web(title:String,path:String), doc(title:String,path:String)
     case connectors(tab:Int,focus:String?=nil), connector(String), connectorForm(name:String,accountID:String?)
     case modelProvider(String?)
-    case devices, skills, agentSetting(AgentSetting), activity(id:String,title:String), goal(String), memoryItem(title:String,path:String), feedPost(String), ideaQuote(ChatQuote)
+    case devices, skills, models, activity(id:String,title:String), goal(String), memoryItem(title:String,path:String), feedPost(String), ideaQuote(ChatQuote)
 }
 @Observable final class Nav {
     static let shared=Nav()

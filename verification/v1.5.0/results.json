@@ -1,0 +1,39 @@
+{
+  "version": "1.5.0",
+  "date": "2026-10-20",
+  "android": {
+    "unitTests": 166,
+    "failures": 0,
+    "ui": "Android 15 emulator, synthetic local cloud and isolated debug package",
+    "nativeTouch": "Android 15 emulator, real AccessibilityService and MotionEvent receiver",
+    "oppoThisRelease": "not tested: device locked, user unavailable to unlock",
+    "releaseCode": 22,
+    "signedReleaseInstallation": "passed on Android 15 emulator"
+  },
+  "mac": {
+    "coreAssertions": 223,
+    "attachmentLayout": "passed",
+    "loginAndServerAddressChecks": "passed",
+    "ui": "production SwiftUI views, isolated preferences, synthetic HTTP transport",
+    "ownershipChangePersists": true,
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "localSignature": "verified",
+    "dmgChecksum": "verified",
+    "signedDmgAppStartup": "passed with isolated profile",
+    "appleNotarization": false,
+    "ownershipOnDiskAfterExit": true
+  },
+  "cloud": {
+    "codeChanged": false,
+    "existingVersion": "1.4.0",
+    "dataFormatChanged": false,
+    "dataMigrationRequired": false
+  },
+  "releaseDebugExclusions": [
+    "TouchProbeActivity",
+    "test-only health write permissions"
+  ]
+}

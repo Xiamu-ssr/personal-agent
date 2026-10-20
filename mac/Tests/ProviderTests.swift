@@ -23,7 +23,7 @@ import AppKit
         check(snapshot.model == ModelSelection(provider:"zenmux", id:"claude-demo"), "structured model parses")
         check(snapshot.providers.count == 2 && snapshot.providers[1].models[0].note.isEmpty, "providers parse optional model description")
         check(snapshot.providers[1].keyHint == "••••abcd" && snapshot.providers[0].keyHint == nil && snapshot.providers[0].baseURL == nil, "public key hint and builtin metadata")
-        check(snapshot.label(.model) == "Claude 演示", "settings labels resolve structured selection")
+        check(snapshot.modelLabel == "Claude 演示", "settings labels resolve structured selection")
         let presetRows: [[String: Any]] = [
             ["id":"siliconflow", "name":"硅基流动", "protocol":"openai", "baseUrl":"https://api.siliconflow.cn/v1", "hint":"常用模型", "models":[["id":"deepseek-ai/DeepSeek-V4.1-Flash", "name":"DeepSeek V4.1 Flash", "note":"图片 · 对话 · 工具"]]],
             ["id":"anthropic", "name":"Anthropic", "protocol":"anthropic", "baseUrl":"https://api.anthropic.com", "hint":"官方 API", "models":[["id":"claude-haiku-5-5", "name":"Claude Haiku 5.5"]]],

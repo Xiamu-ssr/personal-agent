@@ -30,14 +30,13 @@ fun AvatarConsole() {
                 Spacer(Modifier.size(42.dp))
             }
             Spacer(Modifier.height(16.dp))
-            SegTabs(listOf("活动","权限","设备","定时","记忆"),tab) { tab=it }
+            SegTabs(listOf("活动","设备","定时","记忆"),tab) { tab=it }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when(tab) {
                     0 -> ActivitiesPanel()
-                    1 -> PermissionsPanel()
-                    2 -> ComputerPanel()
-                    3 -> SchedulesPanel()
-                    4 -> MemoryCards()
+                    1 -> ComputerPanel()
+                    2 -> SchedulesPanel()
+                    3 -> MemoryCards()
                 }
             }
             GoldButton(if(sideRoute!=null) "停止旁聊" else "停止当前回复",Modifier.fillMaxWidth().padding(vertical=12.dp),
@@ -92,15 +91,6 @@ private fun ActivityRow(title: String,summary: String,time: String,icon: ImageVe
             Text(time,style=Type.body(12),color=Pal.Faint,modifier=Modifier.padding(top=3.dp))
         }
         trailing?.let { Box(Modifier.padding(start=8.dp)) { it() } }
-    }
-}
-@Composable
-internal fun PermissionsPanel() {
-    LazyColumn(contentPadding=PaddingValues(bottom=24.dp)) {
-        item { DeviceOwnership() }
-        item { SectionTitle("操作手机"); CardList { PhoneUseAuthorization() } }
-        item { BackgroundConnection() }
-        item { Spacer(Modifier.height(16.dp)); SilverButton("全部本机能力",Modifier.fillMaxWidth()) { Nav.console.value=false; Nav.open(Route.Connectors(0)) } }
     }
 }
 @Composable

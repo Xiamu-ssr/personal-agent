@@ -7,9 +7,9 @@ struct ConsoleView:View {
             VStack(spacing:7) { AgentAvatar(size:84); Text(ProfileStore.shared.agentName).font(Theme.font(size:20,weight:.semibold))
                 if ChatClient.shared.avatarState == .working { Text(ChatClient.shared.avatarText.isEmpty ? "努力工作中" : ChatClient.shared.avatarText).font(Theme.font(size:12)).foregroundStyle(Theme.sub) }
             }
-            PillTabs(titles:["活动","设备权限","设备","定时","记忆"],selection:Binding(get:{Nav.shared.consoleTab},set:{Nav.shared.consoleTab=$0})).padding(6).background(Theme.card,in:Capsule())
+            PillTabs(titles:["活动","设备","定时","记忆"],selection:Binding(get:{Nav.shared.consoleTab},set:{Nav.shared.consoleTab=$0})).padding(6).background(Theme.card,in:Capsule())
             Group {
-                switch Nav.shared.consoleTab { case 0: ActivityListView(); case 1: PermissionPanel(); case 2: ComputerPanel(); case 3: SchedulesPanel(); default: MemoryPanel() }
+                switch Nav.shared.consoleTab { case 0: ActivityListView(); case 1: ComputerPanel(); case 2: SchedulesPanel(); default: MemoryPanel() }
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
             HStack { if !ChatClient.shared.connected { Text("连接中…").font(Theme.font(size:12)).foregroundStyle(Theme.sub) }; Spacer()
                 Button { if Nav.shared.tab == .chat,let side=Nav.shared.sideChat {Task {await side.stop()}} else {ChatClient.shared.interrupt()} } label:{ Label("停止当前回复",systemImage:"stop.fill") }.buttonStyle(PrimaryButtonStyle(height:34)).disabled(!(Nav.shared.tab == .chat && Nav.shared.sideChat != nil ? Nav.shared.sideChat?.status == "running" : ChatClient.shared.busy)).opacity((Nav.shared.tab == .chat && Nav.shared.sideChat != nil ? Nav.shared.sideChat?.status == "running" : ChatClient.shared.busy) ? 1 : 0.35)
@@ -66,25 +66,6 @@ struct ActivityRow:View {
             }.padding(.horizontal,8).padding(.vertical,10).contentShape(Rectangle())
                 .background(hovering ? Theme.field : .clear,in:RoundedRectangle(cornerRadius:12))
         }.buttonStyle(.plain).onHover {hovering=$0}.verificationAction("activity-row-"+item.id)
-    }
-}
-struct PermissionPanel:View {
-    @State private var role=Prefs.deviceRole
-    var body:some View {
-        ScrollView { VStack(alignment:.leading,spacing:16) {
-            Text("这台设备属于谁").font(Theme.titleFont(20))
-            ForEach(["owner","agent"],id:\.self) { value in
-                Button { role=value; Prefs.deviceRole=value; DeviceClient.shared.reregister() } label: {
-                    HStack { Image(systemName:role == value ? "largecircle.fill.circle" : "circle"); VStack(alignment:.leading,spacing:6) {
-                        Text(value == "agent" ? "豆豆专用" : "我日常使用").font(Theme.font(size:16,weight:.medium))
-                        Text(value == "agent" ? "让豆豆用它操作应用、处理事务" : "平时读取信息；操作应用按我交代的任务来").font(Theme.font(size:13)).foregroundStyle(Theme.sub)
-                    }; Spacer() }.card(radius:18,padding:20)
-                }.buttonStyle(.plain)
-            }
-            Text("本机能力与授权").font(Theme.titleFont(18)).padding(.top,8)
-            LocalCapabilityList()
-            Note(text:DeviceClient.shared.online ? "设备已接入云端，已授权能力可用" : "设备正在连接云端")
-        }.padding(28) }
     }
 }
 struct ComputerPanel:View {

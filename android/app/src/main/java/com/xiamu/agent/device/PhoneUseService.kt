@@ -22,10 +22,16 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import com.xiamu.agent.Prefs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -132,16 +138,66 @@ class PhoneUseService : AccessibilityService() {
         require(x.isFinite() && y.isFinite() && x >= 0 && y >= 0 && x < f.width && y < f.height) { "坐标超出当前图片范围" }
         return (x / f.scale).toFloat() to (y / f.scale).toFloat()
     }
-    private suspend fun gesture(from: Pair<Float, Float>, to: Pair<Float, Float> = from, duration: Long = 80) {
-        val path = Path().apply { moveTo(from.first, from.second); if (to != from) lineTo(to.first, to.second) }
-        val description = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, duration)).build()
+    private fun startStroke(stroke: GestureDescription.StrokeDescription): CompletableDeferred<Boolean> {
+        val result = CompletableDeferred<Boolean>()
+        val accepted = dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) { result.complete(true) }
+            override fun onCancelled(gestureDescription: GestureDescription?) { result.complete(false) }
+        }, null)
+        if (!accepted) result.complete(false)
+        return result
+    }
+    private suspend fun release(stroke: GestureDescription.StrokeDescription, end: TouchMotion.Point) {
+        if (!stroke.willContinue()) return
+        runCatching {
+            val path = Path().apply { moveTo(end.x.toFloat(), end.y.toFloat()) }
+            withTimeoutOrNull(1000) { startStroke(stroke.continueStroke(path, 0, 1, false)).await() }
+        }
+    }
+    private suspend fun dispatch(stroke: GestureDescription.StrokeDescription, end: TouchMotion.Point) {
+        currentCoroutineContext().ensureActive()
+        val result = startStroke(stroke)
+        try {
+            check(result.await()) { "手机手势被系统取消，请重新观察界面" }
+        } catch (cancelled: CancellationException) {
+            // Finish the in-flight segment and lift the finger before releasing the operation lock.
+            // Native callbacks only resolve their own result; they never inject a late touch.
+            withContext(NonCancellable) {
+                withTimeoutOrNull(1000) { if(result.await()) release(stroke,end) }
+            }
+            throw cancelled
+        }
+    }
+    private suspend fun gesture(from: Pair<Float, Float>, to: Pair<Float, Float> = from, duration: Long? = null) {
+        val start = TouchMotion.Point(from.first.toDouble(), from.second.toDouble())
+        val end = TouchMotion.Point(to.first.toDouble(), to.second.toDouble())
         withTimeout(6000) {
-            suspendCancellableCoroutine { cont ->
-                val accepted = dispatchGesture(description, object : GestureResultCallback() {
-                    override fun onCompleted(gestureDescription: GestureDescription?) { if (cont.isActive) cont.resume(Unit) }
-                    override fun onCancelled(gestureDescription: GestureDescription?) { if (cont.isActive) cont.resumeWithException(IllegalStateException("手机手势被系统取消，请重新观察界面")) }
-                }, null)
-                if (!accepted && cont.isActive) cont.resumeWithException(IllegalStateException("系统没有接受这个手势"))
+            if (from == to) {
+                val path = Path().apply { moveTo(from.first, from.second) }
+                dispatch(GestureDescription.StrokeDescription(path, 0, duration ?: 80), end)
+                return@withTimeout
+            }
+            val (width, height) = screenSize()
+            val segments = TouchMotion.plan(start, end, width, height, duration)
+            var held: GestureDescription.StrokeDescription? = null
+            var landing = start
+            try {
+                segments.forEachIndexed { i, s ->
+                    currentCoroutineContext().ensureActive()
+                    val path = Path().apply {
+                        moveTo(s.from.x.toFloat(), s.from.y.toFloat())
+                        cubicTo(s.c1.x.toFloat(), s.c1.y.toFloat(), s.c2.x.toFloat(), s.c2.y.toFloat(), s.to.x.toFloat(), s.to.y.toFloat())
+                    }
+                    val continues = i < segments.lastIndex
+                    val stroke = held?.continueStroke(path, 0, s.duration, continues)
+                        ?: GestureDescription.StrokeDescription(path, 0, s.duration, continues)
+                    held = null // dispatch finishes in-flight cleanup before releasing the operation lock.
+                    dispatch(stroke, s.to)
+                    landing = s.to
+                    held = stroke.takeIf { continues }
+                }
+            } finally {
+                held?.let { withContext(NonCancellable + Dispatchers.Main.immediate) { release(it, landing) } }
             }
         }
     }
@@ -172,15 +228,21 @@ class PhoneUseService : AccessibilityService() {
         val direction = args.optString("direction", "down")
         require(direction in setOf("down", "up", "left", "right")) { "direction 只支持 down/up/left/right" }
         val ref = args.optString("ref")
-        if (ref.isNotBlank()) {
-            val action = when (direction) { "up" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP; "left" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT; "right" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT; else -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN }
-            check(node(ref).performAction(action.id)) { "该节点没有接受滚动，请重新观察后使用带 frame 的坐标滑动" }
-            return
-        }
         val f = frame ?: throw IllegalStateException("滚动前先 snapshot 或 screenshot")
+        check(screenSize() == (f.screenWidth to f.screenHeight)) { "屏幕方向或尺寸已变化，请重新观察" }
+        val area = if (ref.isNotBlank()) {
+            val target = node(ref)
+            check(target.isScrollable) { "该节点不可滚动，请选择可滚动节点或使用带 frame 的坐标滑动" }
+            Rect().also { target.getBoundsInScreen(it); check(it.intersect(0, 0, f.screenWidth, f.screenHeight)) { "滚动区域不在屏幕内" } }
+        } else {
+            point(args, 0.0, 0.0) // Validate the observed frame before using screen-derived coordinates.
+            Rect(0, 0, f.screenWidth, f.screenHeight)
+        }
+        check(area.width() >= 32 && area.height() >= 32) { "滚动区域太小，请重新观察" }
         val from = when (direction) { "up" -> .5 to .3; "left" -> .3 to .5; "right" -> .75 to .5; else -> .5 to .75 }
         val to = when (direction) { "up" -> .5 to .75; "left" -> .75 to .5; "right" -> .3 to .5; else -> .5 to .3 }
-        gesture(point(args, f.width * from.first, f.height * from.second), point(args, f.width * to.first, f.height * to.second), 350)
+        fun inArea(p: Pair<Double, Double>) = (area.left + area.width() * p.first).toFloat() to (area.top + area.height() * p.second).toFloat()
+        gesture(inArea(from), inArea(to))
     }
     private suspend fun screenshot(): JSONObject {
         check(Build.VERSION.SDK_INT >= 30) { "此系统低于 Android 11，不支持无障碍截图；可继续使用 snapshot 和节点操作" }
@@ -240,7 +302,7 @@ class PhoneUseService : AccessibilityService() {
             "scroll" -> scroll(args)
             "swipe" -> {
                 val from = args.getJSONObject("from"); val to = args.getJSONObject("to")
-                gesture(point(args, from.getDouble("x"), from.getDouble("y")), point(args, to.getDouble("x"), to.getDouble("y")), args.optLong("duration", 350).coerceIn(80, 2000))
+                gesture(point(args, from.getDouble("x"), from.getDouble("y")), point(args, to.getDouble("x"), to.getDouble("y")), if(args.has("duration")) args.getLong("duration") else null)
             }
             "back", "home", "recents", "notifications", "quick_settings" -> {
                 val action = when (op) { "back" -> GLOBAL_ACTION_BACK; "home" -> GLOBAL_ACTION_HOME; "recents" -> GLOBAL_ACTION_RECENTS; "notifications" -> GLOBAL_ACTION_NOTIFICATIONS; else -> GLOBAL_ACTION_QUICK_SETTINGS }
@@ -259,8 +321,8 @@ class PhoneUseService : AccessibilityService() {
             .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
             .any { it.resolveInfo.serviceInfo.let { s -> s.packageName == ctx.packageName && s.name == PhoneUseService::class.java.name } }
         fun unavailableReason(ctx: Context): String? = when {
-            !Prefs.granted("phone_use") -> "请在这台手机的豆豆 → 设备与权限中开启手机操作"
-            !systemEnabled(ctx) -> "手机操作尚未获得无障碍授权，请在这台手机的豆豆 → 设备与权限中打开系统授权"
+            !Prefs.granted("phone_use") -> "请在这台手机的豆豆 → 连接应用 → 本机中开启手机操作"
+            !systemEnabled(ctx) -> "手机操作尚未获得无障碍授权，请在这台手机的豆豆 → 连接应用 → 本机中打开系统授权"
             !ready() -> "无障碍开关已开启，手机操作服务尚未连接；请稍候，仍未连接时在系统设置中重新开启豆豆手机操作"
             else -> null
         }

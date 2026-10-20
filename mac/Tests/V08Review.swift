@@ -61,9 +61,8 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         let steps=detail["items"] as? [[String:Any]] ?? []
         try check(steps.contains{($0["text"] as? String ?? "").contains("忙时插话")} && steps.contains{$0["kind"] as? String == "tool"},"same activity contains interjection and tool summary")
         Nav.shared.console=true; Nav.shared.consoleTab=0; try await shot("07-console-activities")
-        Nav.shared.consoleTab=1; try await shot("08-console-permissions")
-        Nav.shared.consoleTab=3; try await shot("09-console-schedules")
-        Nav.shared.consoleTab=4; try await shot("10-console-memory")
+        Nav.shared.consoleTab=2; try await shot("09-console-schedules")
+        Nav.shared.consoleTab=3; try await shot("10-console-memory")
         Nav.shared.console=false; try await pause()
         Nav.shared.push(.activity(id:workID,title:"演示忙时")); try await shot("11-activity-detail")
         let continuation=ComposerVerification.currentTask
@@ -106,9 +105,9 @@ struct ReviewFailure:Error,CustomStringConvertible { let description:String }
         Nav.shared.go(.goals); Nav.shared.push(.goal("每周运动")); try await shot("20-goal-detail")
         Nav.shared.go(.library); try await pause(1800); try await shot("21-library-artifacts")
         try await press("pill-影音内容"); try await shot("22-library-media")
-        Nav.shared.console=true; Nav.shared.consoleTab=2; try await shot("25-console-computer")
+        Nav.shared.console=true; Nav.shared.consoleTab=1; try await shot("25-console-computer")
         Nav.shared.console=false; Nav.shared.go(.settings); try await shot("26-settings")
-        Nav.shared.push(.agentSetting(.model)); try await shot("27-models")
+        Nav.shared.push(.models); try await shot("27-models")
         Nav.shared.go(.settings); Nav.shared.push(.connectors(tab:1)); try await shot("28-connectors")
         Nav.shared.go(.settings); Nav.shared.push(.connectors(tab:0)); try await shot("29-local-capabilities")
         Nav.shared.go(.chat); window.makeKeyAndOrderFront(nil); try await pause(500)

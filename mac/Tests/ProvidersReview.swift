@@ -68,7 +68,7 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
     @MainActor static func run() async throws {
         try check(LocalVerification.explicitLoopback && Prefs.isolatedRoot != nil,"isolated temporary user data and explicit loopback")
         Prefs.notifyMessages = false; AppearanceStore.shared.select(.light)
-        Nav.shared.go(.settings); Nav.shared.push(.agentSetting(.model))
+        Nav.shared.go(.settings); Nav.shared.push(.models)
         window = NSWindow(contentRect:NSRect(x:0,y:0,width:1120,height:920),styleMask:[.titled,.closable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
         window.title = "豆豆 · 模型服务验收"; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true; window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView:MainView()); window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
@@ -90,7 +90,7 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         try await input("provider-name","示例模型服务 · 已编辑")
         try check(edit.draft.name == "示例模型服务 · 已编辑", "native NSTextField updates the edit draft")
         try await press("provider-save")
-        try await until("edit complete") { Nav.shared.stacks[.settings]?.last == .agentSetting(.model) && store.snapshot?.providers.last?.name == "示例模型服务 · 已编辑" }
+        try await until("edit complete") { Nav.shared.stacks[.settings]?.last == .models && store.snapshot?.providers.last?.name == "示例模型服务 · 已编辑" }
         try await press("provider-edit-example"); try await pause()
         let active = try form(); try await press("provider-delete")
         try await until("active provider refusal") { active.error == "先换到别的模型" }
@@ -132,7 +132,7 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         try await shot("27-provider-test-error")
         try await input("provider-name","我的模型服务")
         try await press("provider-save")
-        try await until("create success") { Nav.shared.stacks[.settings]?.last == .agentSetting(.model) && store.snapshot?.providers.count == 3 }
+        try await until("create success") { Nav.shared.stacks[.settings]?.last == .models && store.snapshot?.providers.count == 3 }
         try check(adding.draft.apiKey.isEmpty, "successful create clears transient key")
         guard let created = store.snapshot?.providers.first(where:{$0.name == "我的模型服务"}) else { throw ProviderReviewFailure(description:"created provider") }
         let version = ChatClient.shared.settingsVersion
@@ -143,7 +143,7 @@ private struct ProviderReviewFailure: Error, CustomStringConvertible { let descr
         try await until("switch builtin") { store.snapshot?.model.provider == "zenmux" && !store.saving }
         try await press("provider-edit-" + created.id); try await pause()
         try await press("provider-delete")
-        try await until("delete success") { store.snapshot?.providers.count == 2 && Nav.shared.stacks[.settings]?.last == .agentSetting(.model) }
+        try await until("delete success") { store.snapshot?.providers.count == 2 && Nav.shared.stacks[.settings]?.last == .models }
         try check(true,"switching away permits service deletion and list refresh")
         let evidence = try await Api.json("/__review/state"), requests = evidence["requests"] as! [[String:Any]]
         let patches = requests.filter{$0["method"] as? String == "PATCH"}

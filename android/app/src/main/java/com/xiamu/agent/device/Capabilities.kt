@@ -86,7 +86,7 @@ object Capabilities {
     val all: List<Capability> = listOf(
         Capability(
             "phone_use", "手机操作",
-            "通过这台手机的无障碍服务观察和操作应用。先用 apps(query) 找应用包名，launch(package) 启动；snapshot 返回可操作节点 ref、bounds 和 frame，screenshot 返回图片。截图和节点坐标长边最多1440，坐标点击/滑动必须携带最近观察返回的 frame，不能用原始屏幕坐标。优先用 ref 点击/输入，界面变化后重新观察。type 替换输入框文字，submit=true 提交；scroll(direction=down/up/left/right) 表示内容滚动方向。swipe 以图片坐标 from/to 描述手指移动。操作回执只说明动作已执行，用下一次观察确认结果。",
+            "通过这台手机的无障碍服务观察和操作应用。先用 apps(query) 找应用包名，launch(package) 启动；snapshot 返回可操作节点 ref、bounds 和 frame，screenshot 返回图片。截图和节点坐标长边最多1440，坐标点击/滑动必须携带最近观察返回的 frame，不能用原始屏幕坐标。优先用 ref 点击/输入，界面变化后重新观察。type 替换输入框文字，submit=true 提交；scroll(direction=down/up/left/right) 表示内容滚动方向，ref 可限定滚动区域。scroll/swipe 使用平滑曲线和变速的连续触摸。swipe 以图片坐标 from/to 描述手指移动，duration 可选80–2000毫秒，不传则按距离安排时长。操作回执只说明动作已执行，用下一次观察确认结果。",
             """{"op":"apps|launch|snapshot|screenshot|click|long_click|type|scroll|swipe|back|home|recents|notifications|quick_settings","query":"应用名称，apps可选","package":"launch必填包名","ref":"节点引用","frame":"坐标操作必填，最近观察返回的frame","x":100,"y":200,"text":"输入文字","submit":false,"direction":"down","from":{"x":100,"y":800},"to":{"x":100,"y":300},"duration":350}""",
             emptyList(), hint = "看屏幕、点击、输入和滑动；需要开启豆豆手机操作的无障碍授权",
         ) { _, a -> PhoneUseService.execute(a) },

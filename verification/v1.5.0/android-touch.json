@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "continuousCurvedGestures": [
+    {
+      "moves": 27,
+      "down": 1,
+      "up": 1,
+      "maxBendPixels": 6.685546875,
+      "elapsedMs": 537,
+      "requestedMs": 450,
+      "targetErrorPixels": 0
+    },
+    {
+      "moves": 30,
+      "down": 1,
+      "up": 1,
+      "maxBendPixels": 4.384765625,
+      "elapsedMs": 480,
+      "requestedMs": 450,
+      "targetErrorPixels": 0
+    },
+    {
+      "moves": 29,
+      "down": 1,
+      "up": 1,
+      "maxBendPixels": 5.2744140625,
+      "elapsedMs": 473,
+      "requestedMs": 450,
+      "targetErrorPixels": 0
+    },
+    {
+      "moves": 29,
+      "down": 1,
+      "up": 1,
+      "maxBendPixels": 12,
+      "elapsedMs": 473,
+      "requestedMs": 450,
+      "targetErrorPixels": 0
+    },
+    {
+      "moves": 39,
+      "down": 1,
+      "up": 1,
+      "maxBendPixels": 3.6722690912244222,
+      "elapsedMs": 633,
+      "requestedMs": 600,
+      "targetErrorPixels": 0
+    }
+  ],
+  "nodeScroll": true,
+  "cancelReleasesTouch": true,
+  "immediateNextGesture": true
+}

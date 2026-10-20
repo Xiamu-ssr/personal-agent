@@ -23,12 +23,6 @@ struct AgentOption: Identifiable, Equatable {
     }
 }
 
-enum AgentSetting: String, Hashable {
-    case model, deviceRole
-    var title: String { self == .model ? "模型" : "设备归属" }
-    var icon: String { self == .model ? "sparkles" : "checkmark.shield" }
-}
-
 struct AgentSettingsSnapshot {
     let model: ModelSelection
     let providers: [ModelProvider]
@@ -42,9 +36,8 @@ struct AgentSettingsSnapshot {
         guard presets.count == rawPresets.count, Set(presets.map(\.id)).count == presets.count else { throw ApiError(code: 0, message: "供应商预设不完整") }
         return AgentSettingsSnapshot(model:model, providers:providers, providerPresets:presets)
     }
-    func label(_ setting: AgentSetting) -> String {
-        if setting == .model { return providers.first { $0.id == model.provider }?.models.first { $0.id == model.id }?.name ?? "加载中…" }
-        return Prefs.deviceRole == "agent" ? "豆豆的设备" : "我的设备"
+    var modelLabel: String {
+        providers.first { $0.id == model.provider }?.models.first { $0.id == model.id }?.name ?? "加载中…"
     }
 }
 
@@ -80,13 +73,5 @@ struct AgentSettingsSnapshot {
         defer { saving = false; finish() }
         do { snapshot = try AgentSettingsSnapshot.parse(await Api.json("/api/settings", method: "PUT", body: body)) }
         catch { self.error = error.localizedDescription }
-    }
-}
-
-struct AgentSettingPage: View {
-    let setting: AgentSetting
-    var body: some View {
-        if setting == .model { ModelSettingsPage() }
-        else { SubPage(title:"设备归属") { PermissionPanel() } }
     }
 }

@@ -171,7 +171,7 @@ private fun SayCardView(card: SayCard,active: Boolean) {
             }
         }) }
         is SayCard.Goal -> CardList(Modifier.padding(top=10.dp)) { ListRow(card.name,"查看目标",Icons.Outlined.CheckBox,onClick={Nav.open(Route.GoalDetail(card.name))}) }
-        is SayCard.Device -> CardList(Modifier.padding(top=10.dp)) { ListRow(if(card.capability=="health") "健康数据" else "开启本机能力","由你在这台设备上授权",leading={SystemCapabilityIcon(card.capability ?: "device")},onClick={Nav.open(Route.Capabilities)}) }
+        is SayCard.Device -> CardList(Modifier.padding(top=10.dp)) { ListRow(if(card.capability=="health") "健康数据" else "开启本机能力","由你在这台设备上授权",leading={SystemCapabilityIcon(card.capability ?: "device")},onClick={Nav.open(Route.Connectors(0))}) }
         is SayCard.Link -> Column(Modifier.fillMaxWidth().padding(top=10.dp).clip(RoundedCornerShape(16.dp)).background(Pal.Background).tap { openBrowser(context,card.url) }) {
             card.image?.let { ContentImage(it,Modifier.fillMaxWidth().height(140.dp)) }
             Column(Modifier.padding(12.dp)) { Text(card.title,style=Type.title(15),color=Pal.Ink); if(card.description.isNotBlank()) Text(card.description,style=Type.body(13),color=Pal.Muted); Text(runCatching { java.net.URI(card.url).host }.getOrDefault(card.url),style=Type.body(12),color=Pal.Link,modifier=Modifier.padding(top=4.dp)) }

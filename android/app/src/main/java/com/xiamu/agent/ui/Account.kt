@@ -334,7 +334,7 @@ fun SettingsScreen() {
 
         item { SectionTitle("偏好") }
         item { CardList {
-            ListRow("模型",runtime?.modelLabel ?: "正在读取",Icons.Outlined.AutoAwesome) { Nav.open(Route.RuntimeSettings()) }
+            ListRow("模型",runtime?.modelLabel ?: "正在读取",Icons.Outlined.AutoAwesome) { Nav.open(Route.ModelSettings) }
             Hairline()
             ListRow("外观",when(ThemeState.preference.value) { "light"->"浅色"; "dark"->"深色"; else->"跟随系统" },Icons.Outlined.Palette) { Nav.open(Route.Appearance) }
         } }

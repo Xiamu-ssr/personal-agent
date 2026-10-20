@@ -23,8 +23,7 @@ internal fun runtimeSettingsChanged() {
 }
 
 @Composable
-fun RuntimeSettingsScreen(permissions: Boolean) {
-    if(permissions) { SubPage("设备归属") { item { PermissionsPanel() } }; return }
+fun ModelSettingsScreen() {
     val scope=rememberCoroutineScope()
     var revision by remember { mutableIntStateOf(0) }
     val (loaded,loadError)=load("settings",revision=revision+Chat.settingsVersion.intValue) { Api.settings() }
@@ -44,7 +43,7 @@ fun RuntimeSettingsScreen(permissions: Boolean) {
         }
     }
     SubPage("") {
-        item { BigTitle(if(permissions) "权限" else "模型") }
+        item { BigTitle("模型") }
         if(settings==null && loadError.isBlank()) item { Loading() }
         settings?.let { current ->
             run {

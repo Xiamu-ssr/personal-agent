@@ -124,6 +124,32 @@ struct CapRow: View {
     }
 }
 
+private struct DeviceOwnershipSection: View {
+    @State private var role = Prefs.deviceRole
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("这台设备属于谁").font(Theme.titleFont(18))
+            ForEach(["owner", "agent"], id: \.self) { value in
+                Button {
+                    role = value
+                    Prefs.deviceRole = value
+                    DeviceClient.shared.reregister()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: role == value ? "largecircle.fill.circle" : "circle")
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(value == "agent" ? "豆豆专用" : "我日常使用").font(Theme.font(size: 15, weight: .medium))
+                            Text(value == "agent" ? "让豆豆用它操作应用、处理事务" : "平时读取信息；操作应用按我交代的任务来")
+                                .font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
+                        }
+                        Spacer()
+                    }.card(radius: 16, padding: 16)
+                }.buttonStyle(.plain).verificationAction("device-owner-" + value)
+            }
+        }
+    }
+}
+
 struct LocalCapabilityList: View {
     @State private var enabling = false
     @State private var progress = ""
@@ -242,10 +268,10 @@ struct SettingsPage: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 18, alignment: .top)], alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 18) {
-                    CardSection(title: "模型与权限") {
+                    CardSection(title: "模型") {
                         ListRow(icon: "sparkles", tint: Theme.accent, title: "模型",
-                                subtitle: AgentSettingsStore.shared.snapshot?.label(.model) ?? "加载中…") {
-                            Nav.shared.push(.agentSetting(.model))
+                                subtitle: AgentSettingsStore.shared.snapshot?.modelLabel ?? "加载中…") {
+                            Nav.shared.push(.models)
                         }
                         .accessibilityLabel("模型")
                         .verificationAction("模型")
@@ -361,7 +387,12 @@ struct ConnectorsPage: View {
     }
 
     private var local: some View {
-        LocalCapabilityList()
+        VStack(alignment: .leading, spacing: 18) {
+            DeviceOwnershipSection()
+            Text("本机能力与授权").font(Theme.titleFont(18))
+            LocalCapabilityList()
+            Note(text: DeviceClient.shared.online ? "设备已接入云端，已授权能力可用" : "设备正在连接云端")
+        }
     }
 
     private func matches(_ c: CloudConnector) -> Bool {
