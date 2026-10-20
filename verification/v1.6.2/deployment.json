@@ -1,0 +1,97 @@
+{
+  "deployment": {
+    "version": "1.6.2",
+    "fullBackup": true,
+    "protectedFiles": 375,
+    "changedProtectedFiles": 0,
+    "sameMainSession": true,
+    "existingDeliveriesRestored": 2,
+    "sourceCommit": "a6310881308cc0a0e6a388b431d4734d64e2002d"
+  },
+  "production": {
+    "version": "1.6.2",
+    "health": {
+      "ok": true,
+      "ready": true,
+      "kernel": "openclaw",
+      "version": "1.6.2",
+      "protocol": "2"
+    },
+    "realPagePreviews": [
+      {
+        "index": 0,
+        "status": 200,
+        "bytes": 42289,
+        "mime": "image/jpeg"
+      },
+      {
+        "index": 1,
+        "status": 200,
+        "bytes": 72138,
+        "mime": "image/jpeg"
+      },
+      {
+        "index": 2,
+        "status": 200,
+        "bytes": 109368,
+        "mime": "image/jpeg"
+      },
+      {
+        "index": 3,
+        "status": 200,
+        "bytes": 106308,
+        "mime": "image/jpeg"
+      },
+      {
+        "index": 4,
+        "status": 200,
+        "bytes": 111632,
+        "mime": "image/jpeg"
+      },
+      {
+        "index": 5,
+        "status": 200,
+        "bytes": 37439,
+        "mime": "image/jpeg"
+      }
+    ],
+    "allRealPreviewsSucceeded": true,
+    "historicalDeliveriesRestored": 2,
+    "productionCookiePreserved": true,
+    "localGatewayBypassesProxyInNativeProcess": true,
+    "nativeModelRequests": [
+      {
+        "ok": true,
+        "ms": 35145
+      },
+      {
+        "ok": true,
+        "ms": 6599
+      },
+      {
+        "ok": true,
+        "ms": 5257
+      }
+    ],
+    "mainSessionUsedForDiagnostics": false,
+    "modelTransportErrorsAfterDeployment": 0,
+    "connectionResetsAfterDeployment": 0
+  },
+  "external": {
+    "externalHTTPS": true,
+    "httpStatus": 200,
+    "tlsVerified": true,
+    "health": {
+      "ok": true,
+      "ready": true,
+      "kernel": "openclaw",
+      "version": "1.6.2",
+      "protocol": "2"
+    }
+  },
+  "release": {
+    "tag": "v1.6.2",
+    "url": "https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.6.2",
+    "publicDownloadsMatch": true
+  }
+}

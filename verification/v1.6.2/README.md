@@ -23,3 +23,13 @@
 云端接口使用产品的真实实现；所有本地文件、模型和账号均为合成数据。验收主机位于 HTTP loopback `/`，Cookie 的 Secure 与 `/agent` 属性只在本地代理边界调整；生产 HTTPS Cookie 行为未改动。模拟器结果不宣称为 OPPO 真机验收。Mac DMG 未经 Apple 公证。
 
 `android-content.json`、`mac-content.json`、`native-delivery.json`、`checks.json` 和 `assets.json` 记录对应结果；截图全部为合成页面。生产部署结果另记，不将本地 UI 检查当作线上验收。
+
+## 生产与发布
+
+已部署 1.6.2，切换前确认没有活动任务并完整备份。375 个受保护文件的 SHA-256 均未变化，原生主 Session ID 保持不变；两条历史消息补回已有 HTML/图片文件卡片，没有重新生成用户成果。
+
+真实资源库的 6 个页面同时请求预览，全部返回 200/JPEG；修复的历史附件通过认证下载核对。生产 HTML Cookie 的 Secure 与 `/agent` 路径保持不变。外部 HTTPS 健康检查通过，TLS 校验开启。
+
+本轮连接故障的日志为同机模型网关请求反复 ECONNRESET。已在私有部署环境将该网关列入 `NO_PROXY`，核对原生子进程实际继承了直连设置；通过原生 Gateway 连续完成 3 次真实模型请求。本轮部署后的模型传输错误和连接重置均为 0。诊断使用独立 Session，不占用或更换主 Session。
+
+APK 25 / 1.6.2 与 Mac 13 / 1.6.2 已发布；GitHub 摘要和重新下载后的 SHA-256 均与本地产物一致。旧 Release 已清理，保留 Git 标签。模拟器与本地验收服务已关闭，保留原有真机 ADB 连接。详见 `deployment.json` 与 `cleanup.json`。

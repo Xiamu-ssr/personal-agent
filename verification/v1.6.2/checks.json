@@ -17,5 +17,11 @@
     "authenticatedDownloads": true,
     "mainSessionPreserved": true
   },
-  "fixtureCookieTransport": "HTTP loopback at /; Secure and /agent attributes adapted only in the synthetic host"
+  "fixtureCookieTransport": "HTTP loopback at /; Secure and /agent attributes adapted only in the synthetic host",
+  "releaseInstall": {
+    "androidSignedUpgrade": true,
+    "versionName": "1.6.2",
+    "versionCode": 25,
+    "releaseCleartextDisabled": true
+  }
 }
