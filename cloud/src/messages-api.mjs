@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
+import { isIP } from "node:net";
 
 function proxyFor(url, env) {
   const host = url.hostname.replace(/^\[|\]$/g, "");
@@ -39,8 +40,12 @@ export function messagesRequest(url, options, env = process.env) {
         connect.on("connect", (response, socket, head) => {
           if (response.statusCode !== 200) { socket.destroy(); done(new Error("模型服务代理连接失败")); return; }
           if (head.length) socket.unshift(head);
-          const secure = tls.connect({ socket, servername: target.hostname });
-          secure.once("secureConnect", () => done(null, secure)); secure.once("error", done);
+          const host = target.hostname.replace(/^\[|\]$/g, "");
+          try {
+            // Verify the target identity, but send SNI only for DNS names.
+            const secure = tls.connect({ socket, host, servername: isIP(host) ? "" : host });
+            secure.once("secureConnect", () => done(null, secure)); secure.once("error", done);
+          } catch (error) { socket.destroy(); done(error); }
         });
         connect.once("error", done); connect.end();
       };
