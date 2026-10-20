@@ -35,6 +35,7 @@ fun ProviderFormScreen(id: String?) {
     var name by remember { mutableStateOf("") }
     var baseUrl by remember { mutableStateOf("") }
     var protocol by remember { mutableStateOf("anthropic") }
+    var managementKey by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     var shown by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf("") }
@@ -55,7 +56,7 @@ fun ProviderFormScreen(id: String?) {
         if(ready && presetId==preset?.id.orEmpty()) return
         presetId=preset?.id.orEmpty(); name=preset?.name.orEmpty(); baseUrl=preset?.baseUrl.orEmpty(); protocol=preset?.protocol ?: "openai"
         models.clear(); models.addAll(preset?.models ?: listOf(ProviderModel("","")))
-        apiKey=""; shown=false; error=""; details=preset==null; expandedModels=preset==null
+        apiKey=""; managementKey=""; shown=false; error=""; details=preset==null; expandedModels=preset==null
     }
     LaunchedEffect(id,revision) {
         loading=true
@@ -71,7 +72,7 @@ fun ProviderFormScreen(id: String?) {
         catch(e: Exception) { error=e.message ?: "加载失败" }
         finally { loading=false }
     }
-    DisposableEffect(Unit) { onDispose { apiKey="" } }
+    DisposableEffect(Unit) { onDispose { apiKey=""; managementKey="" } }
     val progress=if(deleting) "正在删除…" else "正在测试并保存…"
     Screen {
         Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
@@ -100,6 +101,10 @@ fun ProviderFormScreen(id: String?) {
                                 IconButton(enabled=!saving,onClick={shown=!shown}) { Icon(if(shown) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,if(shown) "隐藏 API Key" else "显示 API Key",tint=Pal.Muted) }
                             })
                         if(editing && hint.isNotBlank()) Text("当前 Key：$hint · 留空保持不变",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(top=6.dp,start=4.dp))
+                    }
+                    if(baseUrl.contains("zenmux.ai")) item {
+                        ProviderField("管理 Key · 可选",managementKey,{managementKey=it},if(editing) "留空保持不变" else "用于查询订阅额度和余额",!saving,password=true)
+                        Text("ZenMux 的额度查询需要单独的 Management API Key。",style=Type.body(11),color=Pal.Muted,modifier=Modifier.padding(top=6.dp,start=4.dp))
                     }
                     item { TextButton(onClick={details=!details},enabled=!saving,modifier=Modifier.testTag("provider-details")) {
                         Text("服务设置",color=Pal.Ink); Icon(if(details) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,null,tint=Pal.Muted)
@@ -145,14 +150,14 @@ fun ProviderFormScreen(id: String?) {
                 }
                 GoldButton(if(saving) progress else "测试并保存",Modifier.fillMaxWidth(),enabled=ready && !saving) {
                     if(saving || !ready) return@GoldButton
-                    val draft=ProviderDraft(name,baseUrl,models.toList(),ProviderKey(apiKey),protocol)
+                    val draft=ProviderDraft(name,baseUrl,models.toList(),ProviderKey(apiKey),protocol,ProviderKey(managementKey))
                     val invalid=draft.validate(editing)
                     if(invalid!=null) error=invalid else {
                         focus.clearFocus(); saving=true; error=""
                         scope.launch {
                             try { Api.saveProvider(id,draft); apiKey=""; runtimeSettingsChanged(); Nav.back() }
                             catch(e: CancellationException) { throw e }
-                            catch(e: Exception) { error=providerError(e.message,draft.apiKey) }
+                            catch(e: Exception) { error=providerError(providerError(e.message,draft.apiKey),draft.managementKey) }
                             finally { saving=false }
                         }
                     }
@@ -161,7 +166,7 @@ fun ProviderFormScreen(id: String?) {
             }
         }
     }
-    if(confirmDelete) AlertDialog(onDismissRequest={confirmDelete=false},title={Text("删除模型服务？")},text={Text("将移除这个服务及其模型。")},
+    if(confirmDelete) AlertDialog(onDismissRequest={confirmDelete=false},title={Text("删除模型服务？")},text={Text("将移除这个服务及其模型；正在使用时，会切换到其他已配置的服务。")},
         confirmButton={TextButton(onClick={
             if(saving) return@TextButton
             confirmDelete=false; saving=true; deleting=true; error=""

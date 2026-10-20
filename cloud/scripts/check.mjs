@@ -12,4 +12,4 @@ function check(dir) {
     }
   }
 }
-for (const dir of ["src", "connectors", "scripts", "test"]) if (fs.existsSync(dir)) check(dir);
+for (const dir of ["src", "connectors", "openclaw-plugin", "scripts", "test"]) if (fs.existsSync(dir)) check(dir);

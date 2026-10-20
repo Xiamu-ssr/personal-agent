@@ -15,6 +15,8 @@ import {startServer} from '../src/server.mjs';
 import {config} from '../src/config.mjs';
 import {testProvider} from '../src/providers.mjs';
 import {readJson} from '../src/store.mjs';
+import {createTavilyConnector} from '../connectors/tavily/index.mjs';
+import {fakeConnectorApi} from './fake-connector-api.mjs';
 const put=(r,f,s)=>{fs.mkdirSync(path.dirname(path.join(r,f)),{recursive:true});fs.writeFileSync(path.join(r,f),s);};
 test('offline migration verifies full backup, preserves private config and content, flattens native memory, never imports sessions',()=>{
  const root=fs.mkdtempSync(path.join(testRoot,'migration-')),backup=path.join(testRoot,'full-v1-backup.tar.gz');
@@ -48,13 +50,50 @@ test('goal delivery and acceptance remain separate states',()=>{
  for(const status of ['未开始','进行中','等待条件','待用户反馈','已完成','暂停','取消'])assert.equal(c.putGoal({name:'测试',title:'测试',status,progress:30,body:'进展与下一步'}).status,status);
  assert.throws(()=>c.putGoal({name:'../escape',title:'x'}));assert.throws(()=>c.putGoal({name:'测试',title:'x',status:'完成'}));
 });
-function product(t,runtime){initialize(config.root);fs.rmSync(config.chatLog,{force:true});const events=[],bus={emit:e=>events.push(e),on(){}};const connectors=new ConnectorManager({root:config.root,definitions:[]}),h=new Harness({hub:new DeviceHub(),bus,connectors,runtime});t.after(()=>h.close());return {h,events,bus,connectors};}
-test('one main session serializes busy input, suppresses quiet heartbeat, brings background work back into context',async t=>{
+function product(t,runtime,definitions=[]){initialize(config.root);fs.rmSync(config.chatLog,{force:true});const events=[],bus={emit:e=>events.push(e),on(){}};const connectors=new ConnectorManager({root:config.root,definitions}),h=new Harness({hub:new DeviceHub(),bus,connectors,runtime});t.after(()=>h.close());return {h,events,bus,connectors};}
+test('one main session forwards busy input, suppresses quiet heartbeat, brings background work back into context',async t=>{
  const calls=[],runtime={ready:true,respond:async(input,opts)=>{calls.push({input,...opts});await new Promise(r=>setTimeout(r,5));return {text:input.includes('静默')?'HEARTBEAT_OK':'执行完成'};},close:async()=>{},reload:async()=>{}};
- const {h}=product(t,runtime);await h.send('第一条');await h.send('补充一条');await h.mainChain;
+ const {h}=product(t,runtime);await h.send('第一条');await h.send('补充一条');await h.waitForMain();
  assert.equal(calls.length,2);assert.ok(calls.every(c=>c.sessionKey==='agent:main:main'));assert.equal(h.busy,false);
  const count=h.speech.history().length;await h.runMain('静默');assert.equal(h.speech.history().length,count);
  await h.runIsolated('独立检索','检索结果',{mainContext:true});assert.notEqual(calls.at(-1).sessionKey,'agent:main:main');assert.match(calls.at(-1).input,/近期主聊天快照/);assert.match(calls.at(-1).input,/第一条/);await h.runMain('继续');assert.ok(calls.at(-1).input.includes('[已完成的后台工作'));assert.equal(h.pending.length,0);
+});
+test('a user followup reaches the running session before its tool work finishes and appears in that activity',async t=>{
+ let finish;const calls=[],first=new Promise(resolve=>finish=resolve);
+ const {h,events}=product(t,{respond:async(input,opts)=>{calls.push({input,...opts});opts.onAccepted?.({});return calls.length===1?first:{text:''};},close:async()=>{}});
+ const original=await h.send('Investigate a synthetic topic'),followup=await h.send('Reply with progress first');
+ assert.equal(calls.length,2,'busy user input must not wait for the original response');
+ assert.equal(calls[0].sessionKey,calls[1].sessionKey);assert.equal(h.running.size,1);
+ assert.equal(h.speech.history().find(m=>m.id===followup).activityId,original);
+ assert.ok(h.taskHistory(original).items.some(s=>s.kind==='prompt'&&s.messageId===followup));
+ assert.ok(events.some(e=>e.t==='activity_step'&&e.item.messageId===followup));
+ finish({text:'Progress including the followup'});await h.waitForMain();assert.equal(h.busy,false);
+ assert.equal(h.speech.history().filter(m=>m.role==='assistant').length,1);
+});
+test('a native followup starting as the first response ends retains tool context and its eventual answer',async t=>{
+ let finishOriginal,finishNext;const first=new Promise(r=>finishOriginal=r),next=new Promise(r=>finishNext=r);let count=0;
+ const {h}=product(t,{respond:async(input,opts)=>{opts.onAccepted?.({});return ++count===1?first:next;},close:async()=>{}});
+ const original=await h.send('First'),followup=await h.send('Next');
+ finishOriginal({text:'First answer'});await new Promise(r=>setImmediate(r));
+ assert.equal(h.busy,true);assert.equal(h.sessionRuns.get('agent:main:main').id,original);
+ finishNext({text:'Next answer'});await h.waitForMain();
+ assert.equal(h.busy,false);assert.equal(h.history.get(original).latestResult,'Next answer');
+ assert.equal(h.speech.history().find(m=>m.id===followup).activityId,original);
+ assert.ok(h.speech.history().some(m=>m.text==='Next answer'));
+});
+test('dynamic Tavily arguments survive JSON routing; malformed calls show the real error and make no paid request',async t=>{
+ const api=await fakeConnectorApi(req=>({data:req.path==='/usage'?{}:{results:[{title:'Synthetic result'}]}}));t.after(()=>api.close());
+ const definition=createTavilyConnector({baseUrl:api.url}),{h}=product(t,{close:async()=>{}},[definition]);
+ await h.connectors.addAccount('tavily',{apiKey:'tvly-local-synthetic-key'});
+ h.history.put('routing',{status:'running'});h.sessionRuns.set('agent:main:main',{id:'routing'});
+ const call=args_json=>h.productTool('call',{sessionKey:'agent:main:main',name:'tavily.search',args_json});
+ for(const input of ['{}','[]','{broken',null]){
+  const failure=await call(input);assert.equal(failure.isError,true);assert.ok(JSON.parse(failure.content[0].text).parameters.properties.query);
+ }
+ assert.equal(api.requests.filter(r=>r.path==='/search').length,0);
+ const success=await call(JSON.stringify({query:'synthetic query',depth:'basic'}));assert.notEqual(success.isError,true);
+ assert.equal(api.requests.find(r=>r.path==='/search').body.query,'synthetic query');
+ assert.ok(h.taskHistory('routing').items.some(i=>i.isError&&i.text.includes('query')));
 });
 test('device ownership stays a role; task GUI capability is not blocked by a hard read/write classifier',async t=>{
  const {h}=product(t,{close:async()=>{}});const ws=new EventEmitter();ws.close=()=>{};ws.send=()=>{};
@@ -88,7 +127,7 @@ test('device catalog distinguishes offline, missing implementation and revoked p
 test('failed scheduled checks stay in activities while a failed user request reports the failure in chat',async t=>{
  const {h}=product(t,{respond:async()=>{throw new Error('HTTP 402');},close:async()=>{}});
  const checked=await h.runMain('定时检查',{id:'scheduled-error',reportError:false});assert.equal(checked.ok,false);assert.equal(h.history.get('scheduled-error').status,'error');assert.equal(h.speech.history().length,0);
- await h.send('用户发来的请求');await h.mainChain;assert.equal(h.speech.history().filter(m=>m.error).length,1);
+ await assert.rejects(h.send('用户发来的请求'),/HTTP 402/);await h.waitForMain();assert.equal(h.speech.history().filter(m=>m.error).length,1);
 });
 test('new HTTP protocol is mandatory and internal tools cannot be reached through proxy headers',async t=>{
  const {h,bus,connectors}=product(t,{ready:true,close:async()=>{}});
@@ -133,7 +172,7 @@ test('activity history serializes native and product tool results as first-class
  await new Promise(r=>setImmediate(r));t.after(async()=>{finish?.();await done;});
  await h.productTool('event',{sessionKey:'agent:main:main',phase:'before',tool:'read'});
  await h.productTool('event',{sessionKey:'agent:main:main',phase:'after',tool:'read'});
- await h.productTool('call',{sessionKey:'agent:main:main',name:'goals.list',args:{}});
+ await h.productTool('call',{sessionKey:'agent:main:main',name:'goals.list',args_json:'{}'});
  const server=startServer({harness:h,hub:h.hub,bus,connectors,log(){},listen:{host:'127.0.0.1',port:0}});await once(server,'listening');t.after(async()=>{server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));});
  const headers={authorization:`Bearer ${config.token}`,'X-Doudou-Protocol':'2'};
  const history=await(await fetch('http://127.0.0.1:'+server.address().port+'/api/activities/tool-history-contract/history',{headers})).json();
@@ -155,7 +194,7 @@ test('feed and personalized Idea references send through one main-chat API, with
  const quote={kind:'idea',id:idea.id,revision:ideas.revision,title:'untrusted title'};
  for(const [n,text]of ['', '只走十分钟'].entries()){
   const body={text,quote,clientId:'idea-message-'+n};const response=await post('/api/send',body);assert.equal(response.status,200);const accepted=await response.json();
-  assert.deepEqual(await(await post('/api/send',body)).json(),accepted);await h.mainChain;
+  assert.deepEqual(await(await post('/api/send',body)).json(),accepted);await h.waitForMain();
  }
  assert.equal(calls.length,2,'acknowledgement retry must not run twice');
  assert.ok(calls.every(c=>c.sessionKey==='agent:main:main'));assert.match(calls[0].input,/帮我安排一次饭后散步/);assert.match(calls[1].input,/只走十分钟/);
@@ -163,7 +202,7 @@ test('feed and personalized Idea references send through one main-chat API, with
  content.write('data/ideas/点子.md','## 新的一批\n- 📷 **挑十张照片**：周末的小事\n  > 帮我整理照片\n');
  assert.equal(h.speech.history().find(m=>m.id===users[0].id).quote.reply,idea.reply,'history retains the adopted Idea after refresh');
  assert.equal((await post('/api/send',{text:'保留附言',quote,clientId:'stale-idea'})).status,409);assert.equal(calls.length,2);
- const feed=await post('/api/send',{text:'',quote:{kind:'feed',path:'data/feed/2026-10-19/1000-news.md'},clientId:'feed-reference'});assert.equal(feed.status,200);await h.mainChain;
+ const feed=await post('/api/send',{text:'',quote:{kind:'feed',path:'data/feed/2026-10-19/1000-news.md'},clientId:'feed-reference'});assert.equal(feed.status,200);await h.waitForMain();
  assert.match(calls.at(-1).input,/有来源的正文/);assert.equal(h.speech.history().filter(m=>m.role==='user').at(-1).quote.kind,'feed');
  assert.equal((await post('/api/ideas/click',{id:idea.id,revision:ideas.revision})).status,404,'deleted immediate-adoption route is not a compatibility path');
  assert.equal((await post('/api/feed/feedback',{path:'data/feed/2026-10-19/1000-news.md',action:'discuss'})).status,400);

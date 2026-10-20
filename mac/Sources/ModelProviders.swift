@@ -51,6 +51,7 @@ struct ModelProvider: Identifiable, Equatable {
     let builtin: Bool
     let baseURL: String?
     let keyHint: String?
+    let usage: UsageSnapshot?
     let models: [ProviderModel]
     init?(_ row: [String: Any]) {
         guard let id = row["id"] as? String, !id.isEmpty,
@@ -63,6 +64,7 @@ struct ModelProvider: Identifiable, Equatable {
             guard let url = row["baseUrl"] as? String, Api.serverURL(url) != nil,
                   row["keyHint"] == nil || row["keyHint"] is String else { return nil }
         }
+        usage = UsageSnapshot(row["usage"] as? [String: Any])
         self.protocolName=protocolName; self.id = id; self.name = name; self.builtin = builtin; self.models = models
         baseURL = builtin ? nil : row["baseUrl"] as? String
         if !builtin, let hint = row["keyHint"] as? String, !hint.isEmpty { keyHint = "••••" + hint.suffix(4) }
@@ -81,6 +83,7 @@ struct ProviderDraft: CustomStringConvertible, CustomDebugStringConvertible {
     var name = ""
     var baseURL = ""
     var apiKey = ""
+    var managementKey = ""
     var protocolName = "anthropic"
     var models = [ProviderModelDraft()]
     init(provider: ModelProvider? = nil) {
@@ -116,6 +119,7 @@ struct ProviderDraft: CustomStringConvertible, CustomDebugStringConvertible {
         while normalized.hasSuffix("/") { normalized.removeLast() }
         var body: [String: Any] = ["protocol":protocolName,"name": name, "baseUrl": normalized, "models": rows]
         if !key.isEmpty { body["apiKey"] = key }
+        if !trimmed(managementKey).isEmpty { body["managementKey"] = trimmed(managementKey) }
         return body
     }
 }
@@ -180,7 +184,7 @@ enum ProviderSecret {
             await AgentSettingsStore.shared.load()
             return true
         } catch {
-            self.error = ProviderSecret.safeError(error.localizedDescription, key: submittedKey)
+            self.error = ProviderSecret.safeError(ProviderSecret.safeError(error.localizedDescription, key: submittedKey), key: draft.managementKey)
             return false
         }
     }
@@ -207,47 +211,95 @@ private struct ProviderIcon: View {
 
 struct ModelSettingsPage: View {
     private var store: AgentSettingsStore { .shared }
+    @State private var cardID: String?
+    private let ink = Color(red: 0.28, green: 0.21, blue: 0.11)
     var body: some View {
-        SubPage(title: "模型", subtitle: "选中即保存，从下一轮开始生效", trailing: {
-            Button { Nav.shared.push(.modelProvider(nil)) } label: { Label("添加模型服务", systemImage: "plus") }
-                .buttonStyle(SoftButtonStyle()).verificationAction("provider-add")
+        SubPage(title: "模型", subtitle: "滑动切换供应商，选择适合这次工作的模型", trailing: {
+            Button { Task { await store.load() } } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(SoftButtonStyle()).help("刷新余量")
         }, content: {
             if let snapshot = store.snapshot {
-                ForEach(snapshot.providers.filter(\.builtin) + snapshot.providers.filter { !$0.builtin }) { provider in
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 10) {
-                            ProviderIcon(name: provider.name)
-                            Text(provider.builtin ? provider.name + "（内置）" : provider.name).font(Theme.font(size: 14, weight: .semibold))
-                            Spacer()
-                            if !provider.builtin {
-                                Button("编辑") { Nav.shared.push(.modelProvider(provider.id)) }.buttonStyle(SoftButtonStyle())
-                                    .verificationAction("provider-edit-" + provider.id)
-                            }
-                        }.padding(.horizontal, 4)
-                        VStack(spacing: 0) {
-                            ForEach(provider.models) { model in
-                                let selection = ModelSelection(provider: provider.id, id: model.id)
-                                Button { Task { await store.selectModel(selection) } } label: {
-                                    HStack(spacing: 16) {
-                                        Image(systemName: snapshot.model == selection ? "checkmark.circle.fill" : "circle").font(Theme.font(size: 20))
-                                            .foregroundStyle(snapshot.model == selection ? Theme.accent : Theme.sub.opacity(0.6))
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            Text(model.name).font(Theme.font(size: 15, weight: .medium))
-                                            Text(model.note.isEmpty ? model.id : model.note).font(Theme.font(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
-                                        }; Spacer()
-                                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 16).contentShape(Rectangle())
-                                }.buttonStyle(.plain).disabled(store.saving || store.loading)
-                                    .accessibilityLabel(provider.name + "，" + model.name)
-                                    .accessibilityValue(snapshot.model == selection ? "已选择" : "未选择")
-                                    .verificationAction("model-" + provider.id + "-" + model.id)
-                                if model.id != provider.models.last?.id { Divider().overlay(Theme.line).padding(.leading, 54) }
-                            }
-                        }.card(radius: 16, padding: 0)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(snapshot.providers) { provider in
+                            providerCard(provider, selected: snapshot.model.provider == provider.id)
+                                .frame(width: 390, height: 226).id(provider.id)
+                        }
+                        Button { Nav.shared.push(.modelProvider(nil)) } label: {
+                            VStack(spacing: 12) {
+                                Image(systemName: "plus").font(Theme.font(size: 30, weight: .light)).foregroundStyle(Theme.accent)
+                                Text("添加模型服务").font(Theme.font(size: 17, weight: .medium)).foregroundStyle(Theme.ink)
+                                Text("你的下一张卡片").font(Theme.font(size: 12)).foregroundStyle(Theme.sub)
+                            }.frame(width: 390, height: 226).background(Theme.field, in: RoundedRectangle(cornerRadius: 24))
+                                .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Theme.line, lineWidth: 1))
+                        }.buttonStyle(.plain).verificationAction("provider-add").id("add")
+                    }.scrollTargetLayout().padding(.vertical, 8)
+                }.scrollTargetBehavior(.viewAligned).scrollPosition(id: $cardID, anchor: .leading)
+                HStack(spacing: 8) {
+                    ForEach(snapshot.providers.map(\.id) + ["add"], id: \.self) { id in
+                        Button { withAnimation(.easeInOut(duration: 0.25)) { cardID = id } } label: {
+                            Capsule().fill(cardID == id ? Theme.accent : Theme.line).frame(width: cardID == id ? 18 : 6, height: 6).padding(.vertical, 8)
+                        }.buttonStyle(.plain).verificationAction("provider-card-" + id).accessibilityLabel(id == "add" ? "新增供应商" : snapshot.providers.first { $0.id == id }?.name ?? "供应商")
                     }
+                }.frame(maxWidth: .infinity)
+                if let provider = snapshot.providers.first(where: { $0.id == (cardID ?? snapshot.model.provider) }) {
+                    HStack { Text("选择模型").font(Theme.font(size: 17, weight: .medium)); Spacer(); Text(provider.name).font(Theme.font(size: 12)).foregroundStyle(Theme.sub) }
+                    VStack(spacing: 0) {
+                        ForEach(provider.models) { model in
+                            let selection = ModelSelection(provider: provider.id, id: model.id)
+                            Button { Task { await store.selectModel(selection) } } label: {
+                                HStack(spacing: 16) {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(model.name).font(Theme.font(size: 15, weight: .medium)).foregroundStyle(Theme.ink)
+                                        Text(model.note.isEmpty ? model.id : model.note).font(Theme.font(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    Image(systemName: snapshot.model == selection ? "checkmark.circle.fill" : "circle").font(Theme.font(size: 20)).foregroundStyle(snapshot.model == selection ? Theme.accent : Theme.sub.opacity(0.5))
+                                }.padding(.horizontal, 18).padding(.vertical, 16).contentShape(Rectangle())
+                            }.buttonStyle(.plain).disabled(store.saving || store.loading).verificationAction("model-" + provider.id + "-" + model.id)
+                            if model.id != provider.models.last?.id { Divider().overlay(Theme.line).padding(.horizontal, 18) }
+                        }
+                    }.card(radius: 16, padding: 0)
                 }
             } else if store.loading { ActiveProgress().frame(maxWidth: .infinity).padding(30) }
             if !store.error.isEmpty { Note(text: store.error) }
-        }).task(id: ChatClient.shared.settingsVersion) { await store.load() }
+        })
+        .task(id: ChatClient.shared.settingsVersion) { await store.load(); if cardID == nil { cardID = store.snapshot?.model.provider } }
+        .onChange(of: cardID) { _, id in
+            guard let snapshot = store.snapshot, let provider = snapshot.providers.first(where: { $0.id == id }), provider.id != snapshot.model.provider, !store.saving else { return }
+            Task { await store.selectModel(ModelSelection(provider: provider.id, id: provider.models[0].id)) }
+        }
+    }
+    private func providerCard(_ provider: ModelProvider, selected: Bool) -> some View {
+        ZStack(alignment: .trailing) {
+            RoundedRectangle(cornerRadius: 24).fill(LinearGradient(colors: [Color(red: 0.93, green: 0.85, blue: 0.67), Color(red: 0.98, green: 0.93, blue: 0.81), Color(red: 0.79, green: 0.68, blue: 0.47)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            Text(provider.name.uppercased()).font(Theme.font(size: 64, weight: .black)).foregroundStyle(ink.opacity(0.055)).fixedSize().offset(x: 12, y: 14)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("DOUDOU  /  MODEL ACCESS").font(Theme.font(size: 9)).tracking(1.2).foregroundStyle(ink.opacity(0.55))
+                        Text(provider.name).font(Theme.font(size: 24, weight: .medium)).foregroundStyle(ink)
+                    }
+                    Spacer()
+                    if !provider.builtin { Button { Nav.shared.push(.modelProvider(provider.id)) } label: { Image(systemName: "ellipsis").font(Theme.font(size: 18)).frame(width: 30, height: 30).foregroundStyle(ink) }.buttonStyle(.plain).help("编辑供应商").verificationAction("provider-edit-" + provider.id) }
+                }
+                Spacer()
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(provider.usage?.items.first?.label ?? "可用额度").font(Theme.font(size: 10)).foregroundStyle(ink.opacity(0.55))
+                        Text(provider.usage?.headline ?? "正在查询额度").font(Theme.font(size: provider.usage?.items.isEmpty == false ? 27 : 12, weight: .medium)).foregroundStyle(ink)
+                        if let second = provider.usage?.items.dropFirst().first { Text(second.label + " · " + second.amount).font(Theme.font(size: 10)).foregroundStyle(ink.opacity(0.6)) }
+                        if let fraction = provider.usage?.items.first?.fraction {
+                            GeometryReader { proxy in Capsule().fill(ink.opacity(0.12)).overlay(alignment: .leading) { Capsule().fill(ink.opacity(0.65)).frame(width: proxy.size.width * fraction) } }.frame(width: 170, height: 3)
+                        }
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 8) {
+                        if selected { Text("● 使用中").font(Theme.font(size: 10)).foregroundStyle(ink) }
+                        Text(provider.keyHint ?? "SERVER ACCOUNT").font(Theme.font(size: 10)).foregroundStyle(ink.opacity(0.6))
+                    }
+                }
+            }.padding(24)
+        }.clipShape(RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.5), lineWidth: 1))
     }
 }
 
@@ -255,6 +307,7 @@ struct ModelProviderFormPage: View {
     let providerID: String?
     @State private var form: ProviderFormModel
     @State private var showKey = false
+    @State private var confirmDeletion = false
     @State private var showPresetMenu = false
     @State private var showDetails = false
     @State private var showModels = false
@@ -316,6 +369,14 @@ struct ModelProviderFormPage: View {
                             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(focusedField == "provider-key" ? Theme.accent.opacity(0.5) : Theme.line, lineWidth: focusedField == "provider-key" ? 1 : 0.6).allowsHitTesting(false))
                         if form.provider != nil { Text("已保存 \(form.provider?.keyHint ?? "••••") · 留空表示不改").font(Theme.font(size: 12)).foregroundStyle(Theme.sub) }
                     }
+                    if form.draft.baseURL.contains("zenmux.ai") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("管理 Key · 可选").font(Theme.font(size: 13, weight: .medium))
+                            SecureField(form.provider == nil ? "用于查询订阅额度和余额" : "留空保持不变", text: $form.draft.managementKey)
+                                .textFieldStyle(.plain).privacySensitive().padding(14).background(Theme.field, in: RoundedRectangle(cornerRadius: 14))
+                            Text("ZenMux 的额度查询需要单独的 Management API Key。").font(Theme.font(size: 11)).foregroundStyle(Theme.sub)
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 12) {
                         fold("服务设置", expanded: $showDetails, marker: "provider-details")
                         if showDetails {
@@ -360,12 +421,15 @@ struct ModelProviderFormPage: View {
                     }.buttonStyle(PrimaryButtonStyle()).verificationAction("provider-save")
                     Spacer()
                     if form.provider != nil {
-                        Button { Task { if await form.delete() { leave() } } } label: { Text(form.deleting ? "正在删除…" : "删除服务") }
+                        Button { confirmDeletion = true } label: { Text(form.deleting ? "正在删除…" : "删除服务") }
                             .buttonStyle(SoftButtonStyle()).verificationAction("provider-delete")
                     }
                 }
             }
-        }.disabled(form.working).onDisappear { form.draft.apiKey = ""; showKey = false }
+        }.disabled(form.working).onDisappear { form.draft.apiKey = ""; form.draft.managementKey = ""; showKey = false }
+        .confirmationDialog("删除模型服务？", isPresented: $confirmDeletion) {
+            Button("删除服务", role: .destructive) { Task { if await form.delete() { leave() } } }
+        } message: { Text("将移除这个服务及其模型；正在使用时，会切换到其他已配置的服务。") }
         #if MAC_VERIFY
         .onAppear { ProviderFormVerification.current = form }
         #endif

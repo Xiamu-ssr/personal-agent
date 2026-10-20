@@ -1,3 +1,4 @@
+import { UsageService } from './usage.mjs';
 // HTTP + WebSocket for the App and devices. nginx exposes it at https://<host>/agent/.
 import fs from "node:fs";
 import http from "node:http";
@@ -110,8 +111,11 @@ async function pair(req, res) {
 
 export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), health = new HealthSync({root:config.root,hub,timezone:config.timezone}), listen = config, content = new Content({ root: config.root, bus, timezone: config.timezone }), schedules = schedulerFor({ harness, log, health, content }) }) {
   const clientRequests = new ClientRequests();
-  const providers = new Providers({ root: config.root, connectors, selected: () => readAppSettings(config.root).model });
-  const settingsUpdated = async () => { await harness.settingsChanged?.(); bus.emit?.(connectors.redact({ t: "settings", ...getAppSettings(config.root) })); };
+  const providers = new Providers({ root: config.root, connectors, selected: () => readAppSettings(config.root).model, select: model => putAppSettings(config.root, { model }) });
+  const usage = new UsageService({ root: config.root, connectors });
+  connectors.usage = list => usage.connectorList(list);
+  const settingsWithUsage = async () => { const settings = getAppSettings(config.root); settings.providers = await usage.providerList(settings.providers); return settings; };
+  const settingsUpdated = async () => { await harness.settingsChanged?.(); bus.emit?.(connectors.redact({ t: "settings", ...await settingsWithUsage() })); };
   const once = async (res, clientId, status, execute) => {
     const response = await clientRequests.run(clientId, async () => {
       try { return { status, body: await execute() }; }
@@ -231,15 +235,15 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
     if (p === "/api/settings") {
       if (req.method === "GET") {
-        try { return json(res,200,connectors.redact(getAppSettings(config.root))); }
+        try { return json(res,200,connectors.redact(await settingsWithUsage())); }
         catch (e) { return json(res,500,{error:e.message}); }
       }
       if (req.method !== "PUT") return json(res,405,{error:"只支持 GET / PUT"});
       try {
         const body=JSON.parse((await readRaw(req,4096)).toString("utf8"));
-        const value=putAppSettings(config.root,body);
+        putAppSettings(config.root,body);
         await settingsUpdated();
-        return json(res,200,connectors.redact(value));
+        return json(res,200,connectors.redact(await settingsWithUsage()));
       } catch (e) { return json(res,400,{error:e instanceof SyntaxError?"请提交有效的 JSON 设置":connectors.redact(e.message)}); }
     }
     if (p === "/api/providers/test" || p === "/api/providers" || p.startsWith("/api/providers/")) {
@@ -274,7 +278,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     }
     if (p === "/api/connectors") {
       return json(res, 200, {
-        cloud: { id: "cloud", name: "云端", kind: "cloud", online: true, ...connectors.list({ forApp: true }) },
+        cloud: { id: "cloud", name: "云端", kind: "cloud", online: true, ...await usage.connectorList(connectors.list({ forApp: true })) },
         devices: hub.known(),
       });
     }

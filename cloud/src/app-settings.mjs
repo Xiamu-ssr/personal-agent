@@ -21,5 +21,5 @@ export function getAppSettings(root) { return {...readAppSettings(root),kernel:"
 export function putAppSettings(root,value) { validate(root,value);writePrivateJson(path.join(root,"system/app-settings.json"),value);return getAppSettings(root); }
 export function selectedModel(root,env=process.env) {
  const m=readAppSettings(root).model,p=providerRecord(root,m.provider);
- return {...m,providerRecord:p,baseUrl:p.builtin?env.MODEL_BASE_URL:p.baseUrl,apiKey:p.builtin?env.MODEL_API_KEY:p.apiKey,protocol:p.protocol};
+ return {...m,providerRecord:p,baseUrl:p.baseUrl,apiKey:p.apiKey,protocol:p.protocol};
 }

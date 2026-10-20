@@ -1,5 +1,6 @@
 package com.xiamu.agent.connectors
 
+import com.xiamu.agent.Usage
 import com.xiamu.agent.Api
 import com.xiamu.agent.Prefs
 import com.xiamu.agent.objects
@@ -21,7 +22,7 @@ data class ConnectorField(
     fun help(values: Map<String, String>) = help
 }
 
-data class ConnectorAccount(val id: String, val label: String, val status: String, val error: String?, val checkedAt: Long, val values: Map<String, String> = emptyMap())
+data class ConnectorAccount(val id: String, val label: String, val status: String, val error: String?, val checkedAt: Long, val values: Map<String, String> = emptyMap(), val usage: Usage? = null)
 
 data class ConnectorInfo(
     val name: String,
@@ -32,6 +33,7 @@ data class ConnectorInfo(
     val fields: List<ConnectorField>?,
     val multiAccount: Boolean,
     val accounts: List<ConnectorAccount>,
+    val usage: Usage? = null,
 ) {
     val usesSwitch: Boolean get() = fields?.isEmpty() == true && !multiAccount
 }
@@ -59,13 +61,13 @@ fun connectorInfo(j: JSONObject, device: Boolean = false): ConnectorInfo {
         )
     }
     val accounts = j.optJSONArray("accounts").objects().map {
-        ConnectorAccount(it.optString("id"), it.optString("label"), it.optString("status"), it.opt("error") as? String, it.optLong("checkedAt"), it.optJSONObject("values")?.stringMap().orEmpty())
+        ConnectorAccount(it.optString("id"), it.optString("label"), it.optString("status"), it.opt("error") as? String, it.optLong("checkedAt"), it.optJSONObject("values")?.stringMap().orEmpty(), Usage.from(it.optJSONObject("usage")))
     }
     return ConnectorInfo(
         j.optString("name"), j.optString("title").ifBlank { j.optString("name") },
         (if (device && !j.optBoolean("enabled")) j.optString("unavailableReason").takeIf { it.isNotBlank() && it != "null" } else null) ?: j.optString("description"), j.optString("icon"),
         if (device) j.optBoolean("enabled") else accounts.any { it.status == "ok" } || j.optString("status") == "on",
-        fields, j.optBoolean("multiAccount", true), accounts,
+        fields, j.optBoolean("multiAccount", true), accounts, Usage.from(j.optJSONObject("usage")),
     )
 }
 

@@ -1,4 +1,4 @@
-# 部署豆豆 1.4
+# 部署豆豆 1.6
 
 豆豆使用 OpenClaw 2026.10.4，一个 Agent、同一个持续压缩的主 Session。Android、Mac 和 cloud 必须一起升级；旧协议返回 426。
 
@@ -35,6 +35,10 @@ sudo -u agent /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node \
 ```
 
 把地址 `https://agent.example.com/agent` 和一次性配对码填入 App。健康检查的 `ready:true` 表示内核可接收请求；还应发送一条消息确认实际模型和工具执行。
+
+## 1.6 升级
+
+等运行中的任务结束，停服后完整备份数据和环境配置，再更新代码并启动。供应商配置自动迁为 version 2，原内置 ZenMux 成为可编辑、删除的普通账号；保留原账号 ID、模型选择、连接器、记忆和原生 Session。后续以 `system/providers.json` 为准。不要清空该文件；余额按需读取，不迁移或复制余额。
 
 ## 从 1.0–1.3 升级
 
@@ -84,7 +88,9 @@ sudo -u agent /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node \
 
 备份整个数据目录和环境配置，避免在在线 SQLite 写入期间直接复制数据库文件。原生记忆检索、压缩前 flush 和 Dreaming 由 OpenClaw 管理；不维护第二份记忆库。App 心跳与 Goal 跟进通过同一主 Session 运行，原生额外心跳关闭以免重复唤醒。定时安排统一通过豆豆 schedules 工具，App 可查看和停用；OpenClaw 自己的 Dreaming 维护任务仍由内核管理。
 
-动态和点子每次更新使用独立任务 Session，带入最近主聊天快照，共用工作区和原生记忆；它们没有 fork 主会话全文。任务摘要留待下次主会话带入，内容立即同步各端。Goal、提醒和心跳在长期主 Session 串行推进。
+动态和点子每次更新使用独立任务 Session，带入最近主聊天快照，共用工作区和原生记忆；它们没有 fork 主会话全文。任务摘要留待下次主会话带入，内容立即同步各端。Goal、提醒、心跳和用户聊天进入同一长期主 Session。
+
+主聊天通过 Gateway `chat.send` 的 `steer` 模式即时接收输入，原生内核负责持久接收和单 Session 调度；App 发送接口等待原生接收确认。工具执行期间的补充在下一次模型决策前进入上下文，不在豆豆外层排队。活动详情同时记录这些补充。工具入口的 `args_json` 是 JSON 对象字符串，字段按目录参数填写；工具校验失败记录真实原因，开启 OpenClaw 原生重复调用检测。
 
 搜索走已连接的 Tavily 账号，`web_fetch` 直接抓取网页；模型供应商订阅不承担第三方搜索额度。
 

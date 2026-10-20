@@ -49,6 +49,7 @@ struct ConnectorAccount: Identifiable {
     let error: String
     let checkedAt: Date?
     let values: [String: String]?
+    var usage: UsageSnapshot? = nil
 }
 
 struct CloudConnector: Identifiable {
@@ -58,12 +59,14 @@ struct CloudConnector: Identifiable {
     let icon: String
     let fields: [ConnectorField]?
     let multiAccount: Bool
+    let usage: UsageSnapshot?
     let accounts: [ConnectorAccount]
     var id: String { name }
     var canAdd: Bool { fields != nil && (multiAccount || accounts.isEmpty) }
     var usesSwitch: Bool { fields?.isEmpty == true && !multiAccount }
 
     init(_ json: [String: Any]) {
+        usage = UsageSnapshot(json["usage"] as? [String: Any])
         name = json["name"] as? String ?? ""
         title = json["title"] as? String ?? name
         description = json["description"] as? String ?? ""
@@ -77,7 +80,7 @@ struct CloudConnector: Identifiable {
             for key in secrets where values?[key] != nil { values?[key] = "••••" }
             return ConnectorAccount(id: row["id"] as? String ?? "", label: row["label"] as? String ?? "账号",
                                     status: row["status"] as? String ?? "", error: row["error"] as? String ?? "",
-                                    checkedAt: (row["checkedAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) }, values: values)
+                                    checkedAt: (row["checkedAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) }, values: values, usage: UsageSnapshot(row["usage"] as? [String: Any]))
         }
     }
 }
@@ -231,6 +234,7 @@ struct ConnectorDetailPage: View {
                         }
                     }
                     Spacer(minLength: 4)
+                    if let usage = account.usage { UsageMeter(usage: usage).frame(width: 180) }
                     HStack(spacing: 8) {
                         if connector.fields != nil {
                             Button("编辑") { Nav.shared.push(.connectorForm(name: name, accountID: account.id)) }.buttonStyle(SoftButtonStyle())
@@ -390,7 +394,10 @@ struct ConnectorListRow: View {
                     Text(connector.description).font(Theme.font(size: 12)).foregroundStyle(Theme.sub).lineLimit(1)
                 }
                 Spacer(minLength: 10)
-                if connected { StatusTag(text: "已连接") }
+                if connected {
+                    if let usage = connector.usage { UsageMeter(usage: usage, compact: true).frame(width: 115) }
+                    StatusTag(text: "已连接")
+                }
                 else { Text("连接").font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.accent).padding(.horizontal, 14).frame(height: 28).background(Theme.field, in: Capsule()) }
             }.padding(.vertical, 12).padding(.horizontal, 6).contentShape(Rectangle())
         }.buttonStyle(.plain)

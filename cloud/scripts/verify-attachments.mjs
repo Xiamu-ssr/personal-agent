@@ -30,7 +30,7 @@ const hub=new DeviceHub(),connectors=new ConnectorManager({root,definitions:[]})
 const server=startServer({harness:h,hub,bus,connectors,content,schedules,log});
 try{
  await h.startMain();const attachments=[...imagePaths.map(p=>({kind:'image',name:path.basename(p),path:p})),{kind:'file',name:'reference.txt',path:file}];
- await h.send('请查看这些附件。','fixture',attachments);await h.mainChain;
+ await h.send('请查看这些附件。','fixture',attachments);await h.waitForMain();
  const task=[...h.history.records.values()].at(-1);assert.equal(task.status,'done',task.summary);assert.ok(sawImages&&sawText);
  console.log(JSON.stringify({ok:true,kernel:'openclaw',syntheticModel:true,initialInputReferencesOnly:true,nativeImageRead:true,nativeFileRead:true,images:2,mixedAttachments:true,modelRequests:fake.requests.length,singleDeviceEntry:true}));
 }finally{await h.close();server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));await fake.close();}

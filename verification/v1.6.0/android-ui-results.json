@@ -1,0 +1,13 @@
+{
+  "fixture": "loopback only",
+  "physicalDevice": false,
+  "checks": [
+    "horizontal swipe saves the selected supplier and displays a cash balance without inventing a ratio",
+    "native edit form saves the supplier name",
+    "deleting the active supplier switches to another configured supplier",
+    "ZenMux management credential has its own secret field",
+    "the final plus card adds and selects a supplier through the real native form",
+    "connector list shows a summed allowance and details show two separate account balances",
+    "unsupported billing endpoints remain explicit rather than showing a fabricated percentage"
+  ]
+}

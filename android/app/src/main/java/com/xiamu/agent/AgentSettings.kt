@@ -39,7 +39,7 @@ data class ProviderPreset(val id: String,val name: String,val protocol: String,v
 }
 
 data class ModelProvider(val id: String,val name: String,val builtin: Boolean,val protocol: String,
-    val models: List<ProviderModel>,val baseUrl: String? = null,val keyHint: String? = null) {
+    val models: List<ProviderModel>,val baseUrl: String? = null,val keyHint: String? = null, val usage: Usage? = null) {
     val maskedKey: String get() = keyHint?.takeIf { it.isNotBlank() }?.let { if(it.all { c -> c=='•' }) "••••" else "••••${it.takeLast(4)}" }.orEmpty()
     companion object {
         fun from(j: JSONObject): ModelProvider {
@@ -47,7 +47,7 @@ data class ModelProvider(val id: String,val name: String,val builtin: Boolean,va
             return ModelProvider(j.getString("id"),j.getString("name"),builtin,j.getString("protocol"),
                 j.getJSONArray("models").objects().map(ProviderModel::from),
                 if(builtin) null else j.optString("baseUrl").takeIf { !j.isNull("baseUrl") && it.isNotBlank() },
-                if(builtin) null else j.optString("keyHint").takeIf { !j.isNull("keyHint") && it.isNotBlank() }?.takeLast(4)).also {
+                if(builtin) null else j.optString("keyHint").takeIf { !j.isNull("keyHint") && it.isNotBlank() }?.takeLast(4), Usage.from(j.optJSONObject("usage"))).also {
                 require(it.id.isNotBlank() && it.name.isNotBlank() && it.protocol in listOf("anthropic","openai") && it.models.isNotEmpty()) { "模型服务格式不完整" }
                 require(it.models.map { m -> m.id }.distinct().size==it.models.size) { "模型 ID 重复" }
             }

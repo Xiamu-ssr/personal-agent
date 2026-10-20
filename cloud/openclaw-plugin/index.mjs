@@ -13,7 +13,7 @@ export default definePluginEntry({id:"doudou",name:"豆豆",register(api) {
  });
  for(const [name,description,parameters,route] of [
   ["doudou_catalog","查看豆豆的设备、连接器、目标、定时和内容工具。传 group 获取该组的完整参数；省略列出分组。",object({group:{type:"string"}}),"catalog"],
-  ["doudou_call","调用目录中的工具，先查看该组的参数。name 如 devices.list_devices，args 使用目录给出的 JSON。",{type:"object",properties:{name:{type:"string"},args:{type:"object",additionalProperties:true}},required:["name","args"],additionalProperties:false},"call"],
+  ["doudou_call","调用目录中的工具，先查看该组参数。name 如 tavily.search；args_json 是按目录字段组成的 JSON 对象字符串，如 {\"query\":\"搜索内容\"}。无参数传字符串 {}。",object({name:{type:"string"},args_json:{type:"string",description:"JSON 对象编码的字符串，字段遵循目录中的 parameters。"}},["name","args_json"]),"call"],
   ["doudou_say","向用户发送文字、选项和卡片。普通回复可直接输出文字；后台没有重要变化时不发送。卡片格式请查看 speech 组。",{type:"object",properties:{text:{type:"string"},options:{type:"array",items:object({label:{type:"string"},reply:{type:"string"}},["label"])},cards:{type:"array",items:{type:"object",additionalProperties:true}}},required:["text"],additionalProperties:false},"say"],
  ])api.registerTool(ctx=>({name,label:name,description,parameters,execute:async(_id,args)=>bridge(route,args,ctx.sessionKey)}),{names:[name]});
 }});

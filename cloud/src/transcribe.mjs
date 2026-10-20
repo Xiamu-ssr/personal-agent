@@ -1,6 +1,8 @@
 // Speech to text for hold-to-talk and voice notes, through the same ZenMux key.
 // ZenMux's /audio/transcriptions endpoint 500s; an audio-capable chat model transcribes well and costs ~nothing.
 // Node's fetch ignores HTTPS_PROXY (the ECS can only reach ZenMux through mihomo), so this shells out to curl.
+import { readProviders } from "./providers.mjs";
+import { config } from "./config.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,9 +12,11 @@ import { execFile } from "node:child_process";
 const MODEL = process.env.AGENT_ASR_MODEL || "google/gemini-3.5-flash-lite";
 const FORMATS = new Set(["wav", "mp3", "aac", "ogg", "flac", "m4a"]);
 
-function endpoint() {
-  const base = (process.env.MODEL_BASE_URL || "https://zenmux.ai/api/anthropic").replace(/\/anthropic\/?$/, "");
-  return `${base}/v1/chat/completions`;
+export function speechProvider(root = config.root) {
+  const provider = readProviders(root).find(p => new URL(p.baseUrl).hostname === "zenmux.ai" && p.apiKey);
+  if (!provider) throw new Error("请先添加可用的 ZenMux 服务以使用语音转写");
+  const base = provider.baseUrl.replace(/\/anthropic\/?$/, "").replace(/\/v1\/?$/, "");
+  return { endpoint: `${base}/v1/chat/completions`, apiKey: provider.apiKey };
 }
 
 // The model sometimes spaces out every CJK character.
@@ -27,6 +31,7 @@ export function audioFormat(name) {
 
 export async function transcribe(buf, format) {
   if (!FORMATS.has(format)) throw new Error(`不支持的音频格式：${format}`);
+  const provider = speechProvider();
   const body = {
     model: MODEL,
     messages: [{
@@ -38,12 +43,12 @@ export async function transcribe(buf, format) {
     }],
   };
   const tmp = path.join(os.tmpdir(), `asr-${crypto.randomUUID()}.json`);
-  fs.writeFileSync(tmp, JSON.stringify(body));
+  fs.writeFileSync(tmp, JSON.stringify(body), { mode: 0o600 });
   try {
     const out = await new Promise((resolve, reject) => {
       execFile("curl", [
-        "-sS", "-m", "90", endpoint(),
-        "-H", `Authorization: Bearer ${process.env.MODEL_API_KEY || ""}`,
+        "-sS", "-m", "90", provider.endpoint,
+        "-H", `Authorization: Bearer ${provider.apiKey}`,
         "-H", "content-type: application/json",
         "--data-binary", `@${tmp}`,
       ], { maxBuffer: 4 << 20 }, (err, stdout) => (err ? reject(err) : resolve(stdout)));

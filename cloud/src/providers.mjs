@@ -13,7 +13,7 @@ export const MODELS = [
   { id: "z-ai/glm-5.3-flashx", label: "GLM 5.3 FlashX", note: "输入约 3.75×，输出约 2.5×；缓存读约 7.5×" },
   { id: "xiaomi/mimo-v2.6-pro", label: "MiMo-V2.6-Pro", note: "输入约 4.35×，输出约 1.74×；缓存读约 0.36×" },
 ];
-export const ZENMUX = { id: "zenmux", name: "ZenMux", builtin: true, protocol: "anthropic", models: MODELS.map(({ id, label, note }) => ({ id, name: label, note })) };
+export const ZENMUX = { id: "zenmux", name: "ZenMux", protocol: "anthropic", baseUrl: "https://zenmux.ai/api/anthropic", models: MODELS.map(({ id, label }) => ({ id, name: label })) };
 
 function fail(message, status = 400) { throw Object.assign(new Error(message), { status }); }
 function text(value, limit, label) {
@@ -30,14 +30,15 @@ export function baseUrl(value) {
 function fields(value, allowed) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((k) => !allowed.includes(k))) fail("模型服务字段不正确");
 }
-function validate(value) {
-  const name = text(value.name, 40, "名称"), url = baseUrl(value.baseUrl), apiKey = text(value.apiKey, 4096, "API Key");
+function validate(value, { allowUnconfigured = false } = {}) {
+  const name = text(value.name, 40, "名称"), url = baseUrl(value.baseUrl), apiKey = allowUnconfigured && value.apiKey === "" ? "" : text(value.apiKey, 4096, "API Key");
   if (!Array.isArray(value.models) || value.models.length < 1 || value.models.length > 20) fail("请添加 1–20 个模型");
   const models = value.models.map((m) => { fields(m, ["id", "name"]); return { id: text(m.id, 200, "模型 ID"), name: text(m.name, 40, "模型显示名") }; });
   if (new Set(models.map((m) => m.id)).size !== models.length) fail("服务内模型 ID 不能重复");
-  if ([name, url, ...models.flatMap((m) => [m.id, m.name])].some((s) => s.includes(apiKey))) fail("服务资料不能包含 API Key");
+  if ([name, url, ...models.flatMap((m) => [m.id, m.name])].some((s) => apiKey && s.includes(apiKey))) fail("服务资料不能包含 API Key");
   if (!["anthropic", "openai"].includes(value.protocol)) fail("协议请选择 Anthropic 或 OpenAI");
-  return { name, baseUrl: url, apiKey, models, protocol: value.protocol };
+  const managementKey = value.managementKey ? text(value.managementKey, 4096, "管理 Key") : "";
+  return { name, baseUrl: url, apiKey, models, protocol: value.protocol, ...(managementKey && { managementKey }) };
 }
 
 export function readProviders(root) {
@@ -45,31 +46,41 @@ export function readProviders(root) {
   if (fs.existsSync(dir) && fs.lstatSync(dir).isSymbolicLink()) fail("模型服务目录不能是符号链接");
   try { if (fs.lstatSync(file).isSymbolicLink()) fail("模型服务配置不能是符号链接"); }
   catch (e) { if (e.code !== "ENOENT") throw e; }
-  if (!fs.existsSync(file)) writePrivateJson(file, { providers: [] });
+  if (!fs.existsSync(file)) writePrivateJson(file, { version: 1, providers: [] });
   fs.chmodSync(file, 0o600);
   try {
     const value = JSON.parse(fs.readFileSync(file, "utf8"));
     if (!Array.isArray(value.providers)) throw new Error();
+    // Migrate the environment account once; version 2 never recreates a deleted card.
+    const migrated = value.version !== 2;
+    if (value.version != null && ![1,2].includes(value.version)) throw new Error();
+    if (migrated) {
+      if (!value.providers.some(p => p.id === "zenmux")) value.providers.unshift({ ...ZENMUX,
+        baseUrl: process.env.MODEL_BASE_URL || ZENMUX.baseUrl, apiKey: process.env.MODEL_API_KEY || "",
+        ...(process.env.MODEL_MANAGEMENT_KEY && { managementKey: process.env.MODEL_MANAGEMENT_KEY }) });
+      value.version = 2;
+    }
     const records = value.providers.map((p) => {
-      if (!/^[a-f0-9-]{36}$/.test(p.id)) throw new Error();
-      return { id: p.id, ...validate(p) };
+      if (p.id !== "zenmux" && !/^[a-f0-9-]{36}$/.test(p.id)) throw new Error();
+      return { id: p.id, ...validate(p, { allowUnconfigured: true }) };
     });
     if (new Set(records.map((p) => p.id)).size !== records.length) throw new Error();
+    if (migrated) writePrivateJson(file, { version: 2, providers: records });
     return records;
   } catch { fail("模型服务配置损坏，请检查 system/providers.json", 500); }
 }
 function mask(value, key) {
+  if (!key) return value;
   if (typeof value === "string") return value.replaceAll(key, "••••");
   if (Array.isArray(value)) return value.map((v) => mask(v, key));
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mask(v, key)]));
 }
 export function publicProvider(p) {
   const models = p.models.map(m => ({ ...m, ...(presetModel(p, m.id)?.note && { note: presetModel(p, m.id).note }) }));
-  return { id: p.id, builtin: false, protocol: p.protocol, ...mask({ name: p.name, baseUrl: p.baseUrl, models }, p.apiKey), keyHint: p.apiKey.length > 4 ? p.apiKey.slice(-4) : "••••" };
+  return { id: p.id, builtin: false, protocol: p.protocol, ...mask(mask({ name: p.name, baseUrl: p.baseUrl, models }, p.apiKey), p.managementKey), hasManagementKey: !!p.managementKey, keyHint: p.apiKey.length > 4 ? p.apiKey.slice(-4) : "••••" };
 }
-export function listProviders(root) { return [structuredClone(ZENMUX), ...readProviders(root).map(publicProvider)]; }
+export function listProviders(root) { return readProviders(root).map(publicProvider); }
 export function providerRecord(root, id) {
-  if (id === "zenmux") return ZENMUX;
   return readProviders(root).find((p) => p.id === id) || fail("没有这个模型服务", 404);
 }
 
@@ -96,9 +107,9 @@ export async function testProvider(input, { env = process.env, request = message
 }
 
 export class Providers {
-  constructor({ root, connectors, selected, probe = testProvider }) {
-    Object.assign(this, { root, connectors, selected, probe }); this.chain = Promise.resolve();
-    for (const p of readProviders(root)) this.remember(p.apiKey);
+  constructor({ root, connectors, selected, select, probe = testProvider }) {
+    Object.assign(this, { root, connectors, selected, select, probe }); this.chain = Promise.resolve();
+    for (const p of readProviders(root)) { this.remember(p.apiKey); this.remember(p.managementKey); }
   }
   remember(key) { if (typeof key === "string" && key) this.connectors.knownSecrets.add(key); }
   validatePublic(value) {
@@ -109,37 +120,45 @@ export class Providers {
   mutate(fn) { const p = this.chain.then(fn); this.chain = p.catch(() => {}); return p; }
   create(input) {
     return this.mutate(async () => {
-      fields(input, ["name", "baseUrl", "apiKey", "models", "protocol"]); this.remember(input.apiKey);
+      fields(input, ["name", "baseUrl", "apiKey", "models", "protocol", "managementKey"]); this.remember(input.apiKey); this.remember(input.managementKey);
       const value = validate(input);
       this.validatePublic(value);
       await this.test({ baseUrl: value.baseUrl, apiKey: value.apiKey, model: value.models[0].id, protocol: value.protocol });
       const records = readProviders(this.root), record = { id: crypto.randomUUID(), ...value };
-      records.push(record); writePrivateJson(path.join(this.root, "system/providers.json"), { providers: records });
+      records.push(record); writePrivateJson(path.join(this.root, "system/providers.json"), { version: 2, providers: records });
+      try { this.select?.({ provider: record.id, id: record.models[0].id }); }
+      catch (error) { writePrivateJson(path.join(this.root, "system/providers.json"), { version: 2, providers: records.filter(p => p.id !== record.id) }); throw error; }
       return publicProvider(record);
     });
   }
   patch(id, input) {
     return this.mutate(async () => {
-      if (id === "zenmux") fail("内置服务不能修改或删除");
-      fields(input, ["name", "baseUrl", "apiKey", "models", "protocol"]); this.remember(input.apiKey);
+      fields(input, ["name", "baseUrl", "apiKey", "models", "protocol", "managementKey"]); this.remember(input.apiKey); this.remember(input.managementKey);
       const old = providerRecord(this.root, id), keepKey = input.apiKey === undefined || typeof input.apiKey === "string" && !input.apiKey.trim();
-      const value = validate({ ...old, ...input, apiKey: keepKey ? old.apiKey : input.apiKey });
+      const value = validate({ ...old, ...input, apiKey: keepKey ? old.apiKey : input.apiKey, managementKey: input.managementKey === "" ? old.managementKey : input.managementKey ?? old.managementKey });
       this.validatePublic(value);
       const checkSelected = () => { const m = this.selected(); if (m.provider === id && !value.models.some((row) => row.id === m.id)) fail("先换到别的模型", 409); };
       checkSelected();
-      if (["baseUrl", "models", "protocol"].some((key) => Object.hasOwn(input, key)) || !keepKey) await this.test({ baseUrl: value.baseUrl, apiKey: value.apiKey, model: value.models[0].id, protocol: value.protocol });
+      if (value.baseUrl !== old.baseUrl || value.protocol !== old.protocol || value.apiKey !== old.apiKey || JSON.stringify(value.models.map(m => m.id)) !== JSON.stringify(old.models.map(m => m.id))) await this.test({ baseUrl: value.baseUrl, apiKey: value.apiKey, model: value.models[0].id, protocol: value.protocol });
       checkSelected();
       const records = readProviders(this.root), index = records.findIndex((p) => p.id === id), record = { id, ...value };
-      records[index] = record; writePrivateJson(path.join(this.root, "system/providers.json"), { providers: records });
+      records[index] = record; writePrivateJson(path.join(this.root, "system/providers.json"), { version: 2, providers: records });
       return publicProvider(record);
     });
   }
   remove(id) {
     return this.mutate(() => {
-      if (id === "zenmux") fail("内置服务不能修改或删除");
       providerRecord(this.root, id);
-      if (this.selected().provider === id) fail("先换到别的模型", 409);
-      writePrivateJson(path.join(this.root, "system/providers.json"), { providers: readProviders(this.root).filter((p) => p.id !== id) });
+      const original = this.selected(), remaining = readProviders(this.root).filter(p => p.id !== id);
+      let switched = false;
+      if (original.provider === id) {
+        if (!this.select) fail("先换到别的模型", 409);
+        const next = remaining.find(p => p.apiKey && p.models.length);
+        if (!next) fail("至少保留一个已配置的模型服务", 409);
+        this.select({ provider: next.id, id: next.models[0].id }); switched = true;
+      }
+      try { writePrivateJson(path.join(this.root, "system/providers.json"), { version: 2, providers: remaining }); }
+      catch (error) { if (switched) this.select(original); throw error; }
       return { ok: true };
     });
   }

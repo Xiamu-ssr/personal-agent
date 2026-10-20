@@ -1,6 +1,6 @@
 {
   "name": "personal-agent-cloud",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "description": "Doudou: one OpenClaw agent with shared apps, memory and device capabilities",

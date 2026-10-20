@@ -8,7 +8,8 @@ process.env.AGENT_ROOT=root;process.env.AGENT_TOKEN='local-native-test';process.
 const fake=await fakeAnthropic((body,index)=>{
  const names=body.tools?.map(t=>t.name)||[];
  assert.ok(names.includes('doudou_call') && !names.includes('tool_call'),'Doudou tools must expose one invocation layer');
- if(index===0)return {stop_reason:'tool_use',content:[{type:'tool_use',id:'tool_native_1',name:'doudou_call',input:{name:'goals.put',args:{name:'原生工具验证',title:'原生工具验证',status:'进行中',progress:10,body:'由真实 OpenClaw 工具循环写入'}}}]};
+ assert.equal(body.tools.find(t=>t.name==='doudou_call').input_schema.properties.args_json.type,'string','dynamic tool arguments must survive provider schema conversion');
+ if(index===0)return {stop_reason:'tool_use',content:[{type:'tool_use',id:'tool_native_1',name:'doudou_call',input:{name:'goals.put',args_json:JSON.stringify({name:'原生工具验证',title:'原生工具验证',status:'进行中',progress:10,body:'由真实 OpenClaw 工具循环写入'})}}]};
  if(index===4)return new Promise(resolve=>setTimeout(()=>resolve({content:[{type:'text',text:'延时运行'}]}),8000));
  if(index===1){assert.ok(JSON.stringify(body.messages).includes('tool_result'));return {content:[{type:'text',text:'原生执行完成，暗号青竹'}]};}
  assert.ok(JSON.stringify(body.messages).includes('暗号青竹'),'main session continuity lost');

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.5.0"><img src="https://img.shields.io/badge/Release-v1.5.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.5.0"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.6.0"><img src="https://img.shields.io/badge/Release-v1.6.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.6.0"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=101612" alt="Android · macOS · Cloud">
   <a href="https://github.com/openclaw/openclaw"><img src="https://img.shields.io/badge/Built%20with-OpenClaw-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with OpenClaw"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=101612" alt="MIT License"></a>
@@ -27,14 +27,14 @@
 
 ## 开始使用
 
-**当前版本：[v1.5.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.5.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
+**当前版本：[v1.6.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.6.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
-1.5 将设备归属和授权统一到「连接应用 → 本机」，移除头像控制台中重复的权限页。Android Phone Use 的滑动改为平滑曲线与变速触摸，保持准确落点，任务中断时释放触摸。云端协议和持久化数据格式不变。[查看验证记录](verification/v1.5.0/README.md)。
+1.6 将模型服务做成可横滑的金色卡片，集中选模型、编辑账号和查看余额；连接器展示总余量与多账号明细。Tavily 使用真实积分，Wind、高德明确标示未提供查询。原内置 ZenMux 自动迁为可编辑账号，保留模型选择和现有数据。[查看验证记录](verification/v1.6.0/README.md)。
 
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
-| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.5.0/doudou-1.5.0.apk) | Android 9 或更新版本 |
-| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.5.0/doudou-1.5.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
+| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.6.0/doudou-1.6.0.apk) | Android 9 或更新版本 |
+| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.6.0/doudou-1.6.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
 | 云端 | [部署指南](docs/deployment.md) | Linux、Node.js 24.16+ 或 26.1+、systemd、Nginx、HTTPS |
 
 先[部署云端](#部署)，生成一次性配对码，再在 App 填入自己的服务器地址。第一次聊天，豆豆会问怎么称呼你、自己叫什么，再推荐需要连接的应用和本机能力。
@@ -228,7 +228,7 @@ node spec/build.mjs
 
 ## 验证与已知限制
 
-1.5 的[验收记录](verification/v1.5.0/README.md)列出 OPPO 真机连续触摸、曲线路径、落点与中断检查，以及双端界面和安装包验证；隔离验收使用合成数据。附件读取和原生 OpenClaw 的既有验证见 [1.4 记录](verification/v1.4.0/README.md)。
+1.6 的[验收记录](verification/v1.6.0/README.md)记录金色卡片、横滑切换、账号管理、多账号余量和安装包验证；界面验收使用隔离合成账号。附件与 Phone Use 的既有验证见 [1.4 记录](verification/v1.4.0/README.md)。
 
 - Phone Use 已在 Android 15 的 OPPO 真机验证；截图需要 Android 11+。健康数据和其他品牌的系统授权仍需对应设备验证。
 - 手机和电脑的应用操作需要实际设备在线、授权；模型、搜索和第三方服务的费用另计。
@@ -252,8 +252,8 @@ cd android
 ```bash
 # 首次构建创建自己的本地签名身份，可能弹出钥匙串授权
 bash mac/tools/make-signing-identity.sh
-VERSION=1.5.0 bash mac/build.sh
-# 产物：mac/build/doudou-1.5.0.dmg；Apple 芯片 + Intel 通用
+VERSION=1.6.0 bash mac/build.sh
+# 产物：mac/build/doudou-1.6.0.dmg；Apple 芯片 + Intel 通用
 ```
 
 Mac 安装包采用本地签名，未做 Apple 公证。首次打开被系统拦截时，在「系统设置 → 隐私与安全性」中核对应用后选择「仍要打开」。

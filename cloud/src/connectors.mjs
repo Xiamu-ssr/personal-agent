@@ -282,7 +282,7 @@ export class ConnectorManager {
       catch (e) { return { ...text({ error: this.redact(e.message || "连接器操作失败") }), isError: true }; }
     };
     return [
-      defineTool("list", "列出预置连接器、账号状态和配置字段；密钥不会返回。", {}, wrap(() => this.list())),
+      defineTool("list", "列出预置连接器、账号状态和配置字段；密钥不会返回。", {}, wrap(() => this.usage ? this.usage(this.list()) : this.list())),
       defineTool("add_account", "添加并验证账号。若用户在聊天里提供授权码，成功后将 notice 提醒告诉用户。", { name: z.string(), values: VALUES }, wrap(async ({ name, values }) => ({
         ...await this.addAccount(name, values),
         notice: "下次在 App 里点「连接」填表单更安全，聊天记录里会留下授权码",

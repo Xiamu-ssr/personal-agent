@@ -3,6 +3,7 @@ package com.xiamu.agent.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -153,6 +154,10 @@ fun ConnectorsScreen(route: Route.Connectors, gateway: ConnectorGateway = CloudC
                                                 trailing = {
                                                     when {
                                                         c.usesSwitch -> Tag(if (c.enabled) "已连接" else "未开启", if (c.enabled) CapabilityEnabled else Pal.Muted)
+                                                        c.usage != null -> Column(Modifier.width(106.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                                            Text("${c.accounts.size} 个账号",style=Type.body(10),color=Pal.Muted)
+                                                            UsageView(c.usage,compact=true)
+                                                        }
                                                         c.accounts.isNotEmpty() -> Tag("${c.accounts.size} 个账号", if (c.enabled) CapabilityEnabled else Pal.Danger)
                                                         else -> Tag(if (c.enabled) "已连接" else "未开启",if(c.enabled) CapabilityEnabled else Pal.Muted)
                                                     }

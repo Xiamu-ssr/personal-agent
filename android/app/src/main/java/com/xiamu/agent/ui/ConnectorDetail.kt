@@ -128,6 +128,7 @@ fun ConnectorDetailScreen(route: Route.ConnectorDetail, gateway: ConnectorGatewa
                             }
                             if (account.status != "ok") Text(account.error?.takeIf { it.isNotBlank() } ?: "尚未通过验证", fontSize = Type.Secondary, lineHeight = Type.SecondaryLine,
                                 color = Pal.Danger, modifier = Modifier.padding(top = 8.dp))
+                            account.usage?.let { Box(Modifier.fillMaxWidth().padding(top=12.dp,bottom=6.dp)) { UsageView(it) } }
                             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
                                 if (connector.fields != null) TextButton(enabled = busy == null, onClick = { Nav.open(Route.ConnectorForm(connector, account)) }) { Text("编辑", color = Pal.Ink) }
                                 TextButton(enabled = busy == null, onClick = {

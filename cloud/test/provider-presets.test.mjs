@@ -67,7 +67,7 @@ test('templates become accounts only after probing, preserve custom models and n
   const saved = putAppSettings(root, { model: { provider: account.id, id: preset.models[0].id } });
   assert.equal(saved.model.provider, account.id);
   assert.ok(!JSON.stringify(saved).includes(apiKey));
-  assert.equal(readProviders(root)[0].apiKey, apiKey);
+  assert.equal(readProviders(root).find(p => p.id === account.id).apiKey, apiKey);
   assert.equal(fs.statSync(path.join(root, 'system/providers.json')).mode & 0o777, 0o600);
   await assert.rejects(manager.remove(account.id), /先换/);
 });
@@ -76,7 +76,7 @@ test('a failed preset probe does not save an account', async () => {
   const root = fs.mkdtempSync(path.join(testRoot, 'preset-failed-'));
   const manager = new Providers({ root, connectors: new ConnectorManager({ root, definitions: [] }), selected: () => ({}), probe: async () => { throw new Error('HTTP 401'); } });
   await assert.rejects(manager.create({ name: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', protocol: 'openai', apiKey: 'fixture-rejected-key', models: [{ id: 'model', name: '模型' }] }), /401/);
-  assert.equal(readProviders(root).length, 0);
+  assert.equal(readProviders(root).length, 1);
 });
 
 test('the probe uses the OpenAI token parameter only on the official endpoint and redacts SiliconFlow errors', async () => {
