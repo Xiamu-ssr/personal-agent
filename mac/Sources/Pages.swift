@@ -6,10 +6,10 @@ struct PageScaffold<Content:View>:View {
     @ViewBuilder let content:()->Content
     var body:some View {
         ScrollView {
-            VStack(alignment:.leading,spacing:24) {
+            LazyVStack(alignment:.leading,spacing:24) {
                 PageTitle(title:title,subtitle:subtitle).verificationAction("page-title-"+title)
                 content()
-            }.frame(maxWidth:740,alignment:.leading).padding(.horizontal,40).padding(.top,36).padding(.bottom,38).frame(maxWidth:.infinity)
+            }.frame(maxWidth:740,alignment:.leading).padding(.horizontal,40).padding(.top,36).padding(.bottom,38).frame(maxWidth:.infinity).background(OverlayScrollbars())
         }.scrollContentBackground(.hidden)
     }
 }
@@ -26,7 +26,7 @@ struct SubPage<Content:View,Trailing:View>:View {
             }.padding(.horizontal,32).padding(.top,24).padding(.bottom,22)
             if scrolls { ScrollView { VStack(alignment:.leading,spacing:22) {
                 if !subtitle.isEmpty { Text(subtitle).font(Theme.font(size:13)).foregroundStyle(Theme.sub) }; content()
-            }.frame(maxWidth:760,alignment:.leading).padding(.horizontal,36).padding(.bottom,32).frame(maxWidth:.infinity) } }
+            }.frame(maxWidth:760,alignment:.leading).padding(.horizontal,36).padding(.bottom,32).frame(maxWidth:.infinity).background(OverlayScrollbars()) } }
             else { content() }
         }
     }

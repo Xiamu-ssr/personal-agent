@@ -27,7 +27,7 @@ struct MainView:View {
             }
         }
         .frame(minWidth:920,minHeight:650).foregroundStyle(Theme.ink).font(Theme.font(size:15))
-        .preferredColorScheme(Theme.scheme).tint(Theme.ink)
+        .tint(Theme.ink)
         .background(WindowActivityReader(activity:activity).frame(width:0,height:0))
         .environment(\.interactiveWindow,activity.active)
         .sheet(isPresented:Binding(get:{nav.console},set:{nav.console=$0})) { ConsoleView() }
@@ -39,15 +39,26 @@ struct MainView:View {
         .onChange(of:systemScheme) { _,v in if AppearanceStore.shared.selection == .system { AppearanceStore.shared.systemDark=v == .dark } }
     }
     @ViewBuilder private var content:some View {
-        if let route=nav.stacks[nav.tab]?.last { RouteView(route:route).id(route) }
-        else {
+        let route=nav.stacks[nav.tab]?.last
+        let mainVisible=nav.tab == .chat && route == nil && nav.sideChat == nil
+        ZStack {
+            // Keep the transcript through everyday tabs, with media and row updates
+            // paused offscreen. Settings releases its hosted graphs before
+            // changing appearance; transcript measurements and reading state survive.
+            if nav.tab != .settings {
+                ChatPage().opacity(mainVisible ? 1:0).allowsHitTesting(mainVisible).accessibilityHidden(!mainVisible)
+                    .environment(\.interactiveWindow,activity.active && mainVisible).environment(\.pageVisible,mainVisible)
+            }
+            if let route { RouteView(route:route).id(route) }
+            else {
             switch nav.tab {
-            case .chat: ChatPage(thread:nav.sideChat).id(nav.sideChat?.id)
+            case .chat: if let thread=nav.sideChat {ChatPage(thread:thread).id(thread.id)}
             case .feed: FeedPage()
             case .ideas: IdeasPage()
             case .goals: GoalsPage()
             case .library: LibraryPage()
             case .settings: SettingsPage()
+            }
             }
         }
     }
@@ -82,7 +93,7 @@ struct Sidebar:View {
                     }.buttonStyle(.plain).verificationAction("side-chat-"+s.id) }
                     if side.next != nil {Button("更早的旁聊"){Task {await side.load(reset:false)}}.buttonStyle(.plain).font(Theme.font(size:11)).padding(12).disabled(side.loading).task(id:side.next){await side.load(reset:false)}}
                     if !side.error.isEmpty {Button("旁聊加载失败，重试"){Task {await side.load()}}.buttonStyle(.plain).font(Theme.font(size:11)).padding(12)}
-                }
+                }.background(OverlayScrollbars())
             }
             Spacer(minLength:8)
             Button { nav.go(.settings) } label:{ Label("设置",systemImage:"gearshape").font(Theme.font(size:13)).frame(maxWidth:.infinity,alignment:.leading).padding(14) }.buttonStyle(.plain)

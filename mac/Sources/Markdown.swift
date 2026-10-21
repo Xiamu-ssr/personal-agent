@@ -258,24 +258,38 @@ struct MarkdownView: View {
 
     private func table(_ rows: [[String]]) -> some View {
         let cols = rows.map(\.count).max() ?? 0
-        return ScrollView(.horizontal, showsIndicators: false) {
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+        let wide = cols > 3
+        // A horizontal scroll view proposes an unbounded width. Grid's flexible
+        // columns measured single-line rows, then wrapped them only while drawing.
+        // Give every cell its final width before measuring each complete row.
+        let widths = (0..<cols).map { column in
+            min(280, max(108, rows.map { row in
+                ((column < row.count ? row[column] : "") as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size - 1)]).width
+            }.max() ?? 108))
+        }
+        let content = VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { r, row in
-                    GridRow {
+                    if r > 0 { Rectangle().fill(Theme.line).frame(height: 0.5) }
+                    HStack(alignment: .top, spacing: 18) {
                         ForEach(0..<cols, id: \.self) { c in
                             Text(Markdown.inline(c < row.count ? row[c] : ""))
                                 .font(Theme.font(size: size - 1, weight: r == 0 ? .semibold : .regular))
                                 .foregroundStyle(r == 0 ? Theme.ink : Theme.ink.opacity(0.9))
-                                .frame(maxWidth: 280, alignment: .leading)
+                                .lineSpacing(4)
+                                .frame(width: wide ? widths[c] : cols == 3 && c == 0 ? min(160, widths[c]) : nil, alignment: .leading)
+                                .frame(maxWidth: wide || (cols == 3 && c == 0) ? nil : .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .verificationAction("markdown-cell-\(r)-\(c)")
                         }
-                    }
-                    if r == 0 { Rectangle().fill(Theme.line).frame(height: 1).gridCellColumns(cols) }
+                    }.padding(.vertical, 10).verificationAction("markdown-table-row-\(r)")
                 }
-            }
-            .padding(12)
+            }.padding(.horizontal, 14)
+        return Group {
+            if wide { ScrollView(.horizontal) { content.background(OverlayScrollbars()) } }
+            else { content.frame(maxWidth: .infinity, alignment: .leading) }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.field))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

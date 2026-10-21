@@ -260,9 +260,8 @@ struct SettingsPage: View {
                 HStack {
                     Text("外观").font(Theme.font(size: 14, weight: .medium))
                     Spacer()
-                    Picker("外观", selection: Binding(get: { AppearanceStore.shared.selection }, set: { AppearanceStore.shared.select($0) })) {
-                        ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
-                    }.labelsHidden().frame(width: 180)
+                    ChoiceControl(title: "外观", selection: Binding(get: { AppearanceStore.shared.selection }, set: { AppearanceStore.shared.select($0) }),
+                                  choices: AppAppearance.allCases.map { ($0, $0.title) }).frame(width: 180)
                 }.padding(12)
             }
 
@@ -327,7 +326,6 @@ struct SettingsPage: View {
             await AgentSettingsStore.shared.load()
             await ProfileStore.shared.load()
             await store.load()
-            while active && !Task.isCancelled { do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }; await AgentSettingsStore.shared.load() }
         }
         .sheet(isPresented: $serverEditor) { ServerAddressEditor() }
         .alert("退出登录？", isPresented: $confirmSignOut) {

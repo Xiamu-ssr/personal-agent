@@ -10,9 +10,13 @@ import Observation
     var choosing=Set<String>()
     var error=""
     @ObservationIgnored private var consumed=Set<String>()
+    // Presentation measurements belong to this transcript; this cache owns
+    // no native views, media players or background page tasks.
+    @ObservationIgnored let scrollState=ChatScrollState()
+    @ObservationIgnored let layoutCache=ChatLayoutCache()
     init(activityID:String?=nil) { self.activityID=activityID }
     func bind(_ id:String) { precondition(activityID == nil || activityID == id); activityID=id }
-    func reset() { items=[]; consumed=[]; choosing=[]; error="";revision += 1 }
+    func reset() { items=[]; consumed=[]; choosing=[]; error="";scrollState.returnToBottom();layoutCache.reset();revision += 1 }
     private func belongs(_ row:[String:Any])->Bool {
         if let activityID { return row["activityId"] as? String == activityID && row["chatType"] as? String == "side" }
         return row["chatType"] as? String != "side"
@@ -36,11 +40,11 @@ import Observation
         for row in rows {receive(row)}
         let order=Dictionary(rows.enumerated().compactMap { i,row in (row["id"] as? String).map {($0,i)} },uniquingKeysWith:{_,new in new})
         // The server owns write order. Events newer than this snapshot stay after its rows.
-        items=items.enumerated().sorted { a,b in
+        let ordered=items.enumerated().sorted { a,b in
             let x=order[a.element.serverID],y=order[b.element.serverID]
             if let x,let y {return x<y}; if x != nil {return true};if y != nil {return false};return a.offset<b.offset
         }.map(\.element)
-        revision += 1
+        if ordered != items {items=ordered;revision += 1}
     }
     func absorb(_ other:ChatTranscript) {
         consumed.formUnion(other.consumed)

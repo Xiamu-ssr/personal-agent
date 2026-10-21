@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -197,13 +198,17 @@ class DeviceService : Service() {
     companion object {
         const val ACTION_REREGISTER = "reregister"
         val online = mutableStateOf(false)
+        val capabilityVersion = mutableIntStateOf(0)
         val connectionStatus = mutableStateOf("正在连接云端")
         @Volatile private var active: DeviceService? = null
 
         fun capabilitiesChanged(ctx: Context) {
-            val service = active
-            if(service != null) service.main.post { service.ws?.let { service.register(it) } }
-            else if(Prefs.configured) start(ctx)
+            Handler(Looper.getMainLooper()).post {
+                capabilityVersion.intValue++
+                val service = active
+                if(service != null) service.ws?.let { service.register(it) }
+                else if(Prefs.configured) start(ctx)
+            }
         }
 
         internal fun onAgentEvent(ctx: Context, kind: String, text: String) {

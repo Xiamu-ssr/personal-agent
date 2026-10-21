@@ -205,10 +205,12 @@ struct ChatMessages:View {
     var emptyText="豆豆正在准备第一次聊天…"
     var topInset:CGFloat=0
     @Environment(\.interactiveWindow) private var active
-    @State private var scroll=ChatScrollState()
+    @Environment(\.pageVisible) private var visible
+    @State private var compactScroll=ChatScrollState()
+    private var scroll:ChatScrollState { compact ? compactScroll : transcript.scrollState }
     @State private var returnRevision=0
     var body:some View {
-        NativeChatList(transcript:transcript,state:scroll,compact:compact,topInset:topInset,active:active,returnRevision:returnRevision)
+        NativeChatList(transcript:transcript,state:scroll,compact:compact,topInset:topInset,active:active,visible:visible,returnRevision:returnRevision)
             .overlay(alignment:.bottomTrailing) {ReturnToBottom(state:scroll){scroll.returnToBottom();returnRevision += 1}}
             .overlay {if transcript.items.isEmpty {Note(text:ChatClient.shared.connected ? emptyText:"连接中…")}}
     }

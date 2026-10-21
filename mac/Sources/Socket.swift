@@ -11,14 +11,11 @@ final class Socket: NSObject, URLSessionWebSocketDelegate {
     private var opened = false
     private var wanted = false
     private var retry = 0
-    private var pinger: Timer?
     private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
 
     init(role: String) {
         self.role = role
         super.init()
-        // Notice dead connections (sleep, network switch) within half a minute.
-        pinger = Timer.scheduledTimer(withTimeInterval: 25, repeats: true) { [weak self] _ in self?.ping() }
     }
 
     func start() {
@@ -64,14 +61,6 @@ final class Socket: NSObject, URLSessionWebSocketDelegate {
         opened = false
         t.resume()
         receive(t)
-    }
-
-    private func ping() {
-        guard let t = task, opened else { return }
-        t.sendPing { [weak self] err in
-            guard err != nil else { return }
-            DispatchQueue.main.async { self?.dropped(t, nil) }
-        }
     }
 
     private func receive(_ t: URLSessionWebSocketTask) {

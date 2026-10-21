@@ -10,6 +10,7 @@ import { readJson, writeJson, tailJsonl, firstTs, dateIn } from "./store.mjs";
 import { issuePairCode } from "./pair.mjs";
 import { transcribe, audioFormat } from "./transcribe.mjs";
 import { ConnectorManager } from "./connectors.mjs";
+import { CONNECTION_HEARTBEAT_MS, pingConnections } from "./connection-heartbeat.mjs";
 import { schedulerFor } from "./scheduler.mjs";
 import { Content } from "./content.mjs";
 import { paginateJobs } from "./task-history.mjs";
@@ -500,16 +501,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     if (ev.t === "say" && ev.text) hub.broadcast({ t: "event", kind: "reply", messageId: ev.id, text: ev.text.slice(0, 300) });
   });
 
-  const heartbeat = setInterval(() => {
-    for (const ws of wss.clients) {
-      if (!ws.isAlive) {
-        ws.terminate();
-        continue;
-      }
-      ws.isAlive = false;
-      ws.ping();
-    }
-  }, 30_000);
+  const heartbeat = setInterval(() => pingConnections(wss.clients), CONNECTION_HEARTBEAT_MS);
   heartbeat.unref();
   server.closeSockets = () => { for (const ws of wss.clients) ws.terminate(); };
   server.on("close", () => { content.close();clearInterval(heartbeat); server.closeSockets(); wss.close(); });

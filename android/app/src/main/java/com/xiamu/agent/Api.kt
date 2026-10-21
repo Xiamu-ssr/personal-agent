@@ -28,7 +28,8 @@ object Api {
     val http: OkHttpClient by lazy { OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
-        .pingInterval(25, TimeUnit.SECONDS)
+        // The cloud owns ping/pong liveness for both app and device sockets.
+        // A second client timer needlessly wakes the mobile radio while idle.
         .apply{Prefs.cacheDirectory()?.let{cache(okhttp3.Cache(File(it,"http-resources"),128L*1024*1024))}}
         .build()
     }

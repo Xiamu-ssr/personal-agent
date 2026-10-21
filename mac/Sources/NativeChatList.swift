@@ -1,5 +1,33 @@
 import AppKit
 import SwiftUI
+import Observation
+
+@Observable final class ChatPresentationActivity {
+    private(set) var active=false
+    @ObservationIgnored private var target=false
+    @ObservationIgnored private var pending=false
+    func set(_ value:Bool) {
+        target=value
+        guard !pending,active != value else{return};pending=true
+        // NSViewRepresentable.updateNSView is inside the parent graph update.
+        // Relay lifecycle changes after that transaction, to the hosted graph.
+        DispatchQueue.main.async { [self] in pending=false;active=target }
+    }
+}
+private struct ChatHostedContent:View {
+    let content:AnyView
+    let activity:ChatPresentationActivity
+    var body:some View {content.environment(\.interactiveWindow,activity.active)}
+}
+
+final class ChatLayoutCache {
+    var width:CGFloat=0
+    var revision = -1
+    var heights:[UUID:CGFloat]=[:]
+    var items:[UUID:ChatItem]=[:]
+    var readingAnchor:(id:UUID,offset:CGFloat)?
+    func reset(){width=0;revision = -1;heights=[:];items=[:];readingAnchor=nil}
+}
 
 /// AppKit owns scrolling and row reuse. SwiftUI lays out only the visible bubbles,
 /// never a value-type ForEach over the entire long-lived conversation.
@@ -9,11 +37,12 @@ struct NativeChatList: NSViewRepresentable {
     var compact=false
     var topInset: CGFloat=0
     var active=false
+    var visible=true
     var returnRevision=0
     func makeCoordinator()->Coordinator {Coordinator()}
     func makeNSView(context:Context)->NSScrollView {context.coordinator.make()}
     func updateNSView(_ view:NSScrollView,context:Context) {
-        context.coordinator.update(transcript:transcript,revision:transcript.revision,state:state,compact:compact,topInset:topInset,active:active,returnRevision:returnRevision)
+        context.coordinator.update(transcript:transcript,revision:transcript.revision,state:state,compact:compact,topInset:topInset,active:active,visible:visible,returnRevision:returnRevision)
     }
     static func dismantleNSView(_ view:NSScrollView,coordinator:Coordinator) {coordinator.close()}
 
@@ -24,14 +53,16 @@ struct NativeChatList: NSViewRepresentable {
         var items:[ChatItem]=[]
         var revision = -1, sentRevision = -1, returnRevision = -1
         var compact=false, active=false, topInset:CGFloat=0, width:CGFloat=0
-        var heights:[UUID:CGFloat]=[:]
+        var metrics=ChatLayoutCache()
+        let activity=ChatPresentationActivity()
         var observers:[NSObjectProtocol]=[]
         var wheel:Any?
         var following=false, pendingBottom=false, closed=false
         var userScrollUntil:TimeInterval=0
-        var readingAnchor:(id:UUID,offset:CGFloat)?
+        var readingAnchor:(id:UUID,offset:CGFloat)? {get{metrics.readingAnchor}set{metrics.readingAnchor=newValue}}
         func make()->NSScrollView {
             scroll.drawsBackground=false;scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
+            OverlayScrollbars.style(scroll)
             table.headerView=nil;table.backgroundColor = .clear;table.intercellSpacing=NSSize(width:0,height:12)
             table.selectionHighlightStyle = .none;table.allowsEmptySelection=true;table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
             let column=NSTableColumn(identifier:NSUserInterfaceItemIdentifier("message"));column.resizingMask = .autoresizingMask;table.addTableColumn(column)
@@ -45,15 +76,22 @@ struct NativeChatList: NSViewRepresentable {
             }
             return scroll
         }
-        func update(transcript:ChatTranscript,revision:Int,state:ChatScrollState,compact:Bool,topInset:CGFloat,active:Bool,returnRevision:Int) {
-            let activityChanged=self.active != active
+        func update(transcript:ChatTranscript,revision:Int,state:ChatScrollState,compact:Bool,topInset:CGFloat,active:Bool,visible:Bool,returnRevision:Int) {
             self.state=state;self.active=active
-            let changed=self.transcript !== transcript || self.revision != revision || self.compact != compact
+            activity.set(active && visible)
+            guard visible else{return}
+            let rebound=self.transcript !== transcript || self.compact != compact
+            let changed=rebound || self.revision != revision
+            if rebound {metrics=compact ? ChatLayoutCache():transcript.layoutCache;sentRevision=transcript.sentRevision}
             self.transcript=transcript;self.compact=compact;self.topInset=topInset
             if changed {
                 let next=(compact ? Array(transcript.items.suffix(60)):transcript.items).filter(\.visible)
                 let old=Dictionary(items.map{($0.id,$0)},uniquingKeysWith:{_,new in new})
-                for item in next where old[item.id] != item {heights.removeValue(forKey:item.id)}
+                if metrics.revision != revision {
+                    let snapshots=Dictionary(next.map{($0.id,$0)},uniquingKeysWith:{_,new in new})
+                    for item in next where metrics.items[item.id] != item {metrics.heights.removeValue(forKey:item.id)}
+                    metrics.heights=metrics.heights.filter{snapshots[$0.key] != nil};metrics.items=snapshots;metrics.revision=revision
+                }
                 let sameOrder=items.map(\.id)==next.map(\.id)
                 items=next;self.revision=revision;state.messages(items)
                 if sameOrder {
@@ -61,9 +99,6 @@ struct NativeChatList: NSViewRepresentable {
                     if !changedRows.isEmpty {table.reloadData(forRowIndexes:changedRows,columnIndexes:IndexSet(integer:0));table.noteHeightOfRows(withIndexesChanged:changedRows)}
                 } else {table.reloadData()}
                 if state.atBottom {bottom()}
-            }else if activityChanged {
-                let visible=table.rows(in:table.visibleRect)
-                if visible.location != NSNotFound,visible.length>0{table.reloadData(forRowIndexes:IndexSet(integersIn:visible.location..<min(items.count,visible.location+visible.length)),columnIndexes:IndexSet(integer:0))}
             }
             if sentRevision != transcript.sentRevision {sentRevision=transcript.sentRevision;state.returnToBottom();bottom()}
             if self.returnRevision != returnRevision {self.returnRevision=returnRevision;if state.atBottom {bottom()}}
@@ -72,11 +107,13 @@ struct NativeChatList: NSViewRepresentable {
         func resize() {
             let next=scroll.contentSize.width
             guard next>40,abs(next-width)>0.5 else{return}
-            if state?.atBottom != true {
+            if state?.atBottom != true && width>0 {
                 let row=table.row(at:NSPoint(x:1,y:scroll.contentView.bounds.minY+1))
                 if items.indices.contains(row){readingAnchor=(items[row].id,scroll.contentView.bounds.minY-table.rect(ofRow:row).minY)}
             }
-            width=next;heights.removeAll(keepingCapacity:true);table.tableColumns.first?.width=next
+            width=next
+            if abs(metrics.width-next)>0.5 {metrics.heights.removeAll(keepingCapacity:true);metrics.width=next}
+            table.tableColumns.first?.width=next
             table.noteHeightOfRows(withIndexesChanged:IndexSet(items.indices));table.reloadData()
             if state?.atBottom == true {bottom()}else{restoreAnchor()}
         }
@@ -84,7 +121,7 @@ struct NativeChatList: NSViewRepresentable {
         func tableView(_ tableView:NSTableView,shouldSelectRow row:Int)->Bool {false}
         func tableView(_ tableView:NSTableView,heightOfRow row:Int)->CGFloat {
             guard items.indices.contains(row) else{return 1}
-            return (heights[items[row].id] ?? 140)+(row==0 ? topInset:0)
+            return (metrics.heights[items[row].id] ?? 140)+(row==0 ? topInset:0)
         }
         func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
             guard items.indices.contains(row),let transcript else{return nil}
@@ -92,13 +129,14 @@ struct NativeChatList: NSViewRepresentable {
             cell.identifier=id
             let item=items[row],padding:CGFloat=compact ? 14:28
             let contentWidth=max(180,min(width-2*padding,compact ? width-2*padding:680))
-            let root=MessageRow(item:item,compact:compact,transcript:transcript).id(item.id).frame(width:contentWidth,alignment:.leading).fixedSize(horizontal:false,vertical:true).padding(.horizontal,padding).padding(.top,row==0 ? topInset:0).padding(.bottom,2).environment(\.interactiveWindow,active)
+            let bubble=MessageRow(item:item,compact:compact,transcript:transcript).id(item.id).frame(width:contentWidth,alignment:.leading).fixedSize(horizontal:false,vertical:true).padding(.horizontal,padding).padding(.top,row==0 ? topInset:0).padding(.bottom,2)
+            let root=ChatHostedContent(content:AnyView(bubble),activity:activity)
             cell.configure(AnyView(root),width:width)
             cell.onHeight={[weak self,weak cell] height in
                 guard let self,let cell,!self.closed,let index=self.items.firstIndex(where:{$0.id==item.id}),self.table.row(for:cell)==index else{return}
                 let value=ceil(height)-(index==0 ? self.topInset:0)
-                guard value.isFinite,value>0,abs((self.heights[item.id] ?? 140)-value)>0.5 else{return}
-                self.heights[item.id]=value;let follow=self.state?.atBottom == true
+                guard value.isFinite,value>0,abs((self.metrics.heights[item.id] ?? 140)-value)>0.5 else{return}
+                self.metrics.heights[item.id]=value;let follow=self.state?.atBottom == true
                 self.table.noteHeightOfRows(withIndexesChanged:IndexSet(integer:index))
                 if follow {self.bottom()}else{self.restoreAnchor()}
             }
@@ -127,7 +165,14 @@ struct NativeChatList: NSViewRepresentable {
             let clip=scroll.contentView.bounds,distance=max(0,table.bounds.height-clip.maxY)
             state?.report(distance:distance,viewport:clip.height,positionChanged:ProcessInfo.processInfo.systemUptime<userScrollUntil)
         }
-        func close(){closed=true;observers.forEach(NotificationCenter.default.removeObserver);observers=[];if let wheel{NSEvent.removeMonitor(wheel)};wheel=nil;scroll.onResize=nil;items=[];transcript=nil;table.dataSource=nil;table.reloadData();table.delegate=nil;scroll.documentView=nil}
+        func close(){
+            activity.set(false)
+            if state?.atBottom != true {
+                let row=table.row(at:NSPoint(x:1,y:scroll.contentView.bounds.minY+1))
+                if items.indices.contains(row){readingAnchor=(items[row].id,scroll.contentView.bounds.minY-table.rect(ofRow:row).minY)}
+            }
+            closed=true;observers.forEach(NotificationCenter.default.removeObserver);observers=[];if let wheel{NSEvent.removeMonitor(wheel)};wheel=nil;scroll.onResize=nil;items=[];transcript=nil;table.dataSource=nil;table.reloadData();table.delegate=nil;scroll.documentView=nil
+        }
     }
 }
 

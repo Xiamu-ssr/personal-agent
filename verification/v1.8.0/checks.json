@@ -1,0 +1,21 @@
+{
+  "cloudTests": 145,
+  "androidUnitTests": 170,
+  "macCoreAssertions": 224,
+  "androidAPIVersion": 35,
+  "androidDeviceChecks": 6,
+  "androidDeviceSeconds": 113.015,
+  "backgroundQuietSeconds": 95,
+  "serverHeartbeatSeconds": 90,
+  "nativePongObserved": true,
+  "clientInitiatedPings": 0,
+  "authorizedBatteryCallAfterQuietPeriod": true,
+  "freshAccessibilitySnapshotAfterContentChange": true,
+  "continuousCurvedGesturesAndCancellation": true,
+  "androidDebugMainActivityWithSyntheticHistory": 1000,
+  "formalAndroidVersion": "1.8.0",
+  "formalAndroidVersionCode": 27,
+  "formalAndroidInstallAndLaunch": true,
+  "formalAndroidConnectedFixture": false,
+  "formalAndroidFixtureLimitation": "Release requires HTTPS; loopback HTTP is allowed only in the debug acceptance build. Connected functional checks used the same source in Debug."
+}

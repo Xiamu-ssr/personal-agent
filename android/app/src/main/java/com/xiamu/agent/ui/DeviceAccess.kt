@@ -15,7 +15,20 @@ import com.xiamu.agent.Prefs
 import com.xiamu.agent.device.Capabilities
 import com.xiamu.agent.device.DeviceService
 import com.xiamu.agent.device.PhoneUseService
-import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+
+@Composable private fun authorizationRevision(): Int {
+    val lifecycle=LocalLifecycleOwner.current.lifecycle
+    var resumed by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycle) {
+        val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_RESUME) resumed++ }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    return resumed+permissionRevision.intValue+DeviceService.capabilityVersion.intValue
+}
 
 @Composable
 internal fun DeviceOwnership() {
@@ -39,10 +52,9 @@ internal fun DeviceOwnership() {
 @Composable
 internal fun PhoneUseAuthorization() {
     val c = ctx()
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while(true) { delay(1000); tick++ } }
-    val wanted = remember(tick,permissionRevision.intValue) { Prefs.granted("phone_use") }
-    val ready = remember(tick,permissionRevision.intValue) { Capabilities.byName("phone_use")!!.enabled(c) }
+    val revision=authorizationRevision()
+    val wanted = remember(revision) { Prefs.granted("phone_use") }
+    val ready = remember(revision) { Capabilities.byName("phone_use")!!.enabled(c) }
     fun enable() {
         Prefs.setGranted("phone_use",true); permissionRevision.intValue++
         DeviceService.capabilitiesChanged(c); PhoneUseService.openSettings(c)
@@ -77,8 +89,8 @@ internal fun PhoneUseAuthorization() {
 @Composable
 internal fun BackgroundConnection() {
     val c=ctx()
-    var unrestricted by remember { mutableStateOf(c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(c.packageName)) }
-    LaunchedEffect(Unit) { while(true) { unrestricted=c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(c.packageName); delay(1500) } }
+    val revision=authorizationRevision()
+    val unrestricted=remember(revision) { c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(c.packageName) }
     Column {
         SectionTitle("后台连接")
         CardList {

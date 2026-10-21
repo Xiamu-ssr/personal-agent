@@ -17,7 +17,7 @@ struct FeedPage:View {
             }.padding(12).background(Theme.card,in:Capsule())
             if store.items.isEmpty { Note(text:store.loading ? "加载中…" : "还没有动态，告诉豆豆你关心什么") }
             ForEach(store.days,id:\.self) { day in
-                VStack(alignment:.leading,spacing:25) {
+                LazyVStack(alignment:.leading,spacing:25) {
                     Text(day).font(Theme.font(size:11,weight:.medium)).foregroundStyle(Theme.sub)
                     ForEach(store.items.filter { $0.date == day }) { p in post(p).id(p.path) }
                 }
@@ -83,7 +83,7 @@ struct FeedSettingsView:View {
             Text("告诉豆豆你关心的方向、来源和希望看到的细节。保存后从下一次更新起生效。").font(Theme.font(size:12)).foregroundStyle(Theme.sub)
             TextEditor(text:$instructions).font(Theme.font(size:14)).scrollContentBackground(.hidden).padding(12).background(Theme.card,in:RoundedRectangle(cornerRadius:16)).frame(height:210)
             Toggle("自动更新",isOn:$enabled).toggleStyle(.switch)
-            HStack { Text("每隔"); Picker("间隔",selection:$interval) { ForEach([15,30,60],id:\.self) { Text("\($0) 分钟").tag($0) } }.labelsHidden().frame(width:130); Spacer() }
+            HStack { Text("每隔"); ChoiceControl(title:"间隔",selection:$interval,choices:[15,30,60].map { ($0,"\($0) 分钟") }).frame(width:130); Spacer() }
             HStack { Text("时段"); TextField("07:00",text:$start).frame(width:75); Text("至"); TextField("23:00",text:$end).frame(width:75) }.textFieldStyle(.roundedBorder)
             if !error.isEmpty { Text(error).font(Theme.font(size:12)) }
             HStack { Spacer(); Button(saving ? "保存中…" : "保存") { save() }.buttonStyle(PrimaryButtonStyle()).verificationAction("feed-save").disabled(loading || saving) }

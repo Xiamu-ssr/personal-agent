@@ -104,6 +104,8 @@ import SwiftUI
         check(transcript.items.map(\.serverID) == ["a","b"] && transcript.items[0].optionsUsed,"catch-up merges missing say without re-enabling options or duplicating")
         transcript.receive(["id":"c","role":"assistant","text":"快照之后","ts":3]);transcript.mergeSnapshot([a,b])
         check(transcript.items.map(\.serverID) == ["a","b","c"],"older snapshot preserves newer websocket messages")
+        let stableRevision=transcript.revision;transcript.mergeSnapshot([a,b])
+        check(transcript.revision == stableRevision,"unchanged foreground history does not invalidate native row layout")
         let chat=ChatClient();chat.handle(["t":"say","id":"a","text":"第一条"])
         MockTransport.respond={r in r.url!.path == "/api/state" ? (200,["chatEmpty":false,"busy":false]) : (200,["items":[a,b]])}
         chat.connected=true;chat.busy=true;await chat.catchUp();await chat.catchUp()

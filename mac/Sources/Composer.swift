@@ -343,6 +343,8 @@ struct ComposerBar: View {
     private var chat: ChatClient { .shared }
     @State private var focused = false
     @State private var takingPhoto = false
+    @State private var attachmentsMenu = false
+    @Environment(\.pageVisible) private var pageVisible
     var compact = false
 
     var body: some View {
@@ -377,6 +379,7 @@ struct ComposerBar: View {
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
         .shadow(color: Theme.ink.opacity(0.025), radius: 6, y: 2)
         .onChange(of:c.focusRevision,initial:true) { if c.focusRevision > 0 { focused = true } }
+        .onChange(of:pageVisible) { _,visible in if !visible {focused=false;attachmentsMenu=false} }
         .sheet(isPresented: $takingPhoto) { PhotoCaptureView { c.add(image: $0, name: "照片") } }
         #if MAC_VERIFY
         .onAppear { if c.taskID != nil { ComposerVerification.currentTask = c } }
@@ -384,19 +387,20 @@ struct ComposerBar: View {
     }
 
     private var plus: some View {
-        Menu {
-            Button { c.pick(images: false) } label: { Label("上传文件", systemImage: "doc") }
-            Button { c.pick(images: true) } label: { Label("图片", systemImage: "photo") }
-            Button { takingPhoto = true } label: { Label("拍照", systemImage: "camera") }
-            Button { c.startNote() } label: { Label("录制语音笔记", systemImage: "waveform") }
-        } label: {
+        Button { attachmentsMenu.toggle() } label: {
             Image(systemName: "plus").font(Theme.font(size: 16, weight: .regular)).foregroundStyle(Theme.ink.opacity(0.7))
                 .frame(width: 38, height: 38).contentShape(Circle())
         }
         .disabled(c.sending || c.transcribing || c.preparing || c.recording != nil)
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .buttonStyle(.plain).verificationAction("composer-attachments")
+        .popover(isPresented: $attachmentsMenu, arrowEdge: .bottom) {
+            VStack(spacing: 3) {
+                MenuActionRow(title: "上传文件", icon: "doc") { attachmentsMenu = false; c.pick(images: false) }
+                MenuActionRow(title: "图片", icon: "photo") { attachmentsMenu = false; c.pick(images: true) }
+                MenuActionRow(title: "拍照", icon: "camera") { attachmentsMenu = false; takingPhoto = true }
+                MenuActionRow(title: "录制语音笔记", icon: "waveform") { attachmentsMenu = false; c.startNote() }
+            }.padding(7).frame(width: 210).background(Theme.card).preferredColorScheme(Theme.scheme)
+        }
         .frame(width: 38, height: 38)
         .help("上传文件、图片或录一段语音笔记")
     }

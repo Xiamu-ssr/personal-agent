@@ -343,11 +343,8 @@ private struct ConnectorFieldView: View {
         VStack(alignment: .leading, spacing: 7) {
             Text(field.label + (field.required ? " *" : "")).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(Theme.ink)
             if field.type == "select" {
-                Picker(field.label, selection: value) {
-                    Text("请选择").tag("")
-                    ForEach(field.options) { option in Text(option.label).tag(option.value) }
-                }
-                .labelsHidden().pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading)
+                ChoiceControl(title: field.label, selection: value, choices: [("", "请选择")] + field.options.map { ($0.value, $0.label) })
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("connector-field-" + field.key)
             } else {
                 HStack(spacing: 8) {

@@ -40,6 +40,10 @@ class TouchMotionDeviceTest {
         shell("settings put secure enabled_accessibility_services ${(enabled+component).joinToString(":")}")
         shell("settings put secure accessibility_enabled 1")
         withTimeout(12000) { while(!PhoneUseService.ready()) delay(100) }
+        val services=context.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+            .getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        val service=services.first { it.resolveInfo.serviceInfo.packageName==context.packageName }
+        assertEquals(android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,service.eventTypes)
         val scenario = ActivityScenario.launch(TouchProbeActivity::class.java)
         lateinit var probe: TouchProbeActivity
         scenario.onActivity { probe = it }
@@ -83,6 +87,15 @@ class TouchMotionDeviceTest {
             movement(.2,.5,.8,.5,450)
             movement(.8,.5,.2,.5,450)
             movement(.2,.7,.8,.3,600)
+            // Fresh snapshots must reflect in-place changes even though the service
+            // no longer subscribes to every text/content/scroll notification.
+            observe()
+            scenario.onActivity { activity ->
+                val content=activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                content.getChildAt(0).contentDescription="豆豆触摸验收：更新后的内容"
+            }
+            val refreshed=observe().getJSONArray("nodes")
+            assertTrue((0 until refreshed.length()).any { refreshed.getJSONObject(it).optString("label").contains("更新后的内容") })
             val screen = automation.takeScreenshot()
             File(context.filesDir,"touch-path.png").outputStream().use { screen.compress(Bitmap.CompressFormat.PNG,100,it) }
             screen.recycle()
