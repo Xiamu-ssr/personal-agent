@@ -30,8 +30,11 @@ struct MenuView: View {
         .preferredColorScheme(Theme.scheme)
         .background(WindowActivityReader(activity: windowActivity).frame(width: 0, height: 0))
         .environment(\.interactiveWindow, windowActivity.active)
-        .task { if session.configured { await ProfileStore.shared.load(); await chat.catchUp() } }
-        .onChange(of:windowActivity.active) { if windowActivity.active {Task {await chat.catchUp()}} }
+        .environment(\.pageVisible, windowActivity.visible)
+        .task(id:windowActivity.visible) {
+            guard windowActivity.visible,session.configured else{return}
+            await ProfileStore.shared.load();await chat.catchUp()
+        }
     }
 
     private func openMain() {

@@ -16,7 +16,7 @@ enum LocalVerification {
 
 /// Production status item. Real clicks and the loopback launch shortcut share this action.
 @MainActor
-final class MenuController: NSObject {
+final class MenuController: NSObject, NSPopoverDelegate {
     static let shared = MenuController()
     private var statusItem: NSStatusItem?
     let popover = NSPopover()
@@ -32,7 +32,7 @@ final class MenuController: NSObject {
         item.button?.setAccessibilityLabel("豆豆菜单栏")
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 380, height: 540)
-        popover.contentViewController = NSHostingController(rootView: MenuView())
+        popover.delegate = self
         updateIcon()
     }
 
@@ -51,10 +51,15 @@ final class MenuController: NSObject {
     @objc private func toggle(_ sender: Any?) {
         if popover.isShown { close(); return }
         guard let button else { return }
+        popover.contentViewController = NSHostingController(rootView: MenuView())
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
     }
 
     func close() { popover.performClose(nil) }
+    func popoverDidClose(_ notification: Notification) {
+        // A closed quick-chat owns no hosted rows, media, observers or page tasks.
+        popover.contentViewController = nil
+    }
 }

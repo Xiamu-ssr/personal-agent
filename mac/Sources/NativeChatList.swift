@@ -42,7 +42,10 @@ struct NativeChatList: NSViewRepresentable {
     func makeCoordinator()->Coordinator {Coordinator()}
     func makeNSView(context:Context)->NSScrollView {context.coordinator.make()}
     func updateNSView(_ view:NSScrollView,context:Context) {
-        context.coordinator.update(transcript:transcript,revision:transcript.revision,state:state,compact:compact,topInset:topInset,active:active,visible:visible,returnRevision:returnRevision)
+        let coordinator=context.coordinator,revision=transcript.revision
+        coordinator.enqueue { [weak coordinator] in
+            coordinator?.update(transcript:transcript,revision:revision,state:state,compact:compact,topInset:topInset,active:active,visible:visible,returnRevision:returnRevision)
+        }
     }
     static func dismantleNSView(_ view:NSScrollView,coordinator:Coordinator) {coordinator.close()}
 
@@ -58,6 +61,24 @@ struct NativeChatList: NSViewRepresentable {
         var observers:[NSObjectProtocol]=[]
         var wheel:Any?
         var following=false, pendingBottom=false, closed=false
+        private var latestUpdate:(()->Void)?
+        private var updateQueued=false,resizeQueued=false
+        // Hosting a row enters a separate SwiftUI graph. Apply native changes
+        // after the enclosing representable transaction; coalesce streamed updates.
+        func enqueue(_ update:@escaping()->Void) {
+            guard !closed else{return};latestUpdate=update
+            guard !updateQueued else{return};updateQueued=true
+            DispatchQueue.main.async{[weak self] in
+                guard let self,!self.closed else{return};self.updateQueued=false
+                let update=self.latestUpdate;self.latestUpdate=nil;update?()
+            }
+        }
+        func scheduleResize(){
+            guard !closed,!resizeQueued else{return};resizeQueued=true
+            DispatchQueue.main.async{[weak self] in
+                guard let self,!self.closed else{return};self.resizeQueued=false;self.resize()
+            }
+        }
         var userScrollUntil:TimeInterval=0
         var readingAnchor:(id:UUID,offset:CGFloat)? {get{metrics.readingAnchor}set{metrics.readingAnchor=newValue}}
         func make()->NSScrollView {
@@ -67,7 +88,7 @@ struct NativeChatList: NSViewRepresentable {
             table.selectionHighlightStyle = .none;table.allowsEmptySelection=true;table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
             let column=NSTableColumn(identifier:NSUserInterfaceItemIdentifier("message"));column.resizingMask = .autoresizingMask;table.addTableColumn(column)
             table.dataSource=self;table.delegate=self;scroll.documentView=table
-            scroll.onResize={[weak self] in self?.resize()}
+            scroll.onResize={[weak self] in self?.scheduleResize()}
             scroll.contentView.postsBoundsChangedNotifications=true
             observers=[NotificationCenter.default.addObserver(forName:NSView.boundsDidChangeNotification,object:scroll.contentView,queue:.main){[weak self] _ in MainActor.assumeIsolated{self?.report()}}]
             wheel=NSEvent.addLocalMonitorForEvents(matching:.scrollWheel){[weak self] event in
@@ -82,7 +103,7 @@ struct NativeChatList: NSViewRepresentable {
             guard visible else{return}
             let rebound=self.transcript !== transcript || self.compact != compact
             let changed=rebound || self.revision != revision
-            if rebound {metrics=compact ? ChatLayoutCache():transcript.layoutCache;sentRevision=transcript.sentRevision}
+            if rebound {metrics=compact ? ChatLayoutCache():transcript.layoutCache;sentRevision=transcript.sentRevision;width=0}
             self.transcript=transcript;self.compact=compact;self.topInset=topInset
             if changed {
                 let next=(compact ? Array(transcript.items.suffix(60)):transcript.items).filter(\.visible)
@@ -171,7 +192,7 @@ struct NativeChatList: NSViewRepresentable {
                 let row=table.row(at:NSPoint(x:1,y:scroll.contentView.bounds.minY+1))
                 if items.indices.contains(row){readingAnchor=(items[row].id,scroll.contentView.bounds.minY-table.rect(ofRow:row).minY)}
             }
-            closed=true;observers.forEach(NotificationCenter.default.removeObserver);observers=[];if let wheel{NSEvent.removeMonitor(wheel)};wheel=nil;scroll.onResize=nil;items=[];transcript=nil;table.dataSource=nil;table.reloadData();table.delegate=nil;scroll.documentView=nil
+            closed=true;latestUpdate=nil;observers.forEach(NotificationCenter.default.removeObserver);observers=[];if let wheel{NSEvent.removeMonitor(wheel)};wheel=nil;scroll.onResize=nil;items=[];transcript=nil;table.dataSource=nil;table.reloadData();table.delegate=nil;scroll.documentView=nil
         }
     }
 }

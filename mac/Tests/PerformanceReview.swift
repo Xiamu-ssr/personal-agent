@@ -14,6 +14,7 @@ import SwiftUI
     @MainActor static func run() async throws {
         precondition(Prefs.isolatedRoot != nil && LocalVerification.explicitLoopback)
         Prefs.token="local-synthetic-review";AppearanceStore.shared.select(.dark)
+        MenuController.shared.install()
         let env=ProcessInfo.processInfo.environment,baseline=env["DOUDOU_BASELINE"] == "1"
         let output=URL(fileURLWithPath:env["DOUDOU_REVIEW_OUTPUT"]!)
         try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
@@ -123,15 +124,22 @@ import SwiftUI
         if !baseline {
             guard readingPositionPreserved && settingsPositionPreserved else {throw ApiError(code:0,message:"Tab navigation lost the reader's message")}
             try await click("composer-attachments")
-            guard let panel=NSApp.windows.first(where:{$0 !== window && $0.isVisible && $0.contentView != nil}) else {throw ApiError(code:0,message:"Attachments popover did not open")}
+            guard let panel=VerificationActionAnchor.views.object(forKey:"attachment-menu-file" as NSString)?.window else {throw ApiError(code:0,message:"Attachments popover did not open")}
             guard panel.screen?.visibleFrame.contains(panel.frame)==true else {throw ApiError(code:0,message:"Attachments menu escaped the visible screen")}
             let view=panel.contentView!,bitmap=view.bitmapImageRepForCachingDisplay(in:view.bounds)!;view.cacheDisplay(in:view.bounds,to:bitmap)
             try bitmap.representation(using:.png,properties:[:])!.write(to:output.appendingPathComponent("mac-attachments-menu.png"))
             try await click("composer-attachments")
         }
+        let hiddenMenuRows=MenuController.shared.popover.contentViewController.flatMap{tableView($0.view)}?.numberOfRows ?? 0
+        guard hiddenMenuRows==0 else{throw ApiError(code:0,message:"Closed menu built an invisible transcript")}
+        MenuController.shared.button?.performClick(nil);try await Task.sleep(nanoseconds:800_000_000)
+        let openMenuRows=MenuController.shared.popover.contentViewController.flatMap{tableView($0.view)}?.numberOfRows ?? 0
+        guard openMenuRows==60 else{throw ApiError(code:0,message:"Menu transcript did not load when opened")}
+        MenuController.shared.close()
         window.orderOut(nil);try await Task.sleep(nanoseconds:1_000_000_000)
         let hiddenPlayers=playingVideos()
-        let record:[String:Any]=["baseline":baseline,"syntheticData":true,"chatMessages":ChatClient.shared.transcript.items.count,"appActiveDuringReaction":reactionActive,"reactionPlayingVideoLayers":reactionPlayers,"idlePlayingVideoLayers":idlePlayers,"hiddenPlayingVideoLayers":hiddenPlayers,"readingPositionPreservedAcrossTabs":readingPositionPreserved,"readingPositionPreservedAcrossSettings":settingsPositionPreserved,"tabSwitchMilliseconds":changes,"maxTabSwitchMilliseconds":changes.max() ?? 0]
+        guard MenuController.shared.popover.contentViewController==nil else {throw ApiError(code:0,message:"Closed quick-chat retained its controller")}
+        let record:[String:Any]=["menuHiddenInitialRows":hiddenMenuRows,"menuOpenRows":openMenuRows,"baseline":baseline,"syntheticData":true,"chatMessages":ChatClient.shared.transcript.items.count,"appActiveDuringReaction":reactionActive,"reactionPlayingVideoLayers":reactionPlayers,"idlePlayingVideoLayers":idlePlayers,"hiddenPlayingVideoLayers":hiddenPlayers,"readingPositionPreservedAcrossTabs":readingPositionPreserved,"readingPositionPreservedAcrossSettings":settingsPositionPreserved,"tabSwitchMilliseconds":changes,"maxTabSwitchMilliseconds":changes.max() ?? 0]
         try JSONSerialization.data(withJSONObject:record,options:[.prettyPrinted,.sortedKeys]).write(to:output.appendingPathComponent("mac-performance-review.json"))
         if !baseline && reactionActive && !ProcessInfo.processInfo.isLowPowerModeEnabled {precondition(reactionPlayers>0,"Expressive avatar never played")}
         if !baseline {precondition(idlePlayers==0 && hiddenPlayers==0,"Decorative video kept decoding while idle/hidden")}

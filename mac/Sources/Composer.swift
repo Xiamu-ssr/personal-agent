@@ -395,7 +395,7 @@ struct ComposerBar: View {
         .buttonStyle(.plain).verificationAction("composer-attachments")
         .popover(isPresented: $attachmentsMenu, arrowEdge: .bottom) {
             VStack(spacing: 3) {
-                MenuActionRow(title: "上传文件", icon: "doc") { attachmentsMenu = false; c.pick(images: false) }
+                MenuActionRow(title: "上传文件", icon: "doc") { attachmentsMenu = false; c.pick(images: false) }.verificationAction("attachment-menu-file")
                 MenuActionRow(title: "图片", icon: "photo") { attachmentsMenu = false; c.pick(images: true) }
                 MenuActionRow(title: "拍照", icon: "camera") { attachmentsMenu = false; takingPhoto = true }
                 MenuActionRow(title: "录制语音笔记", icon: "waveform") { attachmentsMenu = false; c.startNote() }

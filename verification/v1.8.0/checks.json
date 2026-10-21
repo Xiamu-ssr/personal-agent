@@ -17,5 +17,7 @@
   "formalAndroidVersionCode": 27,
   "formalAndroidInstallAndLaunch": true,
   "formalAndroidConnectedFixture": false,
-  "formalAndroidFixtureLimitation": "Release requires HTTPS; loopback HTTP is allowed only in the debug acceptance build. Connected functional checks used the same source in Debug."
+  "formalAndroidFixtureLimitation": "Release requires HTTPS; loopback HTTP is allowed only in the debug acceptance build. Connected functional checks used the same source in Debug.",
+  "androidSignatureMatchesPrevious": true,
+  "androidSigningSHA256": "8081fba0d3ac49eac2ed4fb9fbc4e3fde23daf601ebfecc3e6adcfecd65e9b50"
 }

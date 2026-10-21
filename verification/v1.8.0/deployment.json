@@ -1,0 +1,15 @@
+{
+  "version": "1.8.0",
+  "heartbeatSeconds": 90,
+  "sourceCommit": "b216e96ef45243d6592e9b3a8753a3222dab10b7",
+  "fullBackup": true,
+  "sameMainSession": true,
+  "protectedConfigUnchanged": true,
+  "allChatMessageIdsPreserved": true,
+  "allMemoryFilesPreserved": true,
+  "allLibraryFilesPreserved": true,
+  "connectorInLiveCatalog": true,
+  "privateKeyForm": true,
+  "officialIconServed": true,
+  "businessPromptUpdated": true
+}

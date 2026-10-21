@@ -18,6 +18,7 @@ extension EnvironmentValues {
 @Observable
 final class WindowActivity {
     var active = false
+    var visible = false
 }
 
 struct WindowActivityReader: NSViewRepresentable {
@@ -73,8 +74,10 @@ final class ActivityView: NSView {
         // Visibility changes only. No geometry measurements are written back into SwiftUI.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let active = NSApp.isActive && self.window?.isVisible == true &&
+            let visible = self.window?.isVisible == true &&
                          self.window?.occlusionState.contains(.visible) == true && self.window?.isMiniaturized == false
+            let active = visible && NSApp.isActive
+            if self.activity.visible != visible {self.activity.visible=visible}
             if self.activity.active != active {
                 self.activity.active = active
                 #if MAC_PERF
