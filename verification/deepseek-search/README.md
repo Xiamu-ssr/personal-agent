@@ -9,3 +9,5 @@ Validated 2026-10-21 against the [official Search/Fetch guide](https://api-docs.
 - No official DeepSeek credential is configured on the production server. Authenticated search/fetch remain unverified until an official Key is added through the connector form.
 
 Android and Mac already render connector catalogs, fields and balance snapshots supplied by the server. This addition changes cloud code and its Spec, with no installer or native UI changes.
+
+Production deployment of `a623015495cdc880068d8758ae5218ccc04c92f0` completed after active work finished and a full private backup was taken. The live authenticated catalog returns the new connector and secret form, the official PNG icon returns HTTP 200, and the generated business prompt includes the new tools. The same main Session, all 250 chat message IDs, 60 memory files, 57 library files and 16 protected configuration files were preserved.
