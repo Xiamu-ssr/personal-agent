@@ -21,4 +21,4 @@ OpenResponses 使用支持显式取消的本地 HTTP 流，执行期限交给 Op
 
 ## 1.3.2 主动压缩线
 
-主动压缩线为约 272,000 tokens，主会话与隔离会话使用同一策略。模型的真实 `contextWindow` 保留；原生 `contextTokens` 运行预算为 292,000，包含 OpenClaw 2026.10.4 的 20,000 压缩预留。较小窗口按模型容量限制。开启原生工具循环中途预检，继续由 OpenClaw 执行记忆 flush 和 compact，保持同一 Session。
+当前版本统一设置 `contextWindow`、`contextTokens` 为 272,000，最大输出 128,000，主会话与隔离会话相同；原生预检可能因预留空间提前执行压缩。开启原生工具循环中途预检，继续由 OpenClaw 执行记忆 flush 和 compact，保持同一 Session。

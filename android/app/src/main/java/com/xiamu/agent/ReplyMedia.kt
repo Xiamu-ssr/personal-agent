@@ -16,10 +16,21 @@ data class ReplyMedia(val path: String, val name: String, val kind: String, val 
         fun from(j: JSONObject): ReplyMedia? {
             val path = j.optString("path")
             if (!isDataFile(path)) return null
-            val kind = j.optString("kind").takeIf { it in setOf("image", "video", "audio", "file") } ?: "file"
+            val kind = inferredMediaKind(path,j.optString("mime"),j.optString("kind"))
             return ReplyMedia(path, j.optString("name").ifBlank { path.substringAfterLast('/') }, kind,
                 j.optString("mime").ifBlank { "application/octet-stream" }, j.optLong("size").coerceAtLeast(0))
         }
+    }
+}
+
+fun inferredMediaKind(path:String,mime:String="",declared:String="file"):String {
+    if(declared in setOf("image","video","audio"))return declared
+    val ext=path.substringAfterLast('.',"").lowercase(Locale.ROOT)
+    return when {
+        mime.startsWith("image/") || ext in setOf("png","jpg","jpeg","gif","webp","heic","heif","avif","bmp","tif","tiff")->"image"
+        mime.startsWith("video/") || ext in setOf("mp4","mov","m4v","webm","mkv","3gp")->"video"
+        mime.startsWith("audio/") || ext in setOf("mp3","m4a","aac","wav","flac","ogg","opus","aif","aiff","alac")->"audio"
+        else->"file"
     }
 }
 

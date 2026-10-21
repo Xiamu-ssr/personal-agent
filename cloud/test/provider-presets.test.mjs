@@ -27,7 +27,7 @@ test('the shared catalog has usable, unique provider templates and distinguishes
   assert.equal(multimodal.compat.maxTokensField, 'max_tokens');
   assert.equal(multimodal.compat.requiresReasoningContentOnAssistantMessages, true);
   for (const id of ['deepseek-ai/DeepSeek-V4.1-Flash', 'zai-org/GLM-5.3-Flash', 'zai-org/GLM-5.3']) {
-    assert.equal(nativeModelDefinition(silicon, silicon.models.find(m => m.id === id)).contextWindow, 1048576);
+    assert.equal(nativeModelDefinition(silicon, silicon.models.find(m => m.id === id)).contextWindow, 272000);
   }
   const gemini = presets.find(p => p.id === 'gemini');
   assert.equal(nativeModelDefinition(gemini, gemini.models[0]).compat.requiresReasoningContentOnAssistantMessages, false);
@@ -37,10 +37,10 @@ test('the 272K operating policy preserves native model windows and fits smaller 
   const silicon = listProviderPresets().find(p => p.id === 'siliconflow');
   const model = nativeModelDefinition(silicon, silicon.models[0]);
   assert.equal(COMPACT_AT_TOKENS, 272000);
-  assert.equal(model.contextWindow, 1048576);
-  assert.equal(model.contextTokens, 292000);
+  assert.equal(model.contextWindow, 272000);
+  assert.equal(model.contextTokens, 272000);
   const small = nativeModelDefinition({ protocol: 'openai', baseUrl: 'https://models.example/v1' }, { id: 'small', name: 'Small' });
-  assert.equal(small.contextWindow, 131072);
+  assert.equal(small.contextWindow, 272000);
   assert.equal(small.contextTokens, small.contextWindow);
 });
 

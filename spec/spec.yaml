@@ -83,9 +83,10 @@ domains:
       - id: app_library
         name: 资源库
         icon: 🗃
-        desc: 页面 · 文件 · 影音
+        desc: 站点 · 文档 · 图片 · 音视频
         doc: |-
           - 展示交付成果，可打开、下载、继续修改。
+          - 站点放 data/library/sites/，文档放 data/library/documents/，独立影音放 data/library/media/；按类别筛选。
           - 草稿与成品分开，已有成果原地更新。
       - id: app_activity
         name: 头像与活动
@@ -126,8 +127,8 @@ domains:
         desc: 一个 Session，持续 compact
         doc: |-
           - 不自动 new/reset；压缩前保存重要信息，之后继续原会话。
-          - 约 272K token 主动压缩；与模型容量分开配置，小窗口模型按自身上限提前压缩。
-          - 后台任务可用同一 Agent 的隔离 Session，结果交回主会话。
+          - 所有模型统一配置 272K 上下文、128K 最大输出，压缩沿用 OpenClaw 原生机制。
+          - 定时生成动态、点子使用隔离 Session，共享同一工作区；用户讨论进入主会话。结果保存在栏目文件与活动记录，不拼接进下一条用户消息。
           - 彻底移除 Claude Code SDK 与旧执行路径，不做兼容。
       - id: cl_memory
         name: Memory

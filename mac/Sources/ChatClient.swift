@@ -28,10 +28,18 @@ struct MediaItem: Hashable, Identifiable {
     init?(_ row: [String: Any]) {
         guard let path=row["path"] as? String, DataPath.valid(path) else { return nil }
         self.path=path; name=row["name"] as? String ?? (path as NSString).lastPathComponent
-        kind=Kind(rawValue: row["kind"] as? String ?? "") ?? .file
+        kind=Self.inferredKind(path:path,mime:row["mime"] as? String ?? "",declared:Kind(rawValue:row["kind"] as? String ?? "") ?? .file)
         mime=row["mime"] as? String ?? "application/octet-stream"; size=max(0,row["size"] as? Int ?? 0)
     }
     static func parse(_ value: Any?) -> [MediaItem] { (value as? [[String:Any]] ?? []).compactMap(MediaItem.init) }
+    static func inferredKind(path:String,mime:String="",declared:Kind = .file)->Kind {
+        if declared != .file{return declared}
+        let ext=(path as NSString).pathExtension.lowercased()
+        if mime.hasPrefix("image/") || ["png","jpg","jpeg","gif","webp","heic","heif","avif","bmp","tif","tiff"].contains(ext){return .image}
+        if mime.hasPrefix("video/") || ["mp4","mov","m4v","webm","mkv","3gp"].contains(ext){return .video}
+        if mime.hasPrefix("audio/") || ["mp3","m4a","aac","wav","flac","ogg","opus","aif","aiff","alac"].contains(ext){return .audio}
+        return .file
+    }
 }
 enum DataPath {
     static func valid(_ path: String) -> Bool {
@@ -119,6 +127,7 @@ struct BackgroundActivity: Identifiable, Equatable {
     var devicesVersion=0
     var settingsVersion=0
     var feedVersion=0
+    var libraryVersion=0
     var avatarState: AvatarState = .idle
     var avatarText=""
     var backgroundActivities: [BackgroundActivity]=[]
@@ -139,7 +148,7 @@ struct BackgroundActivity: Identifiable, Equatable {
     func reconnect() { revision += 1; refresh?.cancel(); socket.stop(); connected=false; start() }
     func stop() {
         revision += 1; syncRequested=false; refresh?.cancel(); socket.stop(); connected=false; configured=false
-        transcript.reset(); SideChats.shared.reset(); ActivityListStore.shared.reset(); Nav.shared.sideChat=nil; busy=false; backgroundActivities=[]; error=""; avatarState = .idle
+        transcript.reset(); SideChats.shared.reset(); ActivityListStore.shared.reset();LibraryStore.shared.reset();Api.clearCache(); Nav.shared.sideChat=nil; busy=false; backgroundActivities=[]; error=""; avatarState = .idle
     }
     #if MAC_VERIFY
     func disconnectForReview() {socket.stop();connected=false}
@@ -216,7 +225,7 @@ struct BackgroundActivity: Identifiable, Equatable {
             revision += 1; statusRevision += 1; connected=true; busy=r["busy"] as? Bool ?? false
             transcript.mergeSnapshot(r["history"] as? [[String:Any]] ?? [])
             if let a=r["avatar"] as? [String:Any] { applyAvatar(a) }
-            devicesVersion += 1; jobsVersion += 1
+            devicesVersion += 1; jobsVersion += 1;libraryVersion += 1
             refresh?.cancel(); refresh=Task { @MainActor [weak self] in await self?.bootstrap() }
         case "user","say":
             var row=r; row["role"] = r["t"] as? String == "user" ? "user" : "assistant"; upsert(row)
@@ -247,6 +256,9 @@ struct BackgroundActivity: Identifiable, Equatable {
             }; jobsVersion += 1
         case "feed_new": FeedBadge.shared.receive(); feedVersion += 1
         case "feed_settings": feedVersion += 1
+        case "feed_updated":feedVersion += 1
+        case "library_updated":libraryVersion += 1;Api.clearCache()
+        case "ideas_updated","goals_updated":filesVersion += 1
         case "files_changed","memory_updated":
             filesVersion += 1
             if (r["path"] as? String ?? "").hasPrefix("data/soul/") || r["t"] as? String == "memory_updated" {

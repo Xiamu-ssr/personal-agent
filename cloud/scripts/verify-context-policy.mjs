@@ -52,7 +52,7 @@ function compactEvents(){
 try{
  await h.startMain();
  const cfg=JSON.parse(fs.readFileSync(root+'/system/openclaw.json','utf8')),native=cfg.models.providers[provider].models[0];
- assert.equal(native.contextWindow,1048576);assert.equal(native.contextTokens,292000);
+ assert.equal(native.contextWindow,272000);assert.equal(native.contextTokens,272000);
  assert.equal(cfg.session.reset.mode,'none');assert.equal(cfg.agents.defaults.compaction.midTurnPrecheck.enabled,true);
  for(let i=0;i<4;i++){
   const warmup=await h.runMain(`CONTEXT_POLICY_WARMUP ${i}\n`+(i===0?`Remember ${marker}.\n`+'Earlier synthetic transcript line. '.repeat(6000):'Continue the fixture.'));

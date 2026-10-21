@@ -18,8 +18,8 @@ import kotlinx.coroutines.*
 
 @Composable
 fun ContentImage(path: String,modifier: Modifier = Modifier,scale: ContentScale = ContentScale.Fit,alignment: Alignment = Alignment.Center) {
-    var bitmap by remember(path) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(path) {
+    var bitmap by remember(path) { mutableStateOf<Bitmap?>(Images.cached(path,900)) }
+    LaunchedEffect(path,com.xiamu.agent.Chat.libraryVersion.intValue,com.xiamu.agent.Chat.feedVersion.intValue) {
         bitmap=Images.load(path,900)
     }
     val ratio=bitmap?.let { it.width.toFloat()/it.height.coerceAtLeast(1) } ?: (4f/3f)

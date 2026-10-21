@@ -186,7 +186,7 @@ private fun Attachments(list: List<Attachment>, active: Boolean) {
     if (list.isEmpty()) return
     val c = ctx()
     val scope = rememberCoroutineScope()
-    val images=list.filter { it.kind=="image" }
+    val images=list.filter { it.kind!="voice"&&com.xiamu.agent.inferredMediaKind(it.path,declared=it.kind)=="image" }
     if(images.isNotEmpty()) Column(Modifier.padding(bottom=8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
         if(images.size==1) {
             val a=images.single()
@@ -198,9 +198,10 @@ private fun Attachments(list: List<Attachment>, active: Boolean) {
             }
         }
     }
-    list.filter { it.kind!="image" }.forEach { a ->
-        when (a.kind) {
+    list.filter { it !in images }.forEach { a ->
+        when (if(a.kind=="voice")"voice" else com.xiamu.agent.inferredMediaKind(a.path,declared=a.kind)) {
             "voice" -> VoiceRow(a, active)
+            "video","audio" -> MediaViews(listOf(com.xiamu.agent.ReplyMedia(a.path,a.name,com.xiamu.agent.inferredMediaKind(a.path),"",0)),active)
             else -> Row(
                 Modifier.padding(bottom=6.dp).widthIn(max = 260.dp).clip(RoundedCornerShape(14.dp)).background(Pal.Card)
                     .tap { scope.launch { runCatching { openFile(c, a.path, a.name) }.onFailure { Chat.error.value = "打不开：${it.message}" } } }

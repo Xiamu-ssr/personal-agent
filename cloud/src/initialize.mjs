@@ -11,7 +11,8 @@ export const DEFAULT_JOBS=[
 ];
 export function initialize(root){
  if(fs.existsSync(path.join(root,'data/memory'))||fs.existsSync(path.join(root,'.claude')))throw new Error('请先停服并运行 v1 持久化迁移，再启动新版');
- for(const dir of ['data/feed','data/ideas','data/goals','data/library/artifacts','data/library/media','data/health','data/uploads','workspace','system/connectors','system/sync','memory','skills'])fs.mkdirSync(path.join(root,dir),{recursive:true,mode:0o700});
+ if(fs.existsSync(path.join(root,'data/library/artifacts')))throw new Error('请先停服并运行 migrate-library.mjs，再启动新版');
+ for(const dir of ['data/feed','data/ideas','data/goals','data/library/sites','data/library/documents','data/library/media','data/health','data/uploads','workspace','system/connectors','system/sync','memory','skills'])fs.mkdirSync(path.join(root,dir),{recursive:true,mode:0o700});
  const seed=(file,text)=>{if(!fs.existsSync(path.join(root,file)))fs.writeFileSync(path.join(root,file),text,{mode:0o600});};
  seed('SOUL.md','# 豆豆\n\n你是用户的个人助理，坦诚、有判断，持续把已经答应的事做完。\n');
  seed('USER.md','# 关于用户\n\n从日常交流中逐渐认识用户；尚不知道的不要编造。\n');

@@ -308,7 +308,7 @@ struct ReviewFailure:Error,CustomStringConvertible {let description:String}
     @MainActor static func collect<T:NSView>(_ view:NSView,type:T.Type)->[T] { (view as? T).map{[$0]} ?? view.subviews.flatMap{collect($0,type:type)} }
     @MainActor static func scrollChatToEnd() async throws {
         for _ in 0..<4 {
-            guard let s=collect(window.contentView!,type:ChatScrollObserver.self).first?.enclosingScrollView,let doc=s.documentView else {throw ReviewFailure(description:"native chat scroller")}
+            guard let s=collect(window.contentView!,type:NSTableView.self).first?.enclosingScrollView,let doc=s.documentView else {throw ReviewFailure(description:"native chat scroller")}
             s.contentView.scroll(to:NSPoint(x:0,y:doc.isFlipped ? max(0,doc.bounds.height-s.contentView.bounds.height):0));s.reflectScrolledClipView(s.contentView)
             try await pause(150)
         }

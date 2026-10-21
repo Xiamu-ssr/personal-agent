@@ -75,18 +75,18 @@ class ReplyMediaTest {
         }
     }
 
-    @Test fun unknownKindIsAFileEvenWithAnImageExtension() {
+    @Test fun missingKindUsesImageMimeAndExtension() {
         val input = outputs().getJSONObject(0).put("kind", "future-preview")
         val media = ReplyMedia.from(input)!!
-        assertEquals("file", media.kind)
-        assertEquals(MediaPresentation.File, media.presentation())
+        assertEquals("image", media.kind)
+        assertEquals(MediaPresentation.Image, media.presentation())
         assertEquals("image/png", media.mime)
     }
 
     @Test fun blankNameUsesTheFileNameAndMissingMetadataIsUsable() {
         val media = ReplyMedia.from(JSONObject().put("path", "data/library/media/录音.m4a").put("name", "").put("size", -1))!!
         assertEquals("录音.m4a", media.name)
-        assertEquals("file", media.kind)
+        assertEquals("audio", media.kind)
         assertEquals("application/octet-stream", media.mime)
         assertEquals(0L, media.size)
     }

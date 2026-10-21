@@ -118,6 +118,8 @@ private fun SchedulesPanel() {
                     catch(e: CancellationException) { throw e } catch(e: Exception) { notice=e.message ?: "保存失败" }
                 } }})
                 Text("下次 · ${s.optString("nextRun").takeIf { !s.isNull("nextRun") } ?: "暂无安排"}",style=Type.body(11),color=Pal.Muted)
+                s.optJSONObject("lastRun")?.let{last->Text("上次 · ${last.optString("at")} · ${last.optString("summary").ifBlank{if(last.optString("status")=="running")"进行中" else "已运行"}}",style=Type.body(11),color=Pal.Muted,maxLines=2)}
+                    ?: s.optString("lastSuccess").takeIf{it.isNotBlank()&&it!="null"}?.let{Text("上次完成 · $it",style=Type.body(11),color=Pal.Muted)}
                 RowActions(if(s.optBoolean("running")) "正在运行" else "立即运行") { scope.launch {
                     try { val r=Api.postJson("/api/schedules/${Api.encode(id)}/run"); notice=if(r.optString("mode")=="skipped") "已经在运行" else "已安排运行" }
                     catch(e: CancellationException) { throw e } catch(e: Exception) { notice=e.message ?: "运行失败" }

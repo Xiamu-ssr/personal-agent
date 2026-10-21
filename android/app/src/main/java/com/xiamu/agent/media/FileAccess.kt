@@ -18,7 +18,7 @@ internal fun fileCacheKey(server: String, path: String): String = MessageDigest.
     .digest("$server\n$path".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
 suspend fun cacheFile(context: Context, path: String): File {
-    val file = File(context.cacheDir, "open/${fileCacheKey(Prefs.server, path)}/${path.substringAfterLast('/')}")
+    val file = File(context.cacheDir, "open/${fileCacheKey(Api.accountIdentity(), path)}/${path.substringAfterLast('/')}")
     Api.download(path, file)
     return file
 }

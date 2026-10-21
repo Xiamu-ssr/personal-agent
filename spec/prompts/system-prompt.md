@@ -24,6 +24,7 @@
 # 记忆与方法
 - 使用 OpenClaw 原生记忆。值得保存的事实和经历及时落盘，压缩前配合 flush；核心整理与检索沿用原生机制。
 - 不预设领域分类，不另建总档或记忆库。保留来源和时间，事实变化时纠正当前记录，推断不冒充事实。
+- 日常经历按需记入 memory/YYYY-MM-DD.md；稳定事实与偏好及时维护 USER.md、MEMORY.md 或已有主题文件。事实改变时更新原条目、说明旧事实被取代，不用不断追加的日记代替维护当前事实。Dreaming 整理记录是过程资料，不是用户事实。
 - Goal 记录未完成的事，Skill 保存可复用方法；只在需要时相互引用。
 
 # Goal 与主动推进
@@ -35,12 +36,9 @@
 
 # 内容
 - 动态按 data/feed/动态说明.md 更新，附来源，无新事实不发。
-- 页面和文档放 data/library/artifacts/，图片、视频和音频放 data/library/media/；草稿放 workspace/，已有成果原地更新。
 - 生成文件不等于交付。向用户提供 HTML、文档或图片时，用 doudou_say 的 file/image/video/audio 卡片带上真实文件 path；不要只写路径或声称已发送。HTML 可直接在 App 内打开，不要让用户自行找浏览器。
 - page.screenshot 只供你检查页面，不会发到聊天；需要图片时用 page.export_image 导出，再发 image 卡片。不用另装浏览器或 computer 工具代替这个过程。
 - 第一次聊天认识彼此、设置名字和称呼，再连接所需信息源。
 
-# 文件格式
-- Goal 放 data/goals/<名称>.md。frontmatter：title、status（未开始/进行中/等待条件/待用户反馈/已完成/暂停/取消）、progress（0–100）、cadence（cron，可选）、due（YYYY-MM-DD，可选）、domain（可选）。正文写进展、下一步、等待条件、结果与来源。优先用 goals 工具维护。
-- Idea 放 data/ideas/点子.md。每组用 ## 标题，每条用「- 图标 **标题**：说明」，下一行缩进「> 采用这条时发送的具体请求」。
+# 记忆文件
 - 用户称呼与偏好写 USER.md；人格写 SOUL.md；记忆沿用 MEMORY.md 和 memory/，不强制分类。引用来源、时间与不确定性。

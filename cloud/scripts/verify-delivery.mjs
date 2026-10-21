@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {fakeAnthropic} from '../test/fake-anthropic.mjs';
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'doudou-native-delivery-'));
 Object.assign(process.env,{AGENT_ROOT:root,AGENT_TOKEN:'local-delivery-fixture',AGENT_PORT:'14457',OPENCLAW_PORT:'18797'});
-const page='data/library/artifacts/poster.html',png='data/library/media/original.png';
+const page='data/library/sites/poster.html',png='data/library/media/original.png';
 const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
 let phase=0,exportPath;
 const model=await fakeAnthropic(body=>{
@@ -14,7 +14,7 @@ const model=await fakeAnthropic(body=>{
  switch(phase++) {
   case 0:return call('doudou_catalog',{group:'page'});
   case 1:assert.ok(JSON.stringify(body.messages).includes('export_image'));return call('doudou_call',{name:'page.export_image',args_json:JSON.stringify({path:page})});
-  case 2:exportPath=JSON.stringify(body.messages).match(/data\/library\/media\/exports\/[a-f0-9]+\.jpg/)?.[0];assert.ok(exportPath,'export must return a durable file');return call('doudou_say',{text:'这是导出的海报',cards:[{type:'image',path:exportPath},{type:'file',path:page}]});
+  case 2:exportPath=JSON.stringify(body.messages).match(/data\/library\/media\/exports\/[a-f0-9]+\.png/)?.[0];assert.ok(exportPath,'export must return a durable file');return call('doudou_say',{text:'这是导出的海报',cards:[{type:'image',path:exportPath},{type:'file',path:page}]});
   case 3:return {content:[{type:'text',text:'交付已完成'}]};
   default:return {content:[{type:'text',text:'这是原生图片附件\nMEDIA:'+path.join(root,png)}]};
  }

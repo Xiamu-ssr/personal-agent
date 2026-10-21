@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { initialize, DEFAULT_JOBS } from '../src/initialize.mjs';
+import {migrateLibrary} from './migrate-library.mjs';
 import { writePrivateJson } from '../src/private-json.mjs';
 export function migrateV1({root,backup}){
  root=fs.realpathSync(root);backup=path.resolve(backup);
@@ -37,7 +38,7 @@ export function migrateV1({root,backup}){
  // Chat/session history is archived only, never imported into the new kernel.
  const retired=['system/browser','data/memory','data/soul','.claude','system/sessions','system/chat.jsonl','system/chat-options.json','system/side-chats','system/activity-index.json','system/task-index.json','system/state.json','system/jobs.jsonl','system/pending-results.json'];
  for(const rel of retired)fs.rmSync(path.join(root,rel),{recursive:true,force:true});
- initialize(root);
+ migrateLibrary({root,backup,existingBackup:true});initialize(root);
  const result={version:'1.0.0',at:new Date().toISOString(),backup,sha256,archiveEntries:entries.length,memoryFiles:mapped.size,skills,goals,sessionsImported:0};
  writePrivateJson(marker,result);return result;
 }

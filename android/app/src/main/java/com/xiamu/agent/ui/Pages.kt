@@ -114,23 +114,28 @@ object Nav {
 
 /** Last good value per key, so going back to a page shows something instantly while it refreshes. */
 private val cache = HashMap<String, Any?>()
+private val cacheStamps=HashMap<String,Triple<Int,Int,Long>>()
 
 /** Load something from the server; reload when data/ changes. */
 @Composable
-fun <T> load(key: String, cacheValue: Boolean = true, revision: Int = 0, block: suspend () -> T): Pair<T?, String> {
+fun <T> load(key: String, cacheValue: Boolean = true, revision: Int = 0, watchFiles:Boolean=true,block: suspend () -> T): Pair<T?, String> {
+    val accountKey=Api.accountIdentity()+":"+key
+    val files=if(watchFiles)Chat.filesVersion.intValue else 0
     @Suppress("UNCHECKED_CAST")
-    var value by remember(key) { mutableStateOf(if (cacheValue) cache[key] as T? else null) }
-    var err by remember(key) { mutableStateOf("") }
-    LaunchedEffect(key, Chat.filesVersion.intValue, revision) {
+    var value by remember(accountKey) { mutableStateOf(if (cacheValue) cache[accountKey] as T? else null) }
+    var err by remember(accountKey) { mutableStateOf("") }
+    LaunchedEffect(accountKey,files,revision) {
+        val stamp=cacheStamps[accountKey]
+        if(cacheValue&&stamp!=null&&stamp.first==files&&stamp.second==revision&&System.currentTimeMillis()-stamp.third<45_000){@Suppress("UNCHECKED_CAST") value=cache[accountKey] as T?;return@LaunchedEffect}
         runCatching { block() }
-            .onSuccess { value = it; err = ""; if (cacheValue) cache[key] = it }
+            .onSuccess { value = it; err = ""; if (cacheValue) {cache[accountKey] = it;cacheStamps[accountKey]=Triple(files,revision,System.currentTimeMillis())} }
             .onFailure { if (it is CancellationException) throw it; err = it.message ?: "出错了" }
     }
     return value to err
 }
 
-fun clearCache() = cache.clear()
-fun invalidateCache(key: String) { cache.remove(key) }
+fun clearCache() {cache.clear();cacheStamps.clear()}
+fun invalidateCache(key: String) {val scope=Api.accountIdentity()+":"+key;cache.remove(scope);cacheStamps.remove(scope)}
 
 @Composable
 fun RoutePage(r: Route) {

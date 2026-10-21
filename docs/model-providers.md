@@ -8,6 +8,8 @@
 
 供应商地址、模型 ID、输入能力与官方文档链接集中在 [`cloud/src/provider-presets.mjs`](../cloud/src/provider-presets.mjs)，两端使用同一份云端目录。
 
+所有供应商和自定义模型统一配置 272,000 上下文与 128,000 最大输出，不再按供应商猜测窗口大小；主 Session 不重建，压缩由 OpenClaw 处理。
+
 ## 接口
 
 - `GET /api/settings` 和 settings WebSocket 事件增加 `providerPresets:[{id,name,protocol,baseUrl,hint,docsUrl,models:[{id,name,note}]}]`。

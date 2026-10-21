@@ -4,9 +4,7 @@ const model = (id, name, { vision = false, reasoning = false, contextWindow = 13
   ({ id, name, note: vision ? '图片 · 对话 · 工具' : '对话 · 工具', input: vision ? ['text', 'image'] : ['text'], reasoning, contextWindow, maxTokens, ...rest });
 const vision = { vision: true, reasoning: true };
 export const COMPACT_AT_TOKENS = 272_000;
-// OpenClaw 2026.10.4 reserves 20K inside its active context budget for compaction.
-// Keep that operating budget separate from the provider's native model window.
-const COMPACTION_RESERVE_TOKENS = 20_000;
+export const MODEL_OUTPUT_TOKENS = 128_000;
 
 export const PROVIDER_PRESETS = [
   {
@@ -94,8 +92,8 @@ export function presetModel(provider, id) {
 
 export function nativeModelDefinition(provider, row) {
   const known = presetModel(provider, row.id);
-  const { reasoning = false, input = ['text', 'image'], contextWindow = 131072, maxTokens = 8192 } = known ?? {};
-  const contextTokens = Math.min(contextWindow, COMPACT_AT_TOKENS + COMPACTION_RESERVE_TOKENS);
+  const { reasoning = false, input = ['text', 'image'] } = known ?? {};
+  const contextWindow = COMPACT_AT_TOKENS, contextTokens = COMPACT_AT_TOKENS, maxTokens = MODEL_OUTPUT_TOKENS;
   const result = { id: row.id, name: row.name, reasoning, input, contextWindow, contextTokens, maxTokens };
   if (provider.protocol === 'openai' && !['api.openai.com', 'openrouter.ai', 'zenmux.ai'].includes(new URL(provider.baseUrl).hostname)) {
     const family = PROVIDER_PRESETS.find(p => p.protocol === provider.protocol && p.baseUrl === provider.baseUrl)?.id;

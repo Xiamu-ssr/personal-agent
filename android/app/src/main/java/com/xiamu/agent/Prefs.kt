@@ -7,8 +7,12 @@ import java.util.UUID
 
 object Prefs {
     private lateinit var sp: SharedPreferences
+    lateinit var cacheRoot:java.io.File
+        private set
+    internal fun cacheDirectory():java.io.File?=if(::cacheRoot.isInitialized)cacheRoot else null
 
     fun init(ctx: Context) {
+        cacheRoot=ctx.cacheDir
         sp = ctx.getSharedPreferences("agent", Context.MODE_PRIVATE)
         if (sp.getString("deviceId", null) == null) {
             sp.edit().putString("deviceId", "android-" + UUID.randomUUID().toString().take(8)).apply()

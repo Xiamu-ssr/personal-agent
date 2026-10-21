@@ -22,7 +22,7 @@ class LibraryLayoutDeviceTest {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         Prefs.init(context);Prefs.server="http://127.0.0.1:18770";Prefs.token="local-fixture"
         val library=runBlocking{Api.library()}
-        val pages=library.artifacts.filter{it.kind=="page"}
+        val pages=library.artifacts.filter{it.kind=="site"}
         assertEquals(6,pages.size)
         assertTrue(library.artifacts.none{it.name in listOf("theme","mark")})
         var font by mutableFloatStateOf(1f)

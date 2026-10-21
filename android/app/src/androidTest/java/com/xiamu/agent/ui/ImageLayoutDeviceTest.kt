@@ -24,10 +24,10 @@ class ImageLayoutDeviceTest {
 
     @Test fun portraitAndMultipleImagesReserveTheirFullHeightBeforeCaptionAndNextRow() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        Prefs.init(context);Prefs.server="http://127.0.0.1:18770";Prefs.token="synthetic-layout-token"
+        Prefs.init(context);Prefs.server="http://127.0.0.1:18770";Prefs.token="local-fixture"
         var width by mutableStateOf(320)
         var font by mutableStateOf(1f)
-        var paths by mutableStateOf(listOf("data/library/portrait.png"))
+        var paths by mutableStateOf(listOf("data/library/media/portrait.png"))
         ui.setContent {
             val density=LocalDensity.current.density
             CompositionLocalProvider(LocalDensity provides Density(density,font)) {
@@ -38,7 +38,7 @@ class ImageLayoutDeviceTest {
             }
         }
         for((w,f) in listOf(320 to 1f,280 to 1.4f)) for(sample in listOf(listOf("portrait"),listOf("landscape"),listOf("portrait","landscape"),listOf("portrait","landscape","square"))) {
-            ui.runOnIdle {width=w;font=f;paths=sample.map {"data/library/$it.png"}}
+            ui.runOnIdle {width=w;font=f;paths=sample.map {"data/library/media/$it.png"}}
             ui.waitUntil(15000) {paths.all {Images.cached(it,900)!=null}}
             ui.waitForIdle()
             val pictures=paths.map {ui.onNodeWithTag("content-image:$it",useUnmergedTree=true).getUnclippedBoundsInRoot()}
@@ -56,8 +56,8 @@ class ImageLayoutDeviceTest {
 
     @Test fun feedImageKeepsOriginalAspectRatioAndAllThreeBands() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        Prefs.init(context);Prefs.server="http://127.0.0.1:18770";Prefs.token="synthetic-layout-token"
-        val path="data/library/portrait.png"
+        Prefs.init(context);Prefs.server="http://127.0.0.1:18770";Prefs.token="local-fixture"
+        val path="data/library/media/portrait.png"
         val post=FeedPost("data/feed/2026-10-20/1200-layout.md","2026-10-20","Synthetic feed","Fixture","","2026-10-20 12:00","🌿",path,"Synthetic body")
         ui.setContent {Column(Modifier.width(320.dp).verticalScroll(rememberScrollState())) {FeedPostView(post)}}
         ui.waitUntil(15000) {Images.cached(path,900)!=null};ui.waitForIdle()

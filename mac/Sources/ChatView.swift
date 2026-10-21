@@ -6,9 +6,10 @@ struct AttachmentView: View {
     let att: Attachment
 
     var body: some View {
-        switch att.kind {
+        switch att.kind=="voice" ? "voice":MediaItem.inferredKind(path:att.path,declared:MediaItem.Kind(rawValue:att.kind) ?? .file).rawValue {
         case "image": RemoteImage(path: att.path, maxSide: 220).onTapGesture { Nav.shared.preview = att.path }
         case "voice": VoiceNote(att: att)
+        case "video","audio":if let media=MediaItem(["path":att.path,"name":att.name,"kind":"file","size":att.size ?? 0]){ReplyMediaView(item:media)}
         default:
             Button { Nav.shared.open(att.path, title: att.name) } label: {
                 HStack(spacing: 10) {
@@ -74,11 +75,12 @@ struct RemoteImage: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line, lineWidth: 0.5))
         .contentShape(Rectangle())
-        .task(id: path) {
+        .task(id: path+"-"+String(ChatClient.shared.libraryVersion)) {
             do {
                 let data = try await Api.cached(path)
                 try Task.checkCancellation()
-                image = NSImage(data: data); failed = image == nil
+                let decoded=await ImageDecode.thumbnail(data,maxPixels:fullWidth ? 2400:1200)
+                try Task.checkCancellation();image=decoded;failed=image==nil
             } catch is CancellationError {} catch { failed = true }
         }
     }
@@ -204,26 +206,11 @@ struct ChatMessages:View {
     var topInset:CGFloat=0
     @Environment(\.interactiveWindow) private var active
     @State private var scroll=ChatScrollState()
-    @State private var follower=BottomFollower()
+    @State private var returnRevision=0
     var body:some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment:.leading,spacing:12) {
-                    if transcript.items.isEmpty { Note(text:ChatClient.shared.connected ? emptyText : "连接中…") }
-                    ForEach((compact ? Array(transcript.items.suffix(60)) : transcript.items).filter(\.visible)) { MessageRow(item:$0,compact:compact,transcript:transcript).id($0.id) }
-                    Color.clear.frame(height:1).id("end")
-                }.background(ChatScrollReader(state:scroll).frame(width:0,height:0))
-                    .frame(maxWidth:compact ? .infinity : 680).padding(compact ? 14 : 28).padding(.top,topInset).frame(maxWidth:.infinity)
-            }.overlay(alignment:.bottomTrailing) { ReturnToBottom(state:scroll) { scroll.returnToBottom(); follower.request() } }
-            .onAppear { scroll.messages(transcript.items); follower.request() }
-            .onChange(of:transcript.items) { scroll.messages(transcript.items); if active && scroll.atBottom { follower.request() } }
-            .onChange(of:transcript.sentRevision) { scroll.returnToBottom(); follower.request() }
-            .onChange(of:active) { if active && scroll.atBottom { follower.request() } else { follower.cancel() } }
-            .onChange(of:follower.revision) {
-                guard active && scroll.atBottom else { return }; var transaction=Transaction(); transaction.disablesAnimations=true
-                withTransaction(transaction) { proxy.scrollTo("end",anchor:.bottom) }
-            }.onDisappear { follower.cancel() }
-        }
+        NativeChatList(transcript:transcript,state:scroll,compact:compact,topInset:topInset,active:active,returnRevision:returnRevision)
+            .overlay(alignment:.bottomTrailing) {ReturnToBottom(state:scroll){scroll.returnToBottom();returnRevision += 1}}
+            .overlay {if transcript.items.isEmpty {Note(text:ChatClient.shared.connected ? emptyText:"连接中…")}}
     }
 }
 struct MessageRow:View {

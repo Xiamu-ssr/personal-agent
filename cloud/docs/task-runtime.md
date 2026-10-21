@@ -1,7 +1,11 @@
-# 0.8 SDK 活动运行
+# 会话与活动
 
-主聊天使用长期打开的 AsyncIterable prompt，忙时输入直接 push，同轮下一次模型请求可见；不使用应用消息队列。SDK 可能将插话放到工具结果的提醒中。可复现实验是 `test/sdk-interjection.test.mjs`，完整 HTTP/WS 演示是 `scripts/verify-v08.mjs`。
+一个 Agent，一个长期主 Session（`agent:main:main`），不自动 new/reset。用户聊天、引用动态或点子、讨论目标都进入这个主会话；忙碌时的新消息由原生 Gateway steer 接收。
 
-主线程 busy 的释放仍以 `session_state_changed.idle` 为准，result 可能先于后续原生通知回合。原生 `background_tasks_changed` 是完整集合，和主线程 busy 分开；保持 `perTaskStopAffordance:true`，interrupt 不停止别的 fork。独立定时会话不使用主线程分派，后台需要说话时调用同一个 `mcp__doudou__say`。
+定时生成动态、点子以及设备补读使用同一 Agent 的独立 Session，共享工作区和原生记忆。动态、点子写入各自栏目，完整执行过程与结果保存在活动记录；不维护截断文本队列，也不拼到下一条用户消息里。主会话需要时通过文件或 activities 工具读取。
 
-活动索引与主聊天步骤持久化至 `system/activity-index.json`；原生 SDK transcript 限定在此数据根的 system/sessions 中读取。重建查询时清运行集合，索引中未结束记录改为 stopped，续聊使用 SendMessage、resume 或保存的活动上下文。权限、200K 和内置压缩沿现有策略，详细 App 协议见 [v08-cloud.md](v08-cloud.md)。
+心跳、目标跟进和提醒进入主 Session。后台唤醒等当前主会话工作结束后再执行，不插断用户正在讨论的内容。没有新结果时安静结束；定时安排展示上次运行及下次触发时间。
+
+App 的活动关联原生 run ID。Gateway 连接丢失时保留等待状态，重连后使用 `agent.wait` 查询同一任务，不重新执行，也不取会话里最后一条回复冒充结果。无法核实的结果标记待确认；内核明确返回错误才记为失败。
+
+站点、文档、动态、点子和目标的文件是内容事实源。`content.publish` 使用与 App 相同的解析器校验文件并发出更新事件；缓存、缩略图和检索索引均可重建。

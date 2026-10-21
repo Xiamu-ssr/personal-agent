@@ -109,7 +109,8 @@ async function pair(req, res) {
   return json(res, 200, { token: config.token });
 }
 
-export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), health = new HealthSync({root:config.root,hub,timezone:config.timezone}), listen = config, content = new Content({ root: config.root, bus, timezone: config.timezone }), schedules = schedulerFor({ harness, log, health, content }) }) {
+export function startServer({ harness, hub, bus, log, connectors = harness.connectors || new ConnectorManager(), health = new HealthSync({root:config.root,hub,timezone:config.timezone}), listen = config, content = harness.content || new Content({ root: config.root, bus, timezone: config.timezone }), schedules = schedulerFor({ harness, log, health, content }) }) {
+  content.watch();
   const clientRequests = new ClientRequests();
   const providers = new Providers({ root: config.root, connectors, selected: () => readAppSettings(config.root).model, select: model => putAppSettings(config.root, { model }) });
   const usage = new UsageService({ root: config.root, connectors });
@@ -178,10 +179,16 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         if (schedules.jobs().find((j) => j.id === `goal:${goal.name}`)?.enabled === false) goal.nextCheckin = null;
         return json(res, 200, goal);
       }
-      if (p === "/api/library" && req.method === "GET") return json(res, 200, content.library());
+      if (p === "/api/library" && req.method === "GET") {
+        const value=content.library(),etag='"'+value.revision+'"';
+        if(req.headers['if-none-match']===etag){res.writeHead(304,{'etag':etag,'cache-control':'private, no-cache','vary':'Authorization, Cookie'});return res.end();}
+        res.writeHead(200,{'content-type':'application/json; charset=utf-8','etag':etag,'cache-control':'private, no-cache','vary':'Authorization, Cookie'});return res.end(JSON.stringify(value));
+      }
       if (p === "/api/library/thumbnail" && req.method === "GET") {
         const image = await harness.pages.thumbnail({ path: url.searchParams.get("path") });
-        res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "private, max-age=60" }); return res.end(image.data);
+        const etag='"'+image.revision+'"';
+        if(req.headers['if-none-match']===etag){res.writeHead(304,{'etag':etag,'cache-control':'private, no-cache','vary':'Authorization, Cookie'});return res.end();}
+        res.writeHead(200, { "content-type": "image/jpeg", "etag":etag,"cache-control": "private, no-cache",'vary':'Authorization, Cookie' }); return res.end(image.data);
       }
       if (p === "/api/memory" && req.method === "GET") return json(res, 200, content.memory());
       if (p === "/api/memory/item") {
@@ -387,8 +394,9 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
         if (fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
         if (!fs.statSync(file).isFile()) return json(res, 404, { error: "not found" });
         file = localFile(config.root, path.relative(config.root, file), "data");
-        const size = fs.statSync(file).size;
-        const headers = { "content-type": fileType(file).mime, "cache-control": "no-cache", "accept-ranges": "bytes" };
+        const stat=fs.statSync(file),size=stat.size,etag='"'+crypto.createHash('sha256').update(`${path.relative(config.root,file)}:${size}:${stat.mtimeMs}:${stat.ctimeMs}`).digest('hex').slice(0,24)+'"';
+        const headers = { "content-type": fileType(file).mime, "cache-control": "private, no-cache", "accept-ranges": "bytes",etag,'vary':'Authorization, Cookie' };
+        if(!req.headers.range&&req.headers['if-none-match']===etag){res.writeHead(304,headers);return res.end();}
         let start = 0, end = size - 1, status = 200;
         if (req.headers.range !== undefined) {
           const range = req.headers.range.trim().match(/^bytes=(\d*)-(\d*)$/);
@@ -504,7 +512,7 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
   }, 30_000);
   heartbeat.unref();
   server.closeSockets = () => { for (const ws of wss.clients) ws.terminate(); };
-  server.on("close", () => { clearInterval(heartbeat); server.closeSockets(); wss.close(); });
+  server.on("close", () => { content.close();clearInterval(heartbeat); server.closeSockets(); wss.close(); });
 
   server.listen(listen.port, listen.host, () => log("listening on " + listen.host + ":" + server.address().port));
   return server;

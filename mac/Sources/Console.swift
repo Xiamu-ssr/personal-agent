@@ -92,6 +92,7 @@ struct SchedulesPanel:View {
                         Text(r["name"] as? String ?? id).font(Theme.font(size:14,weight:.medium))
                         Text(scheduleText(r)).font(Theme.font(size:12)).foregroundStyle(Theme.sub)
                         if let d=ProductTime.date(r["nextRun"]) { Text("下次 · "+Fmt.when(d)).font(Theme.font(size:11)).foregroundStyle(Theme.sub) }
+                        if let recent=recentText(r){Text(recent).font(Theme.font(size:11)).foregroundStyle(Theme.sub).lineLimit(2)}
                     }; Spacer()
                     Button(r["running"] as? Bool == true ? "进行中" : "立即运行") { update(id,run:true) }.buttonStyle(SoftButtonStyle()).disabled(working.contains(id) || r["running"] as? Bool == true)
                     Toggle("启用",isOn:Binding(get:{r["enabled"] as? Bool ?? false},set:{update(id,enabled:$0)})).labelsHidden().toggleStyle(.switch).disabled(working.contains(id))
@@ -103,6 +104,15 @@ struct SchedulesPanel:View {
     private func scheduleText(_ r:[String:Any])->String {
         if r["id"] as? String == "feed" { return "每 \(r["interval"] as? Int ?? 30) 分钟 · \(r["start"] as? String ?? "07:00")–\(r["end"] as? String ?? "23:00")" }
         return r["cron"] as? String ?? "按约定跟进"
+    }
+    private func recentText(_ r:[String:Any])->String? {
+        if let last=r["lastRun"] as? [String:Any],let at=ProductTime.date(last["at"]) {
+            let summary=last["summary"] as? String ?? ""
+            let fallback=last["status"] as? String == "running" ? "进行中":"已运行"
+            return "上次 · "+Fmt.when(at)+" · "+(summary.isEmpty ? fallback:summary)
+        }
+        if let at=ProductTime.date(r["lastSuccess"]){return "上次完成 · "+Fmt.when(at)}
+        return nil
     }
     private func load() async { do { rows=try await Api.json("/api/schedules")["items"] as? [[String:Any]] ?? []; error="" } catch { self.error=error.localizedDescription } }
     private func update(_ id:String,enabled:Bool?=nil,run:Bool=false) {

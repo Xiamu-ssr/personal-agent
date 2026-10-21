@@ -176,33 +176,32 @@ struct GoalDetailPage:View {
 }
 struct LibraryPage:View {
     @State private var section=0
-    @State private var artifacts:[Artifact]=[]
-    @State private var media:[MediaItem]=[]
-    @State private var error=""
+    private var store:LibraryStore{.shared}
+    private var artifacts:[Artifact]{store.artifacts.filter{section==0 || (section==1 ? $0.kind=="site":section==2 && $0.kind=="document")}}
+    private var media:[MediaItem]{store.media.filter{section==0 || (section==3 ? $0.kind == .image:section==4 ? $0.kind == .video:section==5 && $0.kind == .audio)}}
     var body:some View {
         PageScaffold(title:"资源库") {
-            PillTabs(titles:["构件","影音内容"],selection:$section)
-            if section == 0 {
+            PillTabs(titles:["全部","站点","文档","图片","视频","音频"],selection:$section)
+            if section <= 2 {
                 LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:20) { ForEach(artifacts) { artifact in
                     Button { Nav.shared.open(artifact.path,title:artifact.name) } label: {
                         VStack(alignment:.leading,spacing:12) {
-                            AuthenticatedThumbnail(endpoint:artifact.thumbnail,icon:artifact.kind == "page" ? "macwindow" : "doc.text").frame(height:190).clipped().clipShape(RoundedRectangle(cornerRadius:14))
+                            AuthenticatedThumbnail(endpoint:artifact.thumbnail,icon:artifact.kind == "site" ? "macwindow" : "doc.text").frame(height:190).clipped().clipShape(RoundedRectangle(cornerRadius:14))
                             Text(artifact.name).font(Theme.font(size:14,weight:.medium)).lineLimit(1)
-                            Text(artifact.kind == "page" ? "页面" : "文档 · \(artifact.files.count) 个文件").font(Theme.font(size:11)).foregroundStyle(Theme.sub)
+                            Text(artifact.kind == "site" ? "站点" : "文档").font(Theme.font(size:11)).foregroundStyle(Theme.sub)
                         }.padding(12).background(Theme.card,in:RoundedRectangle(cornerRadius:20)).contentShape(Rectangle())
                     }.buttonStyle(.plain)
                 } }
-                if artifacts.isEmpty { Note(text:"豆豆做的页面和文档会出现在这里") }
-            } else {
+                if artifacts.isEmpty && section != 0 { Note(text:section==1 ? "豆豆制作的站点会放在这里":"报告与文档会放在这里") }
+            }
+            if section==0 || section>=3 {
                 LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible()),GridItem(.flexible())],spacing:15) {
                     ForEach(media) { item in VStack(alignment:.leading,spacing:9) { ReplyMediaView(item:item); Text(item.name).font(Theme.font(size:11)).foregroundStyle(Theme.sub).lineLimit(1) }.frame(maxWidth:.infinity,alignment:.leading) }
                 }
-                if media.isEmpty { Note(text:"交付的图片、视频和音频会出现在这里") }
+                if media.isEmpty && section != 0 { Note(text:"交付的图片、视频和音频会出现在这里") }
             }
-            if !error.isEmpty { Note(text:error) }
-        }.task(id:ChatClient.shared.filesVersion) {
-            do { let r=try await Api.json("/api/library"); artifacts=(r["artifacts"] as? [[String:Any]] ?? []).compactMap(Artifact.init); media=MediaItem.parse(r["media"]); error="" } catch { self.error=error.localizedDescription }
-        }
+            if !store.error.isEmpty {Note(text:store.error)}
+        }.task(id:ChatClient.shared.libraryVersion) {await store.load(version:ChatClient.shared.libraryVersion)}
     }
 }
 struct AuthenticatedThumbnail:View {
@@ -212,7 +211,7 @@ struct AuthenticatedThumbnail:View {
     var body:some View {
         GeometryReader { geometry in
             ZStack { Theme.field; if let image { Image(nsImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height,alignment:.top).clipped().verificationAction("library-image-"+(endpoint ?? "")) } else { Image(systemName:icon).font(.system(size:35,weight:.light)).foregroundStyle(Theme.sub) } }
-        }.task(id:endpoint) { image=nil;guard let e=endpoint, e.hasPrefix("/api/library/thumbnail?") else { return }; if let d=try? await Api.data(e),!Task.isCancelled { image=NSImage(data:d) } }
+        }.task(id:endpoint) { image=nil;guard let e=endpoint, e.hasPrefix("/api/library/thumbnail?") else { return }; if let d=try? await Api.cached(e),!Task.isCancelled {let decoded=await ImageDecode.thumbnail(d,maxPixels:900);if !Task.isCancelled{image=decoded}} }
     }
 }
 

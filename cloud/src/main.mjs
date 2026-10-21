@@ -9,8 +9,6 @@ import { startServer } from "./server.mjs";
 import { HealthSync } from "./health.mjs";
 import { initialize } from "./initialize.mjs";
 
-import { Content } from "./content.mjs";
-
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 if (!config.token) {
@@ -39,7 +37,7 @@ hub.onReconnect = (info) => {
 
 harness.runtime.onCrash=()=>process.kill(process.pid,"SIGTERM");
 await harness.startMain();
-const content = new Content({ root: config.root, bus, timezone: config.timezone });
+const content = harness.content;
 const schedules = startScheduler({ harness, log, health, content });
 const server = startServer({ harness, hub, bus, log, connectors, health, content, schedules });
 

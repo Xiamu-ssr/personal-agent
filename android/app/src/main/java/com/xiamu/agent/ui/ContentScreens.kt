@@ -101,28 +101,31 @@ fun GoalDetailScreen(name: String) {
 
 @Composable
 fun LibraryScreen(bottom: Dp) {
-    val (library,error)=load("library") { Api.library() }
+    val (library,error)=load("library",revision=Chat.libraryVersion.intValue,watchFiles=false) { Api.library() }
     val context=ctx()
     val scope=rememberCoroutineScope()
     var selected by remember { mutableStateOf<Artifact?>(null) }
+    var section by remember {mutableStateOf(0)}
+    val artifacts=library?.artifacts.orEmpty().filter{section==0 || (section==1&&it.kind=="site") || (section==2&&it.kind=="document")}
+    val media=library?.media.orEmpty().filter{section==0 || it.kind==when(section){3->"image";4->"video";5->"audio";else->""}}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=pagePadding(bottom)) {
-        item { SectionTitle("页面与文档") }
+        item {SegTabs(listOf("全部","站点","文档","图片","视频","音频"),section,modifier=Modifier.padding(bottom=16.dp),onSelect={section=it})}
         if(library==null) item { if(error.isBlank()) Loading() else ErrorNote(error) }
-        if(library?.artifacts?.isEmpty()==true) item { EmptyNote("豆豆做的页面和文档会放在这里。") }
-        library?.artifacts?.chunked(2)?.forEach { row -> item { Row(Modifier.padding(bottom=14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(library!=null && artifacts.isEmpty() && section in 1..2) item {EmptyNote(if(section==1)"豆豆制作的站点会放在这里。" else "报告与文档会放在这里。")}
+        artifacts.chunked(2).forEach { row -> item(key=row.first().path) { Row(Modifier.padding(bottom=14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             row.forEach { a -> Column(Modifier.weight(1f).testTag("library-artifact:${a.path}").clip(RoundedCornerShape(20.dp)).background(Pal.Card).tap {
                 if(a.kind=="document" && a.files.size>1) selected=a
                 else if(a.path.isNotBlank()) scope.launch { runCatching { openFile(context,a.path,a.name) }.onFailure { Chat.error.value="文件暂不可用" } }
             }) {
                 if(a.thumbnail!=null) ContentImage(a.thumbnail,Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(topStart=20.dp,topEnd=20.dp)),scale=ContentScale.Crop,alignment=Alignment.TopCenter) else Box(Modifier.fillMaxWidth().height(132.dp),contentAlignment=Alignment.Center) { Icon(Icons.Outlined.Description,null,tint=Pal.Muted,modifier=Modifier.size(36.dp)) }
                 Text(a.name,style=Type.title(14),color=Pal.Ink,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=12.dp,end=12.dp,top=10.dp).testTag("artifact-title:${a.path}"))
-                Text(if(a.kind=="page") "页面" else "文档",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(start=12.dp,end=12.dp,top=3.dp,bottom=12.dp))
+                Text(if(a.kind=="site") "站点" else "文档",style=Type.body(12),color=Pal.Muted,modifier=Modifier.padding(start=12.dp,end=12.dp,top=3.dp,bottom=12.dp))
             } }
             if(row.size==1) Spacer(Modifier.weight(1f))
         } } }
-        item { SectionTitle("影音") }
-        if(library?.media?.isEmpty()==true) item { EmptyNote("图片、视频和音频会放在这里。") }
-        library?.media?.chunked(3)?.forEach { row -> item { Row(Modifier.padding(bottom=5.dp),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+        if(section==0&&media.isNotEmpty())item {SectionTitle("影音")}
+        if(library!=null&&media.isEmpty()&&section>=3)item{EmptyNote("交付的内容会放在这里。")}
+        media.chunked(3).forEach { row -> item(key=row.first().path) { Row(Modifier.padding(bottom=5.dp),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
             row.forEach { m -> Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(12.dp)).background(Pal.Card).tap {
                 if(m.kind=="image") Nav.open(Route.Image(m.path)) else selected=Artifact(m.name,m.path,"media",0,null,listOf(m))
             },contentAlignment=Alignment.Center) {

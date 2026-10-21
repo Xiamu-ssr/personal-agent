@@ -14,7 +14,7 @@ struct ActivitySummary:Identifiable,Equatable {
         chatType=r["chatType"] as? String
         status=running ? "running" : r["status"] as? String ?? "done"; time=ProductTime.date(r[running ? "started" : "ts"])
     }
-    var label:String { switch status { case "running":"进行中"; case "error":"出错"; case "stopped":"已停止"; default:"完成" } }
+    var label:String { switch status { case "running":"进行中"; case "error":"出错"; case "unknown":"待确认";case "stopped":"已停止"; default:"完成" } }
 }
 
 /// The cloud decides which rounds are activities. Metadata events only patch an existing ID.

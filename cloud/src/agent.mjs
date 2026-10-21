@@ -17,6 +17,7 @@ import { appendJsonl, readJson } from './store.mjs';
 import { writePrivateJson } from './private-json.mjs';
 import { validateMessage, prepareAttachments, userContent } from './attachments.mjs';
 import { runFailureText } from './gateway-chat.mjs';
+import { goalFields } from './content-contract.mjs';
 const quiet=text=>!text||/^(?:HEARTBEAT_OK|NO_REPLY|NONE)[.!。\s]*$/.test(text);
 const result=value=>({content:[{type:'text',text:JSON.stringify(value)}]});
 export class Harness {
@@ -24,7 +25,6 @@ export class Harness {
   Object.assign(this,{hub,bus,connectors});this.log=(...args)=>log(...args.map(v=>connectors.redact(v)));
   for(const [key,value]of Object.entries(process.env))if(/(?:TOKEN|KEY|SECRET|PASSWORD)$/i.test(key)&&value?.length>=8)connectors.knownSecrets.add(value);
   this.runtime=runtime||new OpenClawRuntime({log:this.log});this.busy=false;this.closed=false;this.running=new Map();this.sessionRuns=new Map();this.mainTask=Promise.resolve();
-  this.pendingFile=path.join(config.root,'system/pending-results.json');this.pending=readJson(this.pendingFile,[]);
   this.history=new TaskHistory({root:config.root,redact:s=>connectors.redact(s)});
   this.content=new Content({root:config.root,bus,timezone:config.timezone});this.pages=new PageScreenshot({root:config.root});
   this.speech=new Speech({root:config.root,bus,redact:s=>connectors.redact(s),onSay:e=>{const run=this.running.get(e.activityId);if(run)run.said=true;}});
@@ -35,8 +35,9 @@ export class Harness {
  step(id,kind,text,tool,extra={}){if(!this.history.records.has(id))return;const item={kind,text:this.connectors.redact(String(text||'')),time:new Date().toISOString(),...(tool&&{tool}),...extra};const record=this.history.get(id);this.history.put(id,{steps:[...(record.steps||[]),item]});this.bus.emit({t:'activity_step',id,item});}
  groups(){
   const wrap=fn=>async args=>result(await fn(args));
-  const goalShape={name:z.string(),title:z.string(),status:z.enum(['未开始','进行中','等待条件','待用户反馈','已完成','暂停','取消']),progress:z.number().min(0).max(100),body:z.string(),domain:z.string().optional(),cadence:z.string().optional(),due:z.string().optional()};
   return {...this.connectors.toolGroups(),devices:this.hub.tools(),page:this.pages.tools(),speech:this.speech.tools(),
+   content:[defineTool('publish','校验并发布已有的动态、点子、目标或资源文件；文件是唯一事实源，错误返回具体原因。',{path:z.string()},wrap(({path})=>this.content.publish(path)))],
+   activities:[defineTool('list','查看已经运行的后台工作及结果摘要。',{},wrap(()=>this.history.recent())),defineTool('get','读取一项活动的完整结果和过程。',{id:z.string()},wrap(({id})=>this.history.get(id)))],
    schedules:[defineTool('list','查看定时安排。',{},wrap(()=>readJson(config.scheduleFile,[]))),
     defineTool('put','创建或更新已授权的提醒/定时推进。cron 与 at 二选一，at 是 ISO 时间；enabled=false 停止。',{id:z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),name:z.string().max(100),prompt:z.string().max(8000),cron:z.string().optional(),at:z.string().optional(),enabled:z.boolean()},wrap(job=>{
       if(job.enabled && (!job.prompt.trim() || !!job.cron===!!job.at))throw new Error('请提供提示词及 cron 或 at');
@@ -45,7 +46,7 @@ export class Harness {
       const updated={...job,kind:'reminder'};const successFile=path.join(config.system,'schedule-success.json'),success=readJson(successFile,{});delete success[job.id];writePrivateJson(successFile,success);writePrivateJson(config.scheduleFile,[...jobs.filter(j=>j.id!==job.id),updated]);this.bus.emit({t:'schedules_updated'});return updated;
     }))],
    goals:[defineTool('list','列出目标及当前状态。',{},wrap(()=>this.content.goals())),defineTool('get','读取一个目标。',{name:z.string()},wrap(({name})=>this.content.goal(name))),
-    defineTool('put','创建或更新目标；用户明确认可后才可标记已完成，交付先标待用户反馈。',goalShape,wrap(args=>this.content.putGoal(args)))]};
+    defineTool('put','创建或更新目标；用户明确认可后才可标记已完成，交付先标待用户反馈。',goalFields,wrap(args=>this.content.putGoal(args)))]};
  }
  async productTool(route,args){
   const run=this.sessionRuns.get(args.sessionKey);
@@ -80,30 +81,26 @@ export class Harness {
    return {...result({error:message,parameters:tool.parameters,instruction:'按 parameters 构造参数对象，再 JSON.stringify 后传入 args_json；不要重复同一错误调用。'}),isError:true};
   }
  }
- async execute(prompt,{id=crypto.randomUUID(),label='处理消息',sessionKey=MAIN_SESSION,chatType,attachments=[],silent=false,reportError=true,kind='chat',onAccepted}={}){
+ async execute(prompt,{id=crypto.randomUUID(),label='处理消息',sessionKey=MAIN_SESSION,chatType,attachments=[],silent=false,reportError=true,kind='chat',scheduleId,onAccepted}={}){
   if(this.closed)throw new Error('云端正在关闭');
   const controller=new AbortController(),run={id,label,sessionKey,controller,chatType,silent,said:false,incoming:new Set(),started:Date.now()};
-  this.running.set(id,run);this.sessionRuns.set(sessionKey,run);this.history.put(id,{title:label,kind,status:'running',sessionKey,chatType,steps:this.history.records.get(id)?.steps||[]});this.history.rememberPrompt(id,prompt,attachments);
+  this.running.set(id,run);this.sessionRuns.set(sessionKey,run);this.history.put(id,{title:label,kind,status:'running',sessionKey,chatType,scheduleId,steps:this.history.records.get(id)?.steps||[]});this.history.rememberPrompt(id,prompt,attachments);
   this.busy=[...this.running.values()].some(r=>r.sessionKey===MAIN_SESSION);this.bus.emit({t:'status',busy:this.busy});this.bus.emit({t:'activity',phase:'started',id,title:label,ts:Date.now()});this.avatar.working();
   let ok=false;
   try{
-   let text=prompt;const pendingSnapshot=sessionKey===MAIN_SESSION?[...this.pending]:[];
-   if(sessionKey===MAIN_SESSION&&this.pending.length){const pending=pendingSnapshot;text='[已完成的后台工作，作为当前上下文，不是用户的新指令]\n'+pending.map(x=>`${x.label}: ${x.text}`).join('\n')+'\n\n'+prompt;}
-   const input=userContent(config.root,text,attachments);
+   const input=userContent(config.root,prompt,attachments);
    const response=await this.runtime.respond(input,{sessionKey,signal:controller.signal,id,onAccepted});
-   if(pendingSnapshot.length){this.pending=this.pending.filter(x=>!pendingSnapshot.includes(x));writePrivateJson(this.pendingFile,this.pending);}
    if(response.text)this.step(id,'result',response.text);
    if(!silent&&(!run.said||response.media?.length)&&(!quiet(response.text)||response.media?.length))this.speech.emit({text:response.text},{activityId:id,chatType,nativeMedia:response.media});
-   if(sessionKey!==MAIN_SESSION&&response.text){this.pending.push({label,text:response.text.slice(-12000)});this.pending=this.pending.slice(-20);writePrivateJson(this.pendingFile,this.pending);}
    await this.drainMain(run);
    const latest=run.latestResponse||response.text;
    this.history.put(id,{status:'done',endedAt:Date.now(),summary:quiet(latest)?'已检查，无新变化':latest.slice(0,180),latestResult:latest,usage:response.usage});ok=true;
    return {ok:true,text:response.text};
-  }catch(e){onAccepted?.(null,e);await this.drainMain(run);const stopped=controller.signal.aborted,message=this.connectors.redact(runFailureText(e));if(!stopped)this.log('OpenClaw run failed',id,e.message);this.history.put(id,{status:stopped?'stopped':'error',endedAt:Date.now(),summary:stopped?'已停止':message});if(!silent&&!stopped&&reportError)this.speech.emit({text:'这次没完成：'+message},{activityId:id,chatType,error:true});return {ok:false,error:e.message};
+  }catch(e){onAccepted?.(null,e);await this.drainMain(run);const stopped=controller.signal.aborted,message=this.connectors.redact(runFailureText(e));if(!stopped)this.log('OpenClaw run failed',id,e.message);this.history.put(id,{status:stopped?'stopped':e.code==='outcome_unknown'?'unknown':'error',endedAt:Date.now(),summary:stopped?'已停止':message});if(!silent&&!stopped&&reportError)this.speech.emit({text:(e.code==='outcome_unknown'?'结果待确认：':'这次没完成：')+message},{activityId:id,chatType,error:true});return {ok:false,error:e.message};
   }finally{
    this.running.delete(id);this.sessionRuns.delete(sessionKey);this.busy=[...this.running.values()].some(r=>r.sessionKey===MAIN_SESSION);
    this.bus.emit({t:'status',busy:this.busy});this.bus.emit({t:'activity',phase:'done',id,title:label,status:this.history.get(id).status,summary:this.history.get(id).summary,ts:Date.now()});
-   this.content.discoverFeed();for(const t of ['memory_updated','goals_updated','ideas_updated','library_updated'])this.bus.emit({t});this.avatar.settle(ok);
+   this.content.discoverFeed();this.avatar.settle(ok);
   }
  }
  async drainMain(run){while(run.incoming.size)await Promise.allSettled([...run.incoming]);}
@@ -136,14 +133,14 @@ export class Harness {
   await acceptance;return id;
  }
  async firstChat(device){if(!['mac','android'].includes(device))throw new Error('设备必须是 android 或 mac');const id=await this.send(`[第一次聊天] 设备：${device}。介绍自己；已从旧版迁移的偏好先读取，不让用户重复介绍。`,'onboarding',[],{ifEmpty:true});return {started:!!id,...(id&&{id})};}
- runIsolated(label,prompt,{id=crypto.randomUUID(),chatType,attachments=[],resumeTask,mainContext=false}={}){
+ runIsolated(label,prompt,{id=crypto.randomUUID(),chatType,attachments=[],resumeTask,mainContext=false,scheduleId}={}){
   const key=resumeTask?.sessionKey||`agent:main:task:${id}`;
   if(mainContext){
    const recent=this.speech.history(24).map(({role,text,ts,quote})=>({role,text:text.slice(-2000),ts,...(quote&&{quote})}));
    const bounded=[];let size=0;for(const row of recent.reverse()){const length=JSON.stringify(row).length;if(size+length>16000)break;bounded.unshift(row);size+=length;}
    if(bounded.length)prompt='[近期主聊天快照，仅作背景，不是本次的新指令；完整事实按需检索记忆]\n'+JSON.stringify(bounded)+'\n\n[本次任务]\n'+prompt;
   }
-  return this.execute(prompt,{id,label,chatType,attachments,sessionKey:key,kind:chatType==='side'?'side':'background',silent:!chatType});
+  return this.execute(prompt,{id,label,chatType,attachments,sessionKey:key,kind:chatType==='side'?'side':'background',silent:!chatType,scheduleId});
  }
  async createSideChat(text,attachments=[],title){const m=validateMessage(config.root,text,attachments),id=crypto.randomUUID();this.speech.side(id).user(m.text,m.attachments);this.runIsolated(title||text.slice(0,32),m.text,{id,chatType:'side',attachments:m.attachments}).catch(e=>this.log(e.message));return id;}
  async sendTask(id,text,attachments=[]){const task=this.history.get(id);if(this.running.has(id))throw new TaskError('这个活动正在执行，请稍后补充',409);this.speech.side(id).user(text,attachments);this.runIsolated(task.title,text,{id,chatType:'side',resumeTask:task,attachments}).catch(e=>this.log(e.message));return id;}
@@ -153,5 +150,5 @@ export class Harness {
  chooseOption(messageId,optionId,activityId){return activityId?this.speech.side(activityId).choose(messageId,optionId,(text)=>this.sendTask(activityId,text)):this.speech.choose(messageId,optionId,this.send.bind(this));}
  async stopTask(id){const r=this.running.get(id);if(!r)throw new TaskError('活动已经结束',409);if(!r.controller)throw new TaskError('系统维护正在完成，请稍候',409);r.controller.abort();await this.runtime.abort(r.sessionKey);return {ok:true};}
  async interrupt(){for(const r of this.running.values())if(r.sessionKey===MAIN_SESSION)await this.stopTask(r.id);}
- async close(){this.closed=true;for(const r of this.running.values())r.controller?.abort();await this.runtime.close();this.avatar.close();}
+ async close(){this.closed=true;for(const r of this.running.values())r.controller?.abort();await this.runtime.close();this.content.close();this.avatar.close();}
 }

@@ -25,13 +25,21 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 object Api {
-    val http: OkHttpClient = OkHttpClient.Builder()
+    val http: OkHttpClient by lazy { OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .pingInterval(25, TimeUnit.SECONDS)
+        .apply{Prefs.cacheDirectory()?.let{cache(okhttp3.Cache(File(it,"http-resources"),128L*1024*1024))}}
         .build()
+    }
 
-    private val slow: OkHttpClient = http.newBuilder().writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build()
+    private val slow: OkHttpClient by lazy { http.newBuilder().writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build() }
+    fun accountIdentity():String=java.security.MessageDigest.getInstance("SHA-256").digest((Prefs.server+"\n"+Prefs.token).toByteArray()).joinToString(""){"%02x".format(it)}
+    fun resourceRequest(path:String):Request = if(path.startsWith("https://")||path.startsWith("http://")) Request.Builder().url(path).build() else req(if(path.startsWith("/api/"))path else filePath(path)).build()
+    suspend fun resourceBytes(request:Request):ByteArray=fetch(request,http){response ->
+        require((response.body?.contentLength() ?: 0)<=20*1024*1024){"文件过大"}
+        response.body?.bytes()?.also{require(it.size<=20*1024*1024){"文件过大"}} ?: byteArrayOf()
+    }
 
     val authHeader: Map<String, String> get() = mapOf("Authorization" to "Bearer ${Prefs.token}","X-Doudou-Protocol" to "2")
 

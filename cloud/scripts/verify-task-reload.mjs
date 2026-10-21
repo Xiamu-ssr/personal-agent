@@ -31,7 +31,7 @@ try{
  await until(()=>logs.some(line=>line.includes('config hot reload applied')));
  release();const result=await task;
  assert.equal(result.ok,true,result.error);assert.equal(calls,1);
- assert.ok(h.pending.some(r=>r.text==='Synthetic content update completed'));
+ assert.ok(h.history.recent().some(r=>r.summary==='Synthetic content update completed'));
  await h.send('RELOAD_MAIN continue the same main conversation');await h.waitForMain();
  assert.equal(h.busy,false);assert.equal(h.running.size,0);
  console.log(JSON.stringify({ok:true,kernel:'openclaw',modelChangedDuringTask:true,backgroundCompleted:true,toolCallsAfterReload:calls,resultReturnedToMain:true,modelRequests:fake.requests.length}));

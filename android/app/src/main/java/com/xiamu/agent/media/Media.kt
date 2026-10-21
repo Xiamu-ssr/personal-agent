@@ -16,6 +16,7 @@ import android.util.LruCache
 import androidx.compose.runtime.mutableStateOf
 import com.xiamu.agent.Api
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -121,35 +122,34 @@ suspend fun compressImage(ctx: Context, uri: Uri, maxEdge: Int = 1600): ByteArra
 
 /** Authenticated thumbnails for chat bubbles; small in-memory cache. */
 object Images {
+    private val scope=kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()+Dispatchers.IO)
+    private val flights=java.util.concurrent.ConcurrentHashMap<String,kotlinx.coroutines.Deferred<Bitmap?>>()
     private val cache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
-    fun cached(path: String, maxEdge: Int): Bitmap? = cache.get("$path@$maxEdge")
-    fun clear() = cache.evictAll()
+    private fun key(path:String,maxEdge:Int)=Api.accountIdentity()+":"+path+"@"+maxEdge
+    fun cached(path: String, maxEdge: Int): Bitmap? = cache.get(key(path,maxEdge))
+    fun clear() {cache.evictAll();flights.values.forEach{it.cancel()};flights.clear()}
 
     suspend fun load(path: String, maxEdge: Int): Bitmap? {
         cached(path, maxEdge)?.let { return it }
-        val bytes = try {
-            when {
-                path.startsWith("data/") -> Api.bytes(path)
-                path.startsWith("/api/") -> Api.pathBytes(path)
-                path.startsWith("https://") || path.startsWith("http://") -> withContext(Dispatchers.IO) {
-                    Api.http.newCall(Request.Builder().url(path).build()).execute().use { if(it.isSuccessful) it.body?.bytes() else null }
-                }
-                else -> null
-            }
-        } catch(e: kotlinx.coroutines.CancellationException) { throw e } catch(_: Exception) { null }
-        if(bytes==null || bytes.size>20*1024*1024) return null
-        return withContext(Dispatchers.Default) {
+        val key=key(path,maxEdge)
+        val request=runCatching{Api.resourceRequest(path)}.getOrNull() ?: return null
+        val job=flights.computeIfAbsent(key){scope.async {
+          val bytes=try{Api.resourceBytes(request)}catch(e:kotlinx.coroutines.CancellationException){throw e}catch(_:Exception){return@async null}
+          withContext(Dispatchers.Default) {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             var sample = 1
             while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxEdge) sample *= 2
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-        }?.also { cache.put("$path@$maxEdge", it) }
+          }?.also{cache.put(key,it)}
+        }}
+        try{return job.await()}finally{if(job.isCompleted)flights.remove(key,job)}
     }
 }
+
 
 /** One voice note plays at a time. */
 object VoicePlayer {

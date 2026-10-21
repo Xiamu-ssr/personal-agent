@@ -6,11 +6,10 @@ import SwiftUI
 enum MediaPresentation {
     case image, video, audio, file
     static func forItem(_ item: MediaItem) -> MediaPresentation {
-        let ext = (item.path as NSString).pathExtension.lowercased()
         switch item.kind {
         case .image: return .image
-        case .video: return ext == "webm" ? .file : .video
-        case .audio: return ["ogg", "opus"].contains(ext) ? .file : .audio
+        case .video: return .video
+        case .audio: return .audio
         case .file: return .file
         }
     }

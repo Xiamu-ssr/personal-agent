@@ -126,3 +126,32 @@ struct Artifact:Identifiable {
         thumbnail=r["thumbnail"] as? String; files=MediaItem.parse(r["files"])
     }
 }
+
+@Observable final class LibraryStore {
+    static let shared=LibraryStore()
+    var artifacts:[Artifact]=[]
+    var media:[MediaItem]=[]
+    var error=""
+    var loading=false
+    @ObservationIgnored private var account=""
+    @ObservationIgnored private var version = -1
+    @ObservationIgnored private var loadedAt=Date.distantPast
+    @ObservationIgnored private var requestedVersion=0
+    @ObservationIgnored private var reloadRequested=false
+    func reset(){artifacts=[];media=[];error="";account="";version = -1;loadedAt = .distantPast}
+    @MainActor func load(version:Int) async {
+        let identity=ResourceCache.identity()
+        if account != identity {reset();account=identity}
+        requestedVersion=version
+        guard !loading else{reloadRequested=true;return}
+        let force=self.version != version
+        if !force,Date().timeIntervalSince(loadedAt)<45{return}
+        loading=true;defer{loading=false;if reloadRequested{reloadRequested=false;let next=requestedVersion;Task{await self.load(version:next)}}}
+        do {
+            let bytes=try await ResourceCache.shared.value("/api/library",force:force)
+            guard identity==ResourceCache.identity(),let r=try JSONSerialization.jsonObject(with:bytes) as? [String:Any] else{return}
+            artifacts=(r["artifacts"] as? [[String:Any]] ?? []).compactMap(Artifact.init);media=MediaItem.parse(r["media"])
+            self.version=version;loadedAt=Date();error=""
+        }catch is CancellationError{}catch{self.error=error.localizedDescription}
+    }
+}

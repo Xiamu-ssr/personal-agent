@@ -7,6 +7,7 @@ import { inside, localFile, resolvedPath } from "./local-paths.mjs";
 import { fileType } from "./media.mjs";
 import { artifactRevision } from "./page-screenshot.mjs";
 import { cronFields, nextCron } from "./cron.mjs";
+import { LIBRARY_PATHS, goalSchema } from './content-contract.mjs';
 
 const digest = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 20);
 const dirs = (root, rel) => {
@@ -39,7 +40,7 @@ export function readGoal(root, name, { done = false, timezone = "Asia/Shanghai",
   let raw;
   try { raw = fs.readFileSync(localFile(root, rel, "data/goals"), "utf8"); } catch { throw problem("没有这个目标", 404); }
   const { meta, body } = frontmatter(raw), progress = Number(meta.progress);
-  if (!meta.title || !["未开始", "进行中", "等待条件", "待用户反馈", "已完成", "暂停", "取消"].includes(meta.status) || !Number.isFinite(progress) || progress < 0 || progress > 100 || meta.due && !/^\d{4}-\d{2}-\d{2}$/.test(meta.due)) throw problem("目标 frontmatter 不完整或字段不正确");
+  if (!goalSchema.safeParse({name,...meta,body,progress}).success) throw problem("目标 frontmatter 不完整或字段不正确");
   if (meta.cadence) cronFields(meta.cadence);
   return { name, path: rel, ...meta, progress, body, nextCheckin: !done && ["进行中", "等待条件"].includes(meta.status) && meta.cadence ? nextCron(meta.cadence, timezone, now) : null };
 }
@@ -63,6 +64,33 @@ export class Content {
   constructor({ root, bus = { emit() {} }, timezone = "Asia/Shanghai", clock = () => new Date() }) {
     Object.assign(this, { root, bus, timezone, clock });
     this.feedIndex = new Map(this.feed({ days: 31 }).items.map((i) => [i.path, i.title]));
+    this.watchers=[];this.libraryCache=null;
+  }
+  watch() {
+    if(this.watchers.length)return;
+    const events={'data/library':'library_updated','data/ideas':'ideas_updated','data/goals':'goals_updated','data/feed':'feed_updated','memory':'memory_updated'};
+    this.changeTimers=new Map();
+    for(const [rel,event] of Object.entries(events)) {
+      const dir=path.join(this.root,rel);if(!fs.existsSync(dir))continue;
+      const watcher=fs.watch(dir,{recursive:true},()=>{
+        if(rel==='data/library')this.libraryCache=null;
+        clearTimeout(this.changeTimers.get(rel));
+        const timer=setTimeout(()=>{this.changeTimers.delete(rel);if(rel==='data/feed')this.discoverFeed();this.bus.emit({t:event});},250);timer.unref();this.changeTimers.set(rel,timer);
+      });watcher.unref();this.watchers.push(watcher);
+    }
+  }
+  close(){for(const w of this.watchers)w.close();this.watchers=[];for(const t of this.changeTimers?.values()||[])clearTimeout(t);}
+  publish(rel) {
+    let value,type;
+    if(rel.startsWith('data/feed/')&&rel!=='data/feed/动态说明.md'){value=this.post(rel);type='feed';this.discoverFeed();}
+    else if(rel==='data/ideas/点子.md') {
+      const raw=this.read(rel);value=parseIdeas(raw);type='ideas';
+      if(/\*\*/.test(raw)&&!value.groups.length)throw problem('点子未识别：每组用 ## 标题，每条建议下面缩进 > 采用时的请求');
+    } else if(/^data\/goals\/[^/]+\.md$/.test(rel)){value=this.goal(path.basename(rel,'.md'));type='goals';}
+    else if(Object.values(LIBRARY_PATHS).some(dir=>rel.startsWith(dir+'/'))) {localFile(this.root,rel,'data/library');this.libraryCache=null;value={path:rel};type='library';}
+    else if(rel==='data/feed/动态说明.md'){value={path:rel};type='feed';}
+    else throw problem('发布路径须属于动态、点子、目标或资源库');
+    this.bus.emit({t:type+'_updated',path:rel});return {published:true,type,...(type==='ideas'?{revision:value.revision,groups:value.groups.length}:{path:rel})};
   }
   read(rel) { this.allowed(rel); return fs.readFileSync(localFile(this.root, rel, ""), "utf8"); }
   allowed(rel) { if(typeof rel!=="string" || !/^(?:data\/|memory\/|SOUL\.md$|USER\.md$|MEMORY\.md$)/.test(rel) || /[\\\x00-\x1f]/.test(rel) || rel.split("/").includes("..")) throw problem("文件路径不正确"); }
@@ -74,16 +102,18 @@ export class Content {
     const tmp = `${file}.${crypto.randomUUID()}.tmp`;
     fs.writeFileSync(tmp, text, { mode: 0o600 });
     fs.renameSync(tmp, file);
+    if(rel.startsWith('data/library/'))this.libraryCache=null;
   }
   feed({ before, days = 7 } = {}) {
     if (!Number.isInteger(days) || days < 1 || days > 31 || before !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(before)) throw problem("days 要 1–31，before 要 YYYY-MM-DD");
     const all = dirs(this.root, "data/feed").filter((e) => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name) && (!before || e.name < before)).map((e) => e.name).sort().reverse();
-    const dates = all.slice(0, days), items = [];
+    const dates = all.slice(0, days), items = [], errors=[];
     for (const date of dates) for (const entry of dirs(this.root, `data/feed/${date}`)) {
       if (!entry.isFile() || !/^\d{4}-.+\.md$/.test(entry.name)) continue;
-      try { items.push(this.post(`data/feed/${date}/${entry.name}`)); } catch {}
+      const rel=`data/feed/${date}/${entry.name}`;
+      try { items.push(this.post(rel)); } catch(e) {errors.push({path:rel,error:e.message});}
     }
-    return { days: dates, items: items.sort((a, b) => b.path.localeCompare(a.path)), next: all.length > dates.length ? dates.at(-1) : null };
+    return { days: dates, items: items.sort((a, b) => b.path.localeCompare(a.path)), next: all.length > dates.length ? dates.at(-1) : null,errors };
   }
   post(rel) {
     if (typeof rel !== "string" || !/^data\/feed\/\d{4}-\d{2}-\d{2}\/\d{4}-[^/\\]+\.md$/.test(rel)) throw problem("没有这条动态", 404);
@@ -171,43 +201,41 @@ export class Content {
     return { items, errors };
   }
   library() {
+    if(this.watchers.length&&this.libraryCache)return this.libraryCache;
     const artifacts = [], media = [];
+    const entry = file => {
+      const st = fs.statSync(localFile(this.root, file, "data/library"));
+      return {path:file,name:path.basename(file),size:st.size,mtime:st.mtimeMs,revision:digest(`${file}:${st.size}:${st.mtimeMs}:${st.ctimeMs}`),...fileType(file)};
+    };
     const files = (rel, out) => {
       for (const e of dirs(this.root, rel)) {
         const file = `${rel}/${e.name}`;
         if (e.isDirectory()) files(file, out);
         else if (e.isFile()) {
-          const st = fs.statSync(localFile(this.root, file, "data/library"));
-          out.push({ path: file, name: e.name, size: st.size, mtime: st.mtimeMs, ...fileType(file) });
+          out.push(entry(file));
         }
       }
     };
-    for (const e of dirs(this.root, "data/library/artifacts")) if (e.isDirectory()) {
-      const rel = `data/library/artifacts/${e.name}`, contents = [];
-      files(rel, contents);
-      const page = contents.find((f) => f.path === `${rel}/index.html`) || contents.find(f=>/\.html?$/i.test(f.path));
-      const document = contents.find((f) => f.path === `${rel}/index.md`) || contents[0];
-      artifacts.push({ name: e.name, directory: rel, path: page?.path || document?.path || rel, kind: page ? "page" : "document", mtime: Math.max(fs.statSync(path.join(this.root, rel)).mtimeMs, ...contents.map((f) => f.mtime)), files: contents,
-        ...(page && { thumbnail: `/api/library/thumbnail?path=${encodeURIComponent(page.path)}&rev=${artifactRevision(this.root,page.path)}` }) });
-    } else if(e.isFile()) {
-      const rel=`data/library/artifacts/${e.name}`,file=localFile(this.root,rel,"data/library/artifacts"),st=fs.statSync(file),type=fileType(file);
-      const item={path:rel,name:e.name,size:st.size,mtime:st.mtimeMs,...type};
-      if(type.kind!=="file"){media.push(item);continue;}
-      if(!/\.(?:html?|md|markdown|pdf|txt|csv|json|docx|xlsx|pptx|zip)$/i.test(rel))continue;
-      const page=/\.html?$/i.test(rel);
-      artifacts.push({name:e.name.replace(/\.[^.]+$/,""),path:rel,kind:page?"page":"document",mtime:st.mtimeMs,files:[item],
-        ...(page&&{thumbnail:`/api/library/thumbnail?path=${encodeURIComponent(rel)}&rev=${artifactRevision(this.root,rel)}`})});
+    for(const [category,kind] of [['sites','site'],['documents','document']])for(const e of dirs(this.root,LIBRARY_PATHS[category])) {
+      const rel=`${LIBRARY_PATHS[category]}/${e.name}`,contents=[];
+      if(e.isDirectory())files(rel,contents);else if(e.isFile())contents.push(entry(rel));
+      const own=contents;
+      const main=e.isDirectory()?(own.find(f=>f.path===rel+'/index.html')||own.find(f=>f.path===rel+'/index.md')||own.find(f=>/\.(?:html?|md|markdown|pdf|docx|xlsx|pptx)$/i.test(f.path))||own[0]):own[0];
+      if(!main||!e.isDirectory()&&!/\.(?:html?|md|markdown|pdf|txt|csv|json|docx|xlsx|pptx|zip)$/i.test(rel))continue;
+      const revision=digest(own.map(f=>f.revision).join(':'));
+      artifacts.push({name:e.isDirectory()?e.name:e.name.replace(/\.[^.]+$/,''),path:main.path,kind,revision,mtime:Math.max(...own.map(f=>f.mtime)),files:own,
+        ...(/\.html?$/i.test(main.path)&&{thumbnail:`/api/library/thumbnail?path=${encodeURIComponent(main.path)}&rev=${artifactRevision(this.root,main.path)}`})});
     }
-    files("data/library/media", media);
-    return { artifacts: artifacts.sort((a, b) => b.mtime - a.mtime), media: media.sort((a, b) => b.mtime - a.mtime) };
+    files(LIBRARY_PATHS.media, media);
+    const value={artifacts:artifacts.sort((a,b)=>b.mtime-a.mtime),media:media.sort((a,b)=>b.mtime-a.mtime)};
+    value.revision=digest(JSON.stringify(value));this.libraryCache=value;return value;
   }
   putGoal({name,title,status="未开始",progress=0,body="",domain="",cadence="",due=""}) {
-    if(typeof name!=="string" || !name || /[\\/\x00-\x1f]/.test(name)||name===".."||name===".")throw problem("目标名不正确");
-    if(typeof body!=="string"||body.length>40000)throw problem("目标正文过长");
+    const checked=goalSchema.safeParse({name,title,status,progress,body,domain,cadence,due});
+    if(!checked.success)throw problem(checked.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; '));
     const meta={title,status,progress,domain,cadence,due};
     const raw="---\n"+Object.entries(meta).filter(([,v])=>v!=="").map(([k,v])=>`${k}: ${JSON.stringify(v)}`).join("\n")+"\n---\n"+body+"\n";
     // Validate before replacing an existing goal.
-    if(!title || !["未开始","进行中","等待条件","待用户反馈","已完成","暂停","取消"].includes(status) || !Number.isFinite(progress)||progress<0||progress>100)throw problem("目标状态或进展不正确");
     if(cadence)cronFields(cadence);
     this.write(`data/goals/${name}.md`,raw);this.bus.emit({t:"goals_updated"});return this.goal(name);
   }

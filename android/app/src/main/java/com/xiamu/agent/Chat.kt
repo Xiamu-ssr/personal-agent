@@ -17,6 +17,7 @@ object Chat {
     val agentName=mutableStateOf("豆豆")
     val error=mutableStateOf("")
     val filesVersion=mutableIntStateOf(0)
+    val libraryVersion=mutableIntStateOf(0)
     val activityVersion=mutableIntStateOf(0)
     val settingsVersion=mutableIntStateOf(0)
     val activityUpdates=mutableStateMapOf<String,ActivityTitleUpdate>()
@@ -100,7 +101,7 @@ object Chat {
                 // Re-read canonical activity titles after events missed offline.
                 activityUpdates.clear(); activityVersion.intValue++
                 state.hello(m.optJSONArray("history").objects().mapNotNull(::historyItem),m.optBoolean("busy"),AvatarStatus.from(m.optJSONObject("avatar")))
-                connected.value=true; error.value=""; refresh(); filesVersion.intValue++
+                connected.value=true; error.value=""; refresh(); filesVersion.intValue++;libraryVersion.intValue++
             }
             "user" -> { (historyItem(m) as? ChatItem.User)?.let(state::user); revision++ }
             "say" -> { (historyItem(m) as? ChatItem.Assistant)?.let(state::say); revision++ }
@@ -133,6 +134,9 @@ object Chat {
             }
             "feed_new" -> { inbox.receive(m.optJSONArray("items").objects().map { it.optString("path") }); persistFeed(); feedVersion.intValue++ }
             "feed_settings" -> feedSettingsVersion.intValue++
+            "feed_updated" -> {feedVersion.intValue++;com.xiamu.agent.media.Images.clear()}
+            "library_updated" -> {libraryVersion.intValue++;com.xiamu.agent.media.Images.clear()}
+            "ideas_updated","goals_updated" -> filesVersion.intValue++
             "settings" -> settingsVersion.intValue++
             "files_changed", "memory_updated", "connectors_changed", "devices" -> filesVersion.intValue++
             "error" -> error.value=m.optString("error").ifBlank { "请求失败，请重试" }

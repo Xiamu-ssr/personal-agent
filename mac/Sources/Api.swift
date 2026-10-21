@@ -60,7 +60,7 @@ enum Api {
         return d
     }
 
-    private static func validate(_ d: Data, _ resp: URLResponse) throws {
+    static func validate(_ d: Data, _ resp: URLResponse) throws {
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(code) else {
             let msg = (try? JSONSerialization.jsonObject(with: d) as? [String: Any])?["error"] as? String
@@ -154,27 +154,10 @@ enum Api {
         String(decoding: try await data(filePath(dataPath)), as: UTF8.self)
     }
 
-    private static let cache: NSCache<NSString, NSData> = {
-        let c = NSCache<NSString, NSData>()
-        c.totalCostLimit = 64 << 20
-        return c
-    }()
-
-    /// Bytes of a data/ file, kept in memory (thumbnails, voice notes).
-    static func clearCache() { cache.removeAllObjects() }
+    static func clearCache() {Task{await ResourceCache.shared.invalidate()} }
 
     static func cached(_ dataPath: String) async throws -> Data {
-        if let d = cache.object(forKey: dataPath as NSString) { return d as Data }
-        let d:Data
-        if dataPath.hasPrefix("/api/") {d=try await data(dataPath)}
-        else if let url=URL(string:dataPath),["https","http"].contains(url.scheme?.lowercased() ?? "") {
-            // An external image request never carries the cloud's bearer token.
-            let (bytes,response)=try await session.data(from:url)
-            guard (response as? HTTPURLResponse)?.statusCode==200,bytes.count<=20*1024*1024 else {throw ApiError(code:0,message:"图片加载失败")}
-            d=bytes
-        } else {d=try await data(filePath(dataPath))}
-        cache.setObject(d as NSData, forKey: dataPath as NSString, cost: d.count)
-        return d
+        try await ResourceCache.shared.value(dataPath)
     }
 
     static func wsRequest(_ role: String) -> URLRequest? {
@@ -207,7 +190,7 @@ enum Api {
         defer { try? FileManager.default.removeItem(at: temporary) }
         try validate(Data(), response)
         try Task.checkCancellation()
-        let key = SHA256.hash(data: Data((server + "/" + dataPath).utf8)).map { String(format: "%02x", $0) }.joined()
+        let key = ResourceCache.hash(ResourceCache.identity(server:server,token:token)+"/"+dataPath)
         let dir = (Prefs.isolatedRoot ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0])
             .appendingPathComponent("com.xiamu.agent.mac/media", isDirectory: true).appendingPathComponent(key, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

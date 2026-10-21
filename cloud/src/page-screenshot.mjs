@@ -16,24 +16,24 @@ let previewBytes=0;
 const CACHE_BYTES=16*1024*1024;
 export function artifactRevision(root,rel) {
   const target=screenshotTarget(root,rel),parts=target.rel.split("/");
-  const directory=parts.length>4?parts.slice(0,4).join("/"):"data/library/artifacts";
+  const directory=parts.length>4?parts.slice(0,4).join("/"):path.posix.dirname(target.rel);
   const entries=[];
   const visit=dir=>{for(const e of fs.readdirSync(path.join(root,dir),{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))) {
     if(e.isSymbolicLink()||e.name.startsWith("."))continue;
     const file=dir+"/"+e.name;
     if(e.isDirectory())visit(file);
-    else if(e.isFile()){const s=fs.statSync(localFile(root,file,"data/library/artifacts"));entries.push([file,s.size,s.mtimeMs,s.ctimeMs]);}
+    else if(e.isFile()){const s=fs.statSync(localFile(root,file,"data/library"));entries.push([file,s.size,s.mtimeMs,s.ctimeMs]);}
   }};
   visit(directory);
   return crypto.createHash("sha256").update(JSON.stringify(["preview-v2",target.rel,entries])).digest("hex").slice(0,24);
 }
 export function screenshotTarget(root,rel) {
-  if (typeof rel !== "string" || !/^data\/library\/artifacts\/[^/]+(?:\/|$)/.test(rel)) throw new Error("页面截图只允许 data/library/artifacts/ 下的本地页面");
+  if (typeof rel !== "string" || !/^data\/library\/(?:sites|documents)\/[^/]+(?:\/|$)/.test(rel)) throw new Error("页面截图只允许资源库站点或文档中的本地 HTML");
   if (rel.split(/[\\/]/).includes("..") || path.isAbsolute(rel)) throw new Error("页面截图路径不能越出构件目录");
   const candidate = path.resolve(root, rel);
   if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) rel = path.join(rel, "index.html");
   if (!/\.html?$/.test(rel)) throw new Error("页面截图请指定 HTML 页面或含 index.html 的目录");
-  return { file: localFile(root, rel, "data/library/artifacts"), rel };
+  return { file: localFile(root, rel, "data/library"), rel };
 }
 
 export function browserExecutable() {
@@ -54,8 +54,14 @@ export class PageScreenshot {
     const cached=previews.get(key);
     if(cached){previews.delete(key);previews.set(key,cached);return cached;}
     if(pendingPreviews.has(key))return pendingPreviews.get(key);
+    const disk=path.join(this.root,'system/library-previews',crypto.createHash('sha256').update(key).digest('hex')+'.jpg');
+    try {const data=fs.readFileSync(disk);if(data.length&&data.length<=MAX_BYTES)return {data,revision};}catch{}
     const job=this.screenshot({path:rel}).then(image=>{
+      image.revision=revision;
       if(artifactRevision(this.root,rel)===revision){
+        fs.mkdirSync(path.dirname(disk),{recursive:true,mode:0o700});fs.writeFileSync(disk,image.data,{mode:0o600});
+        const old=fs.readdirSync(path.dirname(disk)).map(name=>({file:path.join(path.dirname(disk),name),stat:fs.statSync(path.join(path.dirname(disk),name))})).sort((a,b)=>b.stat.mtimeMs-a.stat.mtimeMs);
+        let bytes=0;for(const item of old){bytes+=item.stat.size;if(bytes>128*1024*1024)fs.rmSync(item.file,{force:true});}
         previews.set(key,image);previewBytes+=image.data.length;
         while(previewBytes>CACHE_BYTES&&previews.size){const k=previews.keys().next().value;previewBytes-=previews.get(k).data.length;previews.delete(k);}
       }
@@ -63,7 +69,7 @@ export class PageScreenshot {
     }).finally(()=>pendingPreviews.delete(key));
     pendingPreviews.set(key,job);return job;
   }
-  async render({path:rel}) {
+  async render({path:rel,exportImage=false}) {
     const target=screenshotTarget(this.root,rel);
     const executablePath=this.executablePath??browserExecutable();
     if(!this.browserProvider&&(!executablePath||!fs.existsSync(executablePath)))throw new Error("页面截图暂不可用：浏览器尚未安装，请管理员运行 install-screenshot.sh");
@@ -88,9 +94,10 @@ export class PageScreenshot {
         browser=await chromium.connect(browserServer.wsEndpoint());
       }
       if(timedOut){void killBrowser();throw new Error("页面截图超时");}
-      context=await browser.newContext({viewport:{width:WIDTH,height:SCREEN},deviceScaleFactor:1,serviceWorkers:"block",acceptDownloads:false});
+      const width=exportImage?1280:WIDTH;
+      context=await browser.newContext({viewport:{width,height:SCREEN},deviceScaleFactor:1,serviceWorkers:"block",acceptDownloads:false});
       await context.routeWebSocket("**/*",(socket)=>socket.close());
-      const siteRoot=path.join(this.root,target.rel.split("/").length>4?target.rel.split("/").slice(0,4).join("/"):"data/library/artifacts");
+      const siteRoot=path.join(this.root,target.rel.split("/").length>4?target.rel.split("/").slice(0,4).join("/"):path.posix.dirname(target.rel));
       // All requests are handled here; there is never a route.continue() to HTTP.
       // A synthetic origin maps relative site resources to local files without granting file:// access to system/.
       const localOrigin="https://page.localhost";
@@ -100,8 +107,8 @@ export class PageScreenshot {
           const url=new URL(route.request().url());
           if(url.protocol==="data:")return await route.continue();
           let file;
-          if(siteRoot&&url.origin===localOrigin)file=localFile(this.root,decodeURIComponent(url.pathname).replace(/^\//,""),"data/library/artifacts");
-          else if(siteRoot&&url.protocol==="file:")file=localFile(this.root,path.relative(this.root,fileURLToPath(url)),"data/library/artifacts");
+          if(siteRoot&&url.origin===localOrigin)file=localFile(this.root,decodeURIComponent(url.pathname).replace(/^\//,""),"data/library");
+          else if(siteRoot&&url.protocol==="file:")file=localFile(this.root,path.relative(this.root,fileURLToPath(url)),"data/library");
           else return await route.abort();
           if(!inside(fs.realpathSync(file),fs.realpathSync(siteRoot))||fs.statSync(file).size>5*1024*1024)return await route.abort();
           const body=file===target.file&&mainHtml!==undefined?mainHtml:fs.readFileSync(file);
@@ -119,18 +126,21 @@ export class PageScreenshot {
       mainHtml=fs.readFileSync(target.file,"utf8");
       await page.goto(localOrigin+"/"+target.rel.split("/").map(encodeURIComponent).join("/"),{waitUntil:"load"});
       await page.evaluate(()=>document.fonts.ready);
-      height=Math.min(SCREEN*3,Math.max(SCREEN,Math.ceil(await page.evaluate(()=>document.documentElement.scrollHeight))));
-      await page.setViewportSize({width:WIDTH,height});
+      const fullHeight=Math.max(SCREEN,Math.ceil(await page.evaluate(()=>document.documentElement.scrollHeight)));
+      if(exportImage&&fullHeight>32768)throw new Error('页面过长，请拆成多张图片导出');
+      height=exportImage?fullHeight:Math.min(SCREEN*3,fullHeight);
+      await page.setViewportSize({width,height});
       await page.evaluate(()=>new Promise((resolve)=> {
         const timer=setTimeout(resolve,160);
         requestAnimationFrame(()=>requestAnimationFrame(()=>{clearTimeout(timer);resolve();}));
       }));
-      captures.push({input:await page.screenshot({type:"jpeg",quality:85,animations:"disabled",clip:{x:0,y:0,width:WIDTH,height}}),top:0,left:0});
+      captures.push({input:await page.screenshot({type:"png",animations:"disabled",clip:{x:0,y:0,width,height}}),top:0,left:0});
       await context.close();context=null;
       if(browserServer){await browser.close();await browserServer.close();browserServer=null;}
       browser=null;
       sharp.cache(false);sharp.concurrency(1);
-      const composite=await sharp({create:{width:WIDTH,height,channels:3,background:"#ffffff"}}).composite(captures).png().toBuffer();
+      const composite=await sharp({create:{width,height,channels:3,background:"#ffffff"}}).composite(captures).png().toBuffer();
+      if(exportImage){if(composite.length>20*1024*1024)throw new Error('导出图片超过 20MB，请分成多张');return {data:composite,width,height,path:target.rel,mime:'image/png'};}
       let data;
       for(const quality of [80,65,50,35,22]) {data=await sharp(composite).jpeg({quality,mozjpeg:true}).toBuffer();if(data.length<=MAX_BYTES)break;}
       if(data.length>MAX_BYTES)data=await sharp(composite).resize({width:300}).jpeg({quality:25,mozjpeg:true}).toBuffer();
@@ -166,14 +176,14 @@ export class PageScreenshot {
       catch(e){return {isError:true,content:[{type:"text",text:e.message}]};}
     }),defineTool("export_image","将本地 HTML 导出为图片并保存到资源库。返回文件 path；随后用 doudou_say 的 image 卡片交付，导出本身不会发送消息。",{path:z.string().max(1024)},async(args)=>{
       try {
-        const image=await this.screenshot(args),hash=crypto.createHash("sha256").update(image.data).digest("hex").slice(0,20);
-        const rel=`data/library/media/exports/${hash}.jpg`,dir=path.join(this.root,"data/library/media/exports");
+        const image=await this.screenshot({...args,exportImage:true}),hash=crypto.createHash("sha256").update(image.data).digest("hex").slice(0,20);
+        const rel=`data/library/media/exports/${hash}.png`,dir=path.join(this.root,"data/library/media/exports");
         fs.mkdirSync(dir,{recursive:true,mode:0o700});
         if(!inside(fs.realpathSync(dir),fs.realpathSync(path.join(this.root,"data/library/media"))))throw new Error("导出目录不正确");
         const file=path.join(this.root,rel);
         try{fs.writeFileSync(file,image.data,{mode:0o600,flag:"wx"});}
         catch(e){if(e.code!=="EEXIST")throw e;localFile(this.root,rel,"data/library/media");if(!fs.readFileSync(file).equals(image.data))throw new Error("导出文件冲突");}
-        return {content:[{type:"text",text:JSON.stringify({path:rel,width:image.width,height:image.height,mime:"image/jpeg",size:image.data.length,delivered:false,next:{tool:"doudou_say",cards:[{type:"image",path:rel}]}})}]};
+        return {content:[{type:"text",text:JSON.stringify({path:rel,width:image.width,height:image.height,mime:"image/png",size:image.data.length,delivered:false,next:{tool:"doudou_say",cards:[{type:"image",path:rel}]}})}]};
       }catch(e){return {isError:true,content:[{type:"text",text:e.message}]};}
     })];
   }

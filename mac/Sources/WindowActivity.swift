@@ -77,22 +77,3 @@ struct ActiveProgress: View {
         }
     }
 }
-
-/// Coalesce incoming scroll requests without a layout preference or an animated scroll transaction.
-@Observable
-final class BottomFollower {
-    var revision = 0
-    @ObservationIgnored private var pending: DispatchWorkItem?
-    func request() {
-        guard pending == nil else { return }
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.pending = nil
-            self.revision += 1
-        }
-        pending = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
-    }
-    func cancel() { pending?.cancel(); pending = nil }
-    deinit { pending?.cancel() }
-}

@@ -21,7 +21,7 @@ const put=(r,f,s)=>{fs.mkdirSync(path.dirname(path.join(r,f)),{recursive:true});
 test('offline migration verifies full backup, preserves private config and content, flattens native memory, never imports sessions',()=>{
  const root=fs.mkdtempSync(path.join(testRoot,'migration-')),backup=path.join(testRoot,'full-v1-backup.tar.gz');
  put(root,'data/memory/profile/总档.md','用户偏好 · 原件');put(root,'data/memory/life/住房.md','事实 · 来源时间');put(root,'data/soul/角色.md','名字：豆豆');
- put(root,'.claude/skills/example/SKILL.md','原有方法');put(root,'data/library/artifacts/result/index.html','已交付');
+ put(root,'.claude/skills/example/SKILL.md','原有方法');put(root,'data/library/sites/result/index.html','已交付');
  put(root,'system/browser/profile/Cookies','旧浏览器身份');put(root,'system/sessions/history.jsonl','旧会话');put(root,'system/chat.jsonl','旧聊天');put(root,'system/connectors/private/accounts.json','{"accounts":[]}');
  put(root,'system/app-settings.json',JSON.stringify({model:{provider:'zenmux',id:'anthropic/claude-haiku-5.5'},permissionMode:'auto'}));
  put(root,'data/goals/运动.md','---\ntitle: 运动\nstatus: 追踪中\nprogress: 40\ncadence: "0 8 * * *"\n---\n下一步');
@@ -30,7 +30,7 @@ test('offline migration verifies full backup, preserves private config and conte
  assert.ok(fs.readFileSync(path.join(root,'memory/memory-life-住房.md'),'utf8').includes('事实 · 来源时间'));
  assert.equal(new Content({root}).goal('运动').status,'进行中');
  assert.equal(fs.readFileSync(path.join(root,'skills/example/SKILL.md'),'utf8'),'原有方法');
- assert.equal(fs.readFileSync(path.join(root,'data/library/artifacts/result/index.html'),'utf8'),'已交付');
+ assert.equal(fs.readFileSync(path.join(root,'data/library/sites/result/index.html'),'utf8'),'已交付');
  assert.equal(fs.existsSync(path.join(root,'system/sessions')),false);assert.equal(fs.existsSync(path.join(root,'system/chat.jsonl')),false);assert.equal(fs.existsSync(path.join(root,'data/memory')),false);
  assert.ok(execFileSync('tar',['-tzf',backup]).toString().includes('./system/sessions/history.jsonl'));
  assert.equal(readJson(path.join(root,'system/app-settings.json')).permissionMode,undefined);
@@ -51,12 +51,12 @@ test('goal delivery and acceptance remain separate states',()=>{
  assert.throws(()=>c.putGoal({name:'../escape',title:'x'}));assert.throws(()=>c.putGoal({name:'测试',title:'x',status:'完成'}));
 });
 function product(t,runtime,definitions=[]){initialize(config.root);fs.rmSync(config.chatLog,{force:true});const events=[],bus={emit:e=>events.push(e),on(){}};const connectors=new ConnectorManager({root:config.root,definitions}),h=new Harness({hub:new DeviceHub(),bus,connectors,runtime});t.after(()=>h.close());return {h,events,bus,connectors};}
-test('one main session forwards busy input, suppresses quiet heartbeat, brings background work back into context',async t=>{
+test('one main session forwards busy input, suppresses quiet heartbeat and keeps isolated output out of the prompt',async t=>{
  const calls=[],runtime={ready:true,respond:async(input,opts)=>{calls.push({input,...opts});await new Promise(r=>setTimeout(r,5));return {text:input.includes('静默')?'HEARTBEAT_OK':'执行完成'};},close:async()=>{},reload:async()=>{}};
  const {h}=product(t,runtime);await h.send('第一条');await h.send('补充一条');await h.waitForMain();
  assert.equal(calls.length,2);assert.ok(calls.every(c=>c.sessionKey==='agent:main:main'));assert.equal(h.busy,false);
  const count=h.speech.history().length;await h.runMain('静默');assert.equal(h.speech.history().length,count);
- await h.runIsolated('独立检索','检索结果',{mainContext:true});assert.notEqual(calls.at(-1).sessionKey,'agent:main:main');assert.match(calls.at(-1).input,/近期主聊天快照/);assert.match(calls.at(-1).input,/第一条/);await h.runMain('继续');assert.ok(calls.at(-1).input.includes('[已完成的后台工作'));assert.equal(h.pending.length,0);
+ await h.runIsolated('独立检索','检索结果',{mainContext:true});assert.notEqual(calls.at(-1).sessionKey,'agent:main:main');assert.match(calls.at(-1).input,/近期主聊天快照/);assert.match(calls.at(-1).input,/第一条/);await h.runMain('继续');assert.equal(calls.at(-1).input,'继续');assert.equal(h.pending,undefined);
 });
 test('a user followup reaches the running session before its tool work finishes and appears in that activity',async t=>{
  let finish;const calls=[],first=new Promise(resolve=>finish=resolve);
@@ -139,6 +139,12 @@ test('new HTTP protocol is mandatory and internal tools cannot be reached throug
  assert.equal((await fetch(base+'/health')).status,200);
  assert.equal((await fetch(base+'/internal/call',{method:'POST',headers:{...headers,'X-Real-IP':'203.0.113.9'},body:'{}'})).status,403);
  const memory=await (await fetch(base+'/api/memory',{headers})).json();assert.equal(memory.kernel,'openclaw');assert.equal(memory.categories,undefined);
+ const library=await fetch(base+'/api/library',{headers}),etag=library.headers.get('etag');assert.ok(etag);assert.match(library.headers.get('vary'),/Authorization/);
+ assert.equal((await fetch(base+'/api/library',{headers:{...headers,'if-none-match':etag}})).status,304);
+ assert.equal((await fetch(base+'/api/library',{headers:{'X-Doudou-Protocol':'2','if-none-match':etag}})).status,401);
+ const rel='data/library/media/revalidation.txt';h.content.write(rel,'first');const resource=await fetch(base+'/files/'+rel,{headers}),fileTag=resource.headers.get('etag');assert.equal(await resource.text(),'first');
+ assert.equal((await fetch(base+'/files/'+rel,{headers:{...headers,'if-none-match':fileTag}})).status,304);
+ h.content.write(rel,'second');const updated=await fetch(base+'/files/'+rel,{headers:{...headers,'if-none-match':fileTag}});assert.equal(updated.status,200);assert.equal(await updated.text(),'second');assert.notEqual(updated.headers.get('etag'),fileTag);
 });
 test('live running activities keep the started timestamp required by both native apps',async t=>{
  let finish;

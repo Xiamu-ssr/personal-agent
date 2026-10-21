@@ -4,7 +4,7 @@ import org.json.JSONObject
 import java.time.OffsetDateTime
 
 enum class ActivityStatus(val wire: String, val label: String) {
-    Running("running", "进行中"), Done("done", "已完成"), Error("error", "出错"), Stopped("stopped", "已停止");
+    Running("running", "进行中"), Done("done", "已完成"), Error("error", "出错"),Unknown("unknown","待确认"), Stopped("stopped", "已停止");
     companion object { fun from(value: String) = entries.firstOrNull { it.wire == value } ?: error("活动状态无法识别") }
 }
 enum class ActivityItemKind(val wire: String) {

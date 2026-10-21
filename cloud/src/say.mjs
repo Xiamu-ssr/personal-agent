@@ -62,7 +62,7 @@ export class Speech {
     const entry = { role: "assistant", id, text: this.redact(value.text), ts: Date.now(),
       ...(activityId && { activityId }), ...(this.activityId && { chatType: "side" }), ...(error && { error: true }) };
     if (value.options?.length) entry.options = value.options.map((o, i) => ({ id: String(i), label: this.redact(o.label), reply: this.redact(o.reply ?? o.label) }));
-    if (value.cards?.length) entry.cards = value.cards.map(c=>c.path?{...c,...mediaFile(this.root,c.path,c.name)}:c).map((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, typeof v === "string" ? this.redact(v) : v])));
+    if (value.cards?.length) entry.cards = value.cards.map(c=>{if(!c.path)return c;const file=mediaFile(this.root,c.path,c.name);return {...c,...file,type:file.kind};}).map((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, typeof v === "string" ? this.redact(v) : v])));
     const media = [...nativeReplyMedia(this.root,nativeMedia),...replyMedia(this.root, entry.text)].filter((m,i,a)=>a.findIndex(n=>n.path===m.path)===i);
     if (media.length) entry.media = media;
     appendJsonl(this.log, entry);

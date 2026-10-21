@@ -173,15 +173,15 @@ test("files stream audio/video with MIME, full/open/suffix ranges, 416, HEAD and
 });
 
 test("files serve directory indexes and reject outside-data paths and symlink escapes", async (t) => {
-  const base = await serve(t), index = "data/library/artifacts/media-fixture/index.html";
+  const base = await serve(t), index = "data/library/sites/media-fixture/index.html";
   put(config.root, index, "<title>站点</title>");
   const outside = put(config.root, "workspace/media-http.txt", "private fixture");
   fs.symlinkSync(outside, path.join(config.data, "media-http-escape.txt"));
   const request = (p, options = {}) => fetch(base + p, { ...options, headers: auth });
-  const site = await request(fileUrl("data/library/artifacts/media-fixture"));
+  const site = await request(fileUrl("data/library/sites/media-fixture"));
   assert.equal(site.status, 200); assert.equal(site.headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(await site.text(), "<title>站点</title>");
-  const head = await request(fileUrl("data/library/artifacts/media-fixture"), { method: "HEAD" });
+  const head = await request(fileUrl("data/library/sites/media-fixture"), { method: "HEAD" });
   assert.equal(head.status, 200); assert.equal(head.headers.get("content-length"), String(Buffer.byteLength("<title>站点</title>")));
   assert.equal(await head.text(), "");
   for (const [route, status] of [[fileUrl("workspace/media-http.txt"), 400], ["/files/data%2F..%2Fworkspace%2Fmedia-http.txt", 400],

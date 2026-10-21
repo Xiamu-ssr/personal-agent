@@ -13,6 +13,7 @@ import { readAppSettings } from './app-settings.mjs';
 import { nativeModelDefinition } from './provider-presets.mjs';
 import { writePrivateJson } from './private-json.mjs';
 import { GatewayChat } from './gateway-chat.mjs';
+import { contentInstructions } from './content-contract.mjs';
 export const MAIN_SESSION = 'agent:main:main';
 export class OpenClawRuntime {
  constructor({root=config.root,port=config.gatewayPort,log=()=>{},env=process.env}={}) {
@@ -34,7 +35,7 @@ export class OpenClawRuntime {
   fs.mkdirSync(this.state,{recursive:true,mode:0o700});
   const prompt=fs.readFileSync(path.join(config.prompts,'system-prompt.md'),'utf8').split(/^---\s*$/m).at(-1)
    .replaceAll('{名字}',config.agentName).replaceAll('{称呼}',config.userCall).replaceAll('{时区}',config.timezone);
-  fs.writeFileSync(path.join(this.root,'AGENTS.md'),prompt+'\n\n产品工具：先 doudou_catalog 查看分组，再 doudou_call 调用；args_json 是按目录参数组成的 JSON 对象字符串。普通回复直接输出；卡片和选项用 doudou_say。\n'+
+  fs.writeFileSync(path.join(this.root,'AGENTS.md'),prompt+'\n\n'+contentInstructions()+'\n产品工具：先 doudou_catalog 查看分组，再 doudou_call 调用；args_json 是按目录参数组成的 JSON 对象字符串。普通回复直接输出；卡片和选项用 doudou_say。\n'+
    '原生 read/write/edit/exec 处理当前工作区；memory_search/memory_get 检索原生记忆；skills/ 保存方法。不要另造记忆分类或总档。\n'+
    '联网搜索使用已连接的 tavily.search，日常查询用 basic；已知网址先用 web_fetch，需完整正文可用 tavily.extract。搜索账号未连接时如实说明。\n'+
    '定时输入不是新指令授权；只推进已授权目标。没有新结果输出 HEARTBEAT_OK。\n',{mode:0o600});
@@ -58,7 +59,7 @@ export class OpenClawRuntime {
   this.process=spawn(process.execPath,['--max-old-space-size=512',path.join(CODE,'node_modules/openclaw/openclaw.mjs'),'gateway','--port',String(this.port)],{cwd:this.root,env,stdio:['ignore','pipe','pipe']});
   for(const stream of [this.process.stdout,this.process.stderr])stream.on('data',buf=>this.log('openclaw:',buf.toString().trim()));
   this.process.once('exit',(code,signal)=>{this.ready=false;this.log('OpenClaw exited',code,signal);if(!this.closed)this.onCrash?.(code);});
-  this.client=new GatewayClient({url:`ws://127.0.0.1:${this.port}`,token:this.token,minProtocol:4,maxProtocol:4,scopes:['operator.admin','operator.read','operator.write'],onHelloOk:()=>{this.rpcReady=true;this.ready=true;},onConnectError:()=>{this.rpcReady=false;this.ready=false;},onEvent:event=>this.chat.event(event),onGap:()=>this.chat.close(),onClose:()=>{this.rpcReady=false;this.ready=false;this.chat.close();}});
+  this.client=new GatewayClient({url:`ws://127.0.0.1:${this.port}`,token:this.token,minProtocol:4,maxProtocol:4,scopes:['operator.admin','operator.read','operator.write'],onHelloOk:()=>{this.rpcReady=true;this.ready=true;this.chat.recover();},onConnectError:()=>{this.rpcReady=false;this.ready=false;},onEvent:event=>this.chat.event(event),onGap:()=>{this.chat.disconnect();this.chat.recover();},onClose:()=>{this.rpcReady=false;this.ready=false;this.chat.disconnect();}});
   this.chat=new GatewayChat(this.client);
   this.client.start();
   for(let i=0;i<900&&!this.rpcReady;i++){

@@ -57,8 +57,11 @@ export class Schedules {
   }
   list() {
     const settings = this.content.feedSettings(), now = this.clock();
+    const latest=new Map();for(const row of this.harness.history?.records?.values()||[]){if(row.scheduleId&&(!latest.has(row.scheduleId)||latest.get(row.scheduleId).startedAt<row.startedAt))latest.set(row.scheduleId,row);}
     return this.jobs().map((job) => {
       const value = { ...job, enabled: job.enabled !== false, running: this.active.has(job.id) };
+      const run=latest.get(job.id);if(run)value.lastRun={id:run.id,at:new Date(run.startedAt).toISOString(),status:run.status,summary:run.summary||''};
+      value.lastSuccess=readJson(this.successFile,{})[job.id]||null;
       if (job.kind === "feed") {
         value.enabled &&= settings.enabled;
         value.interval = settings.interval; value.start = settings.start; value.end = settings.end;
@@ -119,7 +122,9 @@ export class Schedules {
       const success = readJson(this.successFile, {});
       const prompt = ["feed", "goal", "ideas", "heartbeat"].includes(job.kind) ? schedulePrompt(job.kind, { lastSuccess: success[job.id], goal: job.goal, prompts: this.prompts }) : job.prompt;
       if (typeof prompt !== "string" || !prompt.trim()) throw new Error("定时安排缺少提示词");
-      done = ["goal","heartbeat","reminder"].includes(job.kind) ? this.harness.runMain(prompt, { id, label: triggerTitle(prompt), reportError: false }) : this.harness.runIsolated(label, prompt, { id, mainContext: true });
+      done = ["goal","heartbeat","reminder"].includes(job.kind)
+        ? Promise.resolve(this.harness.waitForMain?.()).then(()=>this.harness.runMain(prompt, { id, label: triggerTitle(prompt)||label, kind:job.kind,scheduleId:job.id,reportError: false }))
+        : this.harness.runIsolated(label, prompt, { id, mainContext: true,scheduleId:job.id });
     }
     this.active.set(job.id, { id, done });
     const finished = done.then((result) => {
