@@ -92,6 +92,15 @@ import SwiftUI
         try await Task.sleep(nanoseconds:UInt64(env["DOUDOU_REVIEW_IDLE_SECONDS"].flatMap(Double.init) ?? 30)*1_000_000_000)
         let idlePlayers=playingVideos()
         try shot("mac-chat")
+        var accessibleRows=0
+        if let list=tableView(window.contentView!) {
+            accessibleRows=list.accessibilityRows()?.count ?? 0
+            if !baseline {
+                guard accessibleRows>0 && accessibleRows<=max(1,list.rows(in:list.visibleRect).length),list.accessibilityRowCount()==1000 else {
+                    throw ApiError(code:0,message:"Accessibility rows \(accessibleRows), visible \(list.rows(in:list.visibleRect).length), total \(list.accessibilityRowCount())")
+                }
+            }
+        }
         var changes:[Double]=[]
         print("PHASE_SWITCH");fflush(stdout)
         for _ in 0..<4 { for tab in [Tab.feed,.ideas,.goals,.library,.chat] {
@@ -139,7 +148,7 @@ import SwiftUI
         window.orderOut(nil);try await Task.sleep(nanoseconds:1_000_000_000)
         let hiddenPlayers=playingVideos()
         guard MenuController.shared.popover.contentViewController==nil else {throw ApiError(code:0,message:"Closed quick-chat retained its controller")}
-        let record:[String:Any]=["menuHiddenInitialRows":hiddenMenuRows,"menuOpenRows":openMenuRows,"baseline":baseline,"syntheticData":true,"chatMessages":ChatClient.shared.transcript.items.count,"appActiveDuringReaction":reactionActive,"reactionPlayingVideoLayers":reactionPlayers,"idlePlayingVideoLayers":idlePlayers,"hiddenPlayingVideoLayers":hiddenPlayers,"readingPositionPreservedAcrossTabs":readingPositionPreserved,"readingPositionPreservedAcrossSettings":settingsPositionPreserved,"tabSwitchMilliseconds":changes,"maxTabSwitchMilliseconds":changes.max() ?? 0]
+        let record:[String:Any]=["menuHiddenInitialRows":hiddenMenuRows,"menuOpenRows":openMenuRows,"baseline":baseline,"syntheticData":true,"accessibleRows":accessibleRows,"chatMessages":ChatClient.shared.transcript.items.count,"appActiveDuringReaction":reactionActive,"reactionPlayingVideoLayers":reactionPlayers,"idlePlayingVideoLayers":idlePlayers,"hiddenPlayingVideoLayers":hiddenPlayers,"readingPositionPreservedAcrossTabs":readingPositionPreserved,"readingPositionPreservedAcrossSettings":settingsPositionPreserved,"tabSwitchMilliseconds":changes,"maxTabSwitchMilliseconds":changes.max() ?? 0]
         try JSONSerialization.data(withJSONObject:record,options:[.prettyPrinted,.sortedKeys]).write(to:output.appendingPathComponent("mac-performance-review.json"))
         if !baseline && reactionActive && !ProcessInfo.processInfo.isLowPowerModeEnabled {precondition(reactionPlayers>0,"Expressive avatar never played")}
         if !baseline {precondition(idlePlayers==0 && hiddenPlayers==0,"Decorative video kept decoding while idle/hidden")}

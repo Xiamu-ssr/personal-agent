@@ -50,7 +50,7 @@ struct NativeChatList: NSViewRepresentable {
     static func dismantleNSView(_ view:NSScrollView,coordinator:Coordinator) {coordinator.close()}
 
     @MainActor final class Coordinator:NSObject,NSTableViewDataSource,NSTableViewDelegate {
-        let scroll=ChatListScroll(),table=NSTableView()
+        let scroll=ChatListScroll(),table=ChatTableView()
         var transcript:ChatTranscript?
         var state:ChatScrollState?
         var items:[ChatItem]=[]
@@ -195,6 +195,23 @@ struct NativeChatList: NSViewRepresentable {
             closed=true;latestUpdate=nil;observers.forEach(NotificationCenter.default.removeObserver);observers=[];if let wheel{NSEvent.removeMonitor(wheel)};wheel=nil;scroll.onResize=nil;items=[];transcript=nil;table.dataSource=nil;table.reloadData();table.delegate=nil;scroll.documentView=nil
         }
     }
+}
+
+/// Keep accessibility virtualized too. Enumerating every history row can ask
+/// AppKit to materialize offscreen hosting views just to inspect their content.
+/// The table still reports its full row count; scrolling exposes the next rows.
+final class ChatTableView:NSTableView {
+    private func visibleRows()->[any NSAccessibilityRow] {
+        let range=rows(in:visibleRect)
+        guard range.location != NSNotFound,range.length>0 else{return []}
+        return (range.location..<min(numberOfRows,NSMaxRange(range))).compactMap {
+            rowView(atRow:$0,makeIfNecessary:false) as (any NSAccessibilityRow)?
+        }
+    }
+    override func accessibilityRowCount()->Int {numberOfRows}
+    override func accessibilityRows()->[any NSAccessibilityRow]? {visibleRows()}
+    override func accessibilityChildren()->[Any]? {visibleRows()}
+    override func accessibilityVisibleRows()->[any NSAccessibilityRow]? {visibleRows()}
 }
 
 final class ChatListScroll:NSScrollView {
