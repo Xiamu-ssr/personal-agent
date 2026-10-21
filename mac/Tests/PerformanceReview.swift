@@ -96,7 +96,7 @@ import SwiftUI
         if let list=tableView(window.contentView!) {
             accessibleRows=list.accessibilityRows()?.count ?? 0
             if !baseline {
-                guard accessibleRows>0 && accessibleRows<=max(1,list.rows(in:list.visibleRect).length),list.accessibilityRowCount()==1000 else {
+                guard list.accessibilityRows()?.allSatisfy({($0 as? NSView)?.isAccessibilityElement()==true && !(($0 as? NSView)?.accessibilityChildren()?.isEmpty ?? true)})==true,accessibleRows>0 && accessibleRows<=max(1,list.rows(in:list.visibleRect).length),list.accessibilityRowCount()==1000 else {
                     throw ApiError(code:0,message:"Accessibility rows \(accessibleRows), visible \(list.rows(in:list.visibleRect).length), total \(list.accessibilityRowCount())")
                 }
             }

@@ -12,7 +12,7 @@
 - Android 170 项 JVM 检查、API 35 模拟器 6 项检查通过。后台静默 95 秒后保持连接、自动回复服务端 pong、响应授权的电量读取，客户端主动 ping 为 0；另有头像生命周期、表格、长图和连续曲线手势检查。
 - Mac 224 项核心断言、原生附件布局和登录地址检查通过。实际窗口载入 1000 条合成消息，检查 20 次切栏、历史阅读位置、表格边界以及真实点击的菜单。
 
-`mac-performance.json` 记录同一工作负载：返回聊天布局耗时中位数约 62.0 → 31.4 毫秒，20 次切栏最大值约 102.3 → 58.8 毫秒；空闲视频 2 → 0，读取历史的位置在常用栏目和设置往返后都保留，布局循环警告为 0。这里测的是导航加同步布局，不是端到端点击延迟。
+`mac-performance.json` 记录同一工作负载：返回聊天布局耗时中位数约 62.0 → 27.8 毫秒，20 次切栏最大值约 102.3 → 60.7 毫秒；空闲视频 2 → 0，读取历史的位置在常用栏目和设置往返后都保留，布局循环警告为 0。这里测的是导航加同步布局，不是端到端点击延迟。
 
 对照数据、正式安装包与生产核验在同目录 JSON 中记录。进程 CPU、解码器数量和模拟器结果不是手机全天耗电占比；19% 是否改善需要真机日常使用后比较。本次没有连接真实手机，也没有向用户主会话发送测试消息。
 
@@ -21,3 +21,9 @@
 `node verification/v1.8.0/fixture.mjs > /tmp/doudou-content-fixture.json`，再用 `DOUDOU_UI_FIXTURE=/tmp/doudou-content-fixture.json node cloud/test/usage-ui-fixture.mjs` 启动仅监听本机的 HTTP/WS。
 
 Mac 检查入口为 `mac/Tests/PerformanceReview.swift`，通过 `mac/tools/compile-check.sh` 编译，并配合真实 Mascot 资源、独立 `DOUDOU_DATA_DIR`、`DOUDOU_REVIEW_OUTPUT` 运行。前台动画核验使用 `DOUDOU_REVIEW_INTERACTIVE=1`，必须激活验收窗口；记录中明确标识是否处于前台。Android 通过 adb 反向映射本机 18770 端口，执行 `PowerContentDeviceTest`、`TouchMotionDeviceTest` 和 `ImageLayoutDeviceTest`。测试使用合成账号和文件，正式 Android 包仍要求 HTTPS。
+
+## 主要改动文件
+
+- Mac：`NativeChatList.swift`、`ChatTranscript.swift`、`ChatView.swift`、`MainView.swift` 处理虚拟列表、测量、阅读位置和页面生命周期；`MenuController.swift`、`MenuView.swift` 释放关闭的快捷聊天；`Avatar.swift`、`WindowActivity.swift` 管理可见性与播放；`Controls.swift`、`Composer.swift`、`Markdown.swift` 及页面文件统一控件和内容排版。
+- Android：`ui/Mascot.kt`、`ui/DeviceAccess.kt`、`device/DeviceService.kt`、`Api.kt`、`phone_use_service.xml` 移除闲置解码、授权轮询、重复保活和多余事件。
+- 云端：`src/connection-heartbeat.mjs`、`src/server.mjs` 统一连接保活。

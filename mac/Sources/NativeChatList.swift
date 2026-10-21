@@ -140,6 +140,9 @@ struct NativeChatList: NSViewRepresentable {
         }
         func numberOfRows(in tableView:NSTableView)->Int {items.count}
         func tableView(_ tableView:NSTableView,shouldSelectRow row:Int)->Bool {false}
+        func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {
+            let view=NSTableRowView();view.setAccessibilityElement(true);view.setAccessibilityRole(.row);return view
+        }
         func tableView(_ tableView:NSTableView,heightOfRow row:Int)->CGFloat {
             guard items.indices.contains(row) else{return 1}
             return (metrics.heights[items[row].id] ?? 140)+(row==0 ? topInset:0)
