@@ -1,0 +1,12 @@
+{
+  "localSyntheticHostStopped": true,
+  "nativeReconnectionKernelStopped": true,
+  "allListedTestPortsFree": true,
+  "androidEmulatorStopped": true,
+  "testDmgProcessesStopped": true,
+  "testDmgUnmounted": true,
+  "adbServerPreserved": true,
+  "macInstalledVersion": "1.7.0",
+  "macInstalledBuild": 14,
+  "privatePreferencesPreserved": true
+}

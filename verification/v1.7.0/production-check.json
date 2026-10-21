@@ -59,5 +59,11 @@
       "ms": 26274
     }
   ],
-  "mainSessionUsedForDiagnostics": false
+  "mainSessionUsedForDiagnostics": false,
+  "externalVerifiedTLS": true,
+  "heartbeatAfterUpgrade": {
+    "at": "2026-10-21T04:30:01.241Z",
+    "status": "done",
+    "completedAt": "2026-10-21T04:30:18.201Z"
+  }
 }
