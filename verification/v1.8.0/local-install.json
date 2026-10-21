@@ -1,0 +1,9 @@
+{
+  "version": "1.8.0",
+  "build": "15",
+  "tokenPreserved": true,
+  "serverPreferencePreserved": true,
+  "appDataUntouched": true,
+  "installedBundleCodeSignatureVerified": true,
+  "actualAccountUsedForUITest": false
+}

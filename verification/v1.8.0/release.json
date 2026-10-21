@@ -1,0 +1,32 @@
+{
+  "version": "1.8.0",
+  "sourceCommit": "45e9ce2b38065347f29f57aba5b84d8fb6e16035",
+  "macVersion": "1.8.0",
+  "macBuild": "15",
+  "macArchitectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "macCodeSignatureVerified": true,
+  "appleNotarized": false,
+  "androidVersionCode": 27,
+  "androidSignatureMatchesPrevious": true,
+  "assets": {
+    "doudou-1.8.0.apk": {
+      "bytes": 9556782,
+      "sha256": "46201e310034473408427f1b84ea19b903f5963cb01d52ed5ee37f6a484823b8"
+    },
+    "doudou-1.8.0.dmg": {
+      "bytes": 11105749,
+      "sha256": "41cbd78c2a8871bacd6f9b15964d0455eb4724ae644672e0d6e35b10030d7d96"
+    }
+  },
+  "publishedAssetsRedownloadedAndVerified": true,
+  "releaseURL": "https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.8.0",
+  "tag": "v1.8.0",
+  "releaseTarget": "45e9ce2b38065347f29f57aba5b84d8fb6e16035",
+  "olderReleasesRemoved": true,
+  "remainingReleaseTags": [
+    "v1.8.0"
+  ]
+}

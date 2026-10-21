@@ -1,0 +1,8 @@
+{
+  "ownedFixturePortClosed": true,
+  "ownedAndroidEmulatorStopped": true,
+  "qemuSystemAarch64ProcessesPresent": false,
+  "sharedADBServerPreserved": true,
+  "mountedTestDMGDetached": true,
+  "testAppsExited": true
+}
