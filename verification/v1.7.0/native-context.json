@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "kernel": "openclaw",
+  "version": "2026.10.4",
+  "nativeModelWindow": 272000,
+  "activeContextBudget": 272000,
+  "compactAtTokens": 272000,
+  "syntheticUsage": true,
+  "belowThresholdInputTokens": 250000,
+  "aboveThresholdInputTokens": 273000,
+  "belowThresholdNoCompaction": true,
+  "nativeCompaction": true,
+  "persistedCompactions": 1,
+  "continuityAfterCompaction": true,
+  "sameSessionId": true,
+  "sessionResetDisabled": true,
+  "midTurnPrecheck": true,
+  "memoryFlushes": 1,
+  "modelRequests": 10
+}

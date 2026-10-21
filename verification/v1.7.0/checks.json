@@ -1,0 +1,27 @@
+{
+  "cloud": {
+    "passed": 138,
+    "failed": 0,
+    "syntax": true
+  },
+  "android": {
+    "jvmPassed": 170,
+    "deviceInstrumentationPassed": 3,
+    "api": 35,
+    "largeFontScale": 1.4,
+    "previewHeightDp": 132,
+    "physicalDevice": false
+  },
+  "mac": {
+    "coreAssertions": 223,
+    "attachmentLayout": true,
+    "serverAddressChecks": true,
+    "uiReview": "mac-review.json"
+  },
+  "nativeKernel": "OpenClaw 2026.10.4",
+  "nativeModel": "synthetic local Anthropic SSE",
+  "limits": {
+    "contextTokens": 272000,
+    "maxOutputTokens": 128000
+  }
+}

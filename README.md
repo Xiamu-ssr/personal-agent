@@ -31,6 +31,8 @@
 
 1.7.0 重做 Mac 长会话列表与资源缓存，资源库区分站点、文档和影音；图片、视频、音频按内容直接展示。定时安排显示执行记录，断线后按原任务编号恢复结果，主会话持续保留。[查看验证记录](verification/v1.7.0/README.md)。
 
+从 1.6 升级云端时，先停服，以数据目录的服务身份运行 `cloud/scripts/migrate-library.mjs --root <数据目录> --backup <目录外的完整备份>`，再启动新版；备份位置须可读写。迁移会改写资源引用、保留主会话，并删除旧资源目录。两个客户端一起更新。
+
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
 | Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.7.0/doudou-1.7.0.apk) | Android 9 或更新版本 |

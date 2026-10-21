@@ -1,0 +1,11 @@
+{
+  "version": "1.7.0",
+  "macBuild": 14,
+  "syntheticData": true,
+  "source": "Manual CUA interaction with the signed mounted DMG",
+  "historyBeforeZoom": 993,
+  "historyAfterZoom": 993,
+  "sendAndReceiveObserved": true,
+  "mainChatReply": "合成消息已收到。",
+  "resourceFilteringObserved": true
+}

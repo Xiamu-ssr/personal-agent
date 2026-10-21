@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "kernel": "openclaw",
+  "syntheticModel": true,
+  "requests": 5,
+  "exportSaved": true,
+  "imageCardDelivered": true,
+  "htmlCardDelivered": true,
+  "nativeMediaDelivered": true,
+  "authenticatedDownloads": true,
+  "mainSessionPreserved": true
+}

@@ -1,0 +1,63 @@
+{
+  "version": "1.7.0",
+  "health": {
+    "ok": true,
+    "ready": true,
+    "kernel": "openclaw",
+    "version": "1.7.0",
+    "protocol": "2"
+  },
+  "realPagePreviews": [
+    {
+      "index": 0,
+      "status": 200,
+      "bytes": 41447,
+      "mime": "image/jpeg"
+    },
+    {
+      "index": 1,
+      "status": 200,
+      "bytes": 72405,
+      "mime": "image/jpeg"
+    },
+    {
+      "index": 2,
+      "status": 200,
+      "bytes": 108085,
+      "mime": "image/jpeg"
+    },
+    {
+      "index": 3,
+      "status": 200,
+      "bytes": 105687,
+      "mime": "image/jpeg"
+    },
+    {
+      "index": 4,
+      "status": 200,
+      "bytes": 111286,
+      "mime": "image/jpeg"
+    },
+    {
+      "index": 5,
+      "status": 200,
+      "bytes": 36343,
+      "mime": "image/jpeg"
+    }
+  ],
+  "allRealPreviewsSucceeded": true,
+  "libraryKinds": {
+    "sites": 6,
+    "documents": 2
+  },
+  "libraryConditional304": true,
+  "productionCookiePreserved": true,
+  "localGatewayBypassesProxyInNativeProcess": true,
+  "nativeModelRequests": [
+    {
+      "ok": true,
+      "ms": 26274
+    }
+  ],
+  "mainSessionUsedForDiagnostics": false
+}

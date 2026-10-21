@@ -1,0 +1,18 @@
+{
+  "seconds" : 20.119338035583496,
+  "responsiveTicks" : 193,
+  "initialRetainedHosts" : 1,
+  "diskInvalidatedByEvent" : true,
+  "externalHasNoCredential" : true,
+  "etagRevalidated" : true,
+  "nativeMediaPlayed" : 2,
+  "accountsIsolated" : true,
+  "historyPositionPreserved" : true,
+  "cacheCoalesced" : true,
+  "syntheticData" : true,
+  "historyMessagePreservedAcrossResize" : true,
+  "libraryEntries" : 7,
+  "diskCacheReused" : true,
+  "overwriteUpdated" : true,
+  "chatMessages" : 1013
+}

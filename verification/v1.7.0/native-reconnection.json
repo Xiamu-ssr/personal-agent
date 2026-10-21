@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "kernel": "openclaw",
+  "version": "2026.10.4",
+  "disconnectedDuringInference": true,
+  "recoveredByNativeRunId": true,
+  "modelRequests": 1,
+  "maxOutputTokens": 128000,
+  "duplicateExecution": false,
+  "resultDelivered": true,
+  "nativeSystemAndWorkspaceInstructions": true
+}

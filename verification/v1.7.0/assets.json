@@ -1,0 +1,25 @@
+{
+  "version": "1.7.0",
+  "androidVersionCode": 26,
+  "macBuild": 14,
+  "macArchitectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "macSignature": "Doudou Local Signing",
+  "appleNotarized": false,
+  "assets": [
+    {
+      "name": "doudou-1.7.0.apk",
+      "bytes": 9556786,
+      "sha256": "b602b5bd7f22d8a4f3783989ea07cb334074c95bf637b2b6a72902c4cc12dbed"
+    },
+    {
+      "name": "doudou-1.7.0.dmg",
+      "bytes": 10991989,
+      "sha256": "f8c5a02a426efbe2f5870f97eb7121dc8ced46283ade5ff411a2828e0e4bf97d"
+    }
+  ],
+  "androidCertificateMatchesPrevious": true,
+  "androidReleaseInstalledOnEmulator": true
+}

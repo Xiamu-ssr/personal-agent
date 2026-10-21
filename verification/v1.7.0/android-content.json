@@ -1,0 +1,25 @@
+{
+  "scope": "Debug MainActivity with production HTTP/WS implementation and synthetic local content, Android API 35 emulator",
+  "syntheticData": true,
+  "librarySections": [
+    "全部",
+    "站点",
+    "文档",
+    "图片",
+    "视频",
+    "音频"
+  ],
+  "siteOpenedWithAssets": true,
+  "videoPlayback": {
+    "container": "MP4",
+    "videoCodec": "H264",
+    "audioCodec": "AAC",
+    "durationSeconds": 3,
+    "observedCurrentSeconds": 1
+  },
+  "audioPlayback": {
+    "container": "MP3",
+    "durationSeconds": 3
+  },
+  "physicalDeviceTested": false
+}

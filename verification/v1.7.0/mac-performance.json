@@ -1,0 +1,918 @@
+{
+  "workload": "500 synthetic long messages, repeated resize and incoming messages; local debug UI binaries",
+  "measurement": "proc_pid_rusage ri_phys_footprint, ps CPU percentage",
+  "results": {
+    "baseline": {
+      "exitCode": 0,
+      "seconds": 45.77,
+      "peakFootprintMB": 178.63,
+      "firstSteadyFootprintMB": 40.86,
+      "lastFootprintMB": 172.38,
+      "medianSteadyCpuPercent": 2.1,
+      "maxSteadyCpuPercent": 93.2,
+      "samples": [
+        {
+          "seconds": 0.0,
+          "footprintBytes": 180344,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 0.52,
+          "footprintBytes": 24904400,
+          "cpuPercent": 40.7
+        },
+        {
+          "seconds": 1.03,
+          "footprintBytes": 28967632,
+          "cpuPercent": 9.2
+        },
+        {
+          "seconds": 1.54,
+          "footprintBytes": 29590368,
+          "cpuPercent": 1.7
+        },
+        {
+          "seconds": 2.06,
+          "footprintBytes": 29590368,
+          "cpuPercent": 2.3
+        },
+        {
+          "seconds": 2.58,
+          "footprintBytes": 29639520,
+          "cpuPercent": 0.3
+        },
+        {
+          "seconds": 3.1,
+          "footprintBytes": 29721440,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 3.61,
+          "footprintBytes": 30458744,
+          "cpuPercent": 9.6
+        },
+        {
+          "seconds": 4.13,
+          "footprintBytes": 30573432,
+          "cpuPercent": 3.7
+        },
+        {
+          "seconds": 4.64,
+          "footprintBytes": 31753104,
+          "cpuPercent": 10.4
+        },
+        {
+          "seconds": 5.16,
+          "footprintBytes": 95142848,
+          "cpuPercent": 6.2
+        },
+        {
+          "seconds": 5.67,
+          "footprintBytes": 95257560,
+          "cpuPercent": 1.7
+        },
+        {
+          "seconds": 6.19,
+          "footprintBytes": 42910704,
+          "cpuPercent": 0.7
+        },
+        {
+          "seconds": 6.7,
+          "footprintBytes": 43647984,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 7.22,
+          "footprintBytes": 43647984,
+          "cpuPercent": 3.9
+        },
+        {
+          "seconds": 7.74,
+          "footprintBytes": 42845168,
+          "cpuPercent": 0.6
+        },
+        {
+          "seconds": 8.25,
+          "footprintBytes": 42845168,
+          "cpuPercent": 0.3
+        },
+        {
+          "seconds": 8.77,
+          "footprintBytes": 43058160,
+          "cpuPercent": 4.4
+        },
+        {
+          "seconds": 9.28,
+          "footprintBytes": 41124872,
+          "cpuPercent": 1.4
+        },
+        {
+          "seconds": 9.8,
+          "footprintBytes": 51037216,
+          "cpuPercent": 18.4
+        },
+        {
+          "seconds": 10.31,
+          "footprintBytes": 103072824,
+          "cpuPercent": 87.1
+        },
+        {
+          "seconds": 10.81,
+          "footprintBytes": 105514040,
+          "cpuPercent": 92.2
+        },
+        {
+          "seconds": 11.32,
+          "footprintBytes": 107185208,
+          "cpuPercent": 93.2
+        },
+        {
+          "seconds": 11.83,
+          "footprintBytes": 107529272,
+          "cpuPercent": 24.7
+        },
+        {
+          "seconds": 12.36,
+          "footprintBytes": 107529272,
+          "cpuPercent": 3.6
+        },
+        {
+          "seconds": 12.86,
+          "footprintBytes": 107529272,
+          "cpuPercent": 0.5
+        },
+        {
+          "seconds": 13.37,
+          "footprintBytes": 164758584,
+          "cpuPercent": 9.2
+        },
+        {
+          "seconds": 13.89,
+          "footprintBytes": 169051216,
+          "cpuPercent": 7.6
+        },
+        {
+          "seconds": 14.41,
+          "footprintBytes": 168805456,
+          "cpuPercent": 2.5
+        },
+        {
+          "seconds": 14.92,
+          "footprintBytes": 125207656,
+          "cpuPercent": 1.0
+        },
+        {
+          "seconds": 15.44,
+          "footprintBytes": 122586216,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 15.96,
+          "footprintBytes": 116294760,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 16.46,
+          "footprintBytes": 113099880,
+          "cpuPercent": 10.1
+        },
+        {
+          "seconds": 16.98,
+          "footprintBytes": 110920808,
+          "cpuPercent": 2.3
+        },
+        {
+          "seconds": 17.49,
+          "footprintBytes": 111756392,
+          "cpuPercent": 6.7
+        },
+        {
+          "seconds": 18.01,
+          "footprintBytes": 175817832,
+          "cpuPercent": 8.3
+        },
+        {
+          "seconds": 18.52,
+          "footprintBytes": 175817832,
+          "cpuPercent": 2.3
+        },
+        {
+          "seconds": 19.03,
+          "footprintBytes": 124634216,
+          "cpuPercent": 2.3
+        },
+        {
+          "seconds": 19.53,
+          "footprintBytes": 181814400,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 20.05,
+          "footprintBytes": 177177728,
+          "cpuPercent": 3.1
+        },
+        {
+          "seconds": 20.57,
+          "footprintBytes": 168805504,
+          "cpuPercent": 2.1
+        },
+        {
+          "seconds": 21.09,
+          "footprintBytes": 122160256,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 21.6,
+          "footprintBytes": 122373248,
+          "cpuPercent": 3.0
+        },
+        {
+          "seconds": 22.12,
+          "footprintBytes": 175522944,
+          "cpuPercent": 1.9
+        },
+        {
+          "seconds": 22.63,
+          "footprintBytes": 175473792,
+          "cpuPercent": 5.2
+        },
+        {
+          "seconds": 23.15,
+          "footprintBytes": 117916800,
+          "cpuPercent": 1.1
+        },
+        {
+          "seconds": 23.67,
+          "footprintBytes": 117916800,
+          "cpuPercent": 0.6
+        },
+        {
+          "seconds": 24.18,
+          "footprintBytes": 117392512,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 24.69,
+          "footprintBytes": 117392512,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 25.2,
+          "footprintBytes": 117392512,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 25.71,
+          "footprintBytes": 176850048,
+          "cpuPercent": 14.5
+        },
+        {
+          "seconds": 26.23,
+          "footprintBytes": 177489024,
+          "cpuPercent": 5.6
+        },
+        {
+          "seconds": 26.74,
+          "footprintBytes": 177554560,
+          "cpuPercent": 3.6
+        },
+        {
+          "seconds": 27.25,
+          "footprintBytes": 126420096,
+          "cpuPercent": 1.3
+        },
+        {
+          "seconds": 27.76,
+          "footprintBytes": 121209984,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 28.28,
+          "footprintBytes": 121209984,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 28.79,
+          "footprintBytes": 119784576,
+          "cpuPercent": 1.4
+        },
+        {
+          "seconds": 29.31,
+          "footprintBytes": 117834880,
+          "cpuPercent": 0.4
+        },
+        {
+          "seconds": 29.82,
+          "footprintBytes": 118670488,
+          "cpuPercent": 3.3
+        },
+        {
+          "seconds": 30.34,
+          "footprintBytes": 182109336,
+          "cpuPercent": 7.3
+        },
+        {
+          "seconds": 30.85,
+          "footprintBytes": 182109336,
+          "cpuPercent": 1.1
+        },
+        {
+          "seconds": 31.37,
+          "footprintBytes": 123110552,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 31.88,
+          "footprintBytes": 182518936,
+          "cpuPercent": 18.5
+        },
+        {
+          "seconds": 32.4,
+          "footprintBytes": 182518936,
+          "cpuPercent": 3.2
+        },
+        {
+          "seconds": 32.91,
+          "footprintBytes": 180421784,
+          "cpuPercent": 1.8
+        },
+        {
+          "seconds": 33.42,
+          "footprintBytes": 127485080,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 33.93,
+          "footprintBytes": 127616152,
+          "cpuPercent": 3.6
+        },
+        {
+          "seconds": 34.45,
+          "footprintBytes": 123208856,
+          "cpuPercent": 3.0
+        },
+        {
+          "seconds": 34.96,
+          "footprintBytes": 123126936,
+          "cpuPercent": 2.2
+        },
+        {
+          "seconds": 35.48,
+          "footprintBytes": 122307736,
+          "cpuPercent": 0.4
+        },
+        {
+          "seconds": 35.99,
+          "footprintBytes": 122340504,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 36.51,
+          "footprintBytes": 122340504,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 37.02,
+          "footprintBytes": 122340504,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 37.52,
+          "footprintBytes": 122340504,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 38.04,
+          "footprintBytes": 178947224,
+          "cpuPercent": 11.2
+        },
+        {
+          "seconds": 38.55,
+          "footprintBytes": 177374360,
+          "cpuPercent": 5.5
+        },
+        {
+          "seconds": 39.07,
+          "footprintBytes": 177357976,
+          "cpuPercent": 3.5
+        },
+        {
+          "seconds": 39.58,
+          "footprintBytes": 126354584,
+          "cpuPercent": 0.5
+        },
+        {
+          "seconds": 40.1,
+          "footprintBytes": 123733144,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 40.61,
+          "footprintBytes": 122291352,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 41.13,
+          "footprintBytes": 122258584,
+          "cpuPercent": 5.4
+        },
+        {
+          "seconds": 41.64,
+          "footprintBytes": 122258584,
+          "cpuPercent": 1.3
+        },
+        {
+          "seconds": 42.16,
+          "footprintBytes": 123012248,
+          "cpuPercent": 6.9
+        },
+        {
+          "seconds": 42.68,
+          "footprintBytes": 186844312,
+          "cpuPercent": 9.4
+        },
+        {
+          "seconds": 43.2,
+          "footprintBytes": 186844312,
+          "cpuPercent": 2.0
+        },
+        {
+          "seconds": 43.71,
+          "footprintBytes": 133465240,
+          "cpuPercent": 1.7
+        },
+        {
+          "seconds": 44.23,
+          "footprintBytes": 187303064,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 44.75,
+          "footprintBytes": 182633624,
+          "cpuPercent": 3.8
+        },
+        {
+          "seconds": 45.27,
+          "footprintBytes": 180749464,
+          "cpuPercent": 0.4
+        }
+      ]
+    },
+    "fixed": {
+      "exitCode": 0,
+      "seconds": 45.69,
+      "peakFootprintMB": 111.27,
+      "firstSteadyFootprintMB": 52.74,
+      "lastFootprintMB": 58.84,
+      "medianSteadyCpuPercent": 2.0,
+      "maxSteadyCpuPercent": 20.6,
+      "samples": [
+        {
+          "seconds": 0.01,
+          "footprintBytes": 147528,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 0.51,
+          "footprintBytes": 101466976,
+          "cpuPercent": 25.4
+        },
+        {
+          "seconds": 1.03,
+          "footprintBytes": 101925728,
+          "cpuPercent": 5.6
+        },
+        {
+          "seconds": 1.54,
+          "footprintBytes": 49824752,
+          "cpuPercent": 4.8
+        },
+        {
+          "seconds": 2.06,
+          "footprintBytes": 49824752,
+          "cpuPercent": 0.6
+        },
+        {
+          "seconds": 2.58,
+          "footprintBytes": 49824752,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 3.09,
+          "footprintBytes": 49857520,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 3.61,
+          "footprintBytes": 54674440,
+          "cpuPercent": 14.2
+        },
+        {
+          "seconds": 4.12,
+          "footprintBytes": 45499424,
+          "cpuPercent": 3.6
+        },
+        {
+          "seconds": 4.64,
+          "footprintBytes": 102286392,
+          "cpuPercent": 10.3
+        },
+        {
+          "seconds": 5.15,
+          "footprintBytes": 99959864,
+          "cpuPercent": 2.5
+        },
+        {
+          "seconds": 5.65,
+          "footprintBytes": 48759864,
+          "cpuPercent": 7.1
+        },
+        {
+          "seconds": 6.17,
+          "footprintBytes": 48759864,
+          "cpuPercent": 1.0
+        },
+        {
+          "seconds": 6.68,
+          "footprintBytes": 110920760,
+          "cpuPercent": 14.0
+        },
+        {
+          "seconds": 7.2,
+          "footprintBytes": 105481272,
+          "cpuPercent": 3.8
+        },
+        {
+          "seconds": 7.71,
+          "footprintBytes": 105890896,
+          "cpuPercent": 1.8
+        },
+        {
+          "seconds": 8.23,
+          "footprintBytes": 55297104,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 8.74,
+          "footprintBytes": 108643408,
+          "cpuPercent": 7.6
+        },
+        {
+          "seconds": 9.25,
+          "footprintBytes": 106300496,
+          "cpuPercent": 2.2
+        },
+        {
+          "seconds": 9.76,
+          "footprintBytes": 113230976,
+          "cpuPercent": 20.6
+        },
+        {
+          "seconds": 10.29,
+          "footprintBytes": 108446848,
+          "cpuPercent": 4.9
+        },
+        {
+          "seconds": 10.8,
+          "footprintBytes": 57787520,
+          "cpuPercent": 1.8
+        },
+        {
+          "seconds": 11.31,
+          "footprintBytes": 57787520,
+          "cpuPercent": 0.7
+        },
+        {
+          "seconds": 11.82,
+          "footprintBytes": 53101696,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 12.34,
+          "footprintBytes": 53101696,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 12.85,
+          "footprintBytes": 116130944,
+          "cpuPercent": 13.4
+        },
+        {
+          "seconds": 13.37,
+          "footprintBytes": 111543424,
+          "cpuPercent": 3.7
+        },
+        {
+          "seconds": 13.88,
+          "footprintBytes": 60130432,
+          "cpuPercent": 3.0
+        },
+        {
+          "seconds": 14.4,
+          "footprintBytes": 60130432,
+          "cpuPercent": 0.4
+        },
+        {
+          "seconds": 14.91,
+          "footprintBytes": 53101696,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 15.42,
+          "footprintBytes": 54150272,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 15.92,
+          "footprintBytes": 114721920,
+          "cpuPercent": 5.3
+        },
+        {
+          "seconds": 16.43,
+          "footprintBytes": 110134400,
+          "cpuPercent": 1.3
+        },
+        {
+          "seconds": 16.94,
+          "footprintBytes": 114312320,
+          "cpuPercent": 4.9
+        },
+        {
+          "seconds": 17.46,
+          "footprintBytes": 112624768,
+          "cpuPercent": 1.7
+        },
+        {
+          "seconds": 17.98,
+          "footprintBytes": 61277312,
+          "cpuPercent": 2.7
+        },
+        {
+          "seconds": 18.48,
+          "footprintBytes": 61277312,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 19.0,
+          "footprintBytes": 112837736,
+          "cpuPercent": 12.9
+        },
+        {
+          "seconds": 19.51,
+          "footprintBytes": 110298216,
+          "cpuPercent": 3.6
+        },
+        {
+          "seconds": 20.03,
+          "footprintBytes": 55100544,
+          "cpuPercent": 2.0
+        },
+        {
+          "seconds": 20.55,
+          "footprintBytes": 55100544,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 21.06,
+          "footprintBytes": 112215168,
+          "cpuPercent": 5.3
+        },
+        {
+          "seconds": 21.58,
+          "footprintBytes": 112215168,
+          "cpuPercent": 2.4
+        },
+        {
+          "seconds": 22.1,
+          "footprintBytes": 115967128,
+          "cpuPercent": 14.4
+        },
+        {
+          "seconds": 22.61,
+          "footprintBytes": 113280152,
+          "cpuPercent": 3.8
+        },
+        {
+          "seconds": 23.13,
+          "footprintBytes": 112559256,
+          "cpuPercent": 1.7
+        },
+        {
+          "seconds": 23.64,
+          "footprintBytes": 61703320,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 24.15,
+          "footprintBytes": 54723736,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 24.67,
+          "footprintBytes": 54723736,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 25.17,
+          "footprintBytes": 113542296,
+          "cpuPercent": 6.2
+        },
+        {
+          "seconds": 25.69,
+          "footprintBytes": 113427608,
+          "cpuPercent": 1.3
+        },
+        {
+          "seconds": 26.19,
+          "footprintBytes": 61179032,
+          "cpuPercent": 1.0
+        },
+        {
+          "seconds": 26.7,
+          "footprintBytes": 61179032,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 27.2,
+          "footprintBytes": 54985880,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 27.71,
+          "footprintBytes": 54985880,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 28.22,
+          "footprintBytes": 111838360,
+          "cpuPercent": 6.4
+        },
+        {
+          "seconds": 28.73,
+          "footprintBytes": 111969432,
+          "cpuPercent": 1.3
+        },
+        {
+          "seconds": 29.25,
+          "footprintBytes": 115639448,
+          "cpuPercent": 2.6
+        },
+        {
+          "seconds": 29.76,
+          "footprintBytes": 113902744,
+          "cpuPercent": 0.8
+        },
+        {
+          "seconds": 30.27,
+          "footprintBytes": 61228184,
+          "cpuPercent": 0.9
+        },
+        {
+          "seconds": 30.79,
+          "footprintBytes": 61228184,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 31.3,
+          "footprintBytes": 115262616,
+          "cpuPercent": 7.3
+        },
+        {
+          "seconds": 31.81,
+          "footprintBytes": 114672792,
+          "cpuPercent": 1.4
+        },
+        {
+          "seconds": 32.33,
+          "footprintBytes": 114394264,
+          "cpuPercent": 2.2
+        },
+        {
+          "seconds": 32.84,
+          "footprintBytes": 63603864,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 33.35,
+          "footprintBytes": 113312920,
+          "cpuPercent": 14.3
+        },
+        {
+          "seconds": 33.87,
+          "footprintBytes": 113099928,
+          "cpuPercent": 3.5
+        },
+        {
+          "seconds": 34.39,
+          "footprintBytes": 115328152,
+          "cpuPercent": 12.0
+        },
+        {
+          "seconds": 34.9,
+          "footprintBytes": 114541720,
+          "cpuPercent": 3.3
+        },
+        {
+          "seconds": 35.41,
+          "footprintBytes": 100549784,
+          "cpuPercent": 5.5
+        },
+        {
+          "seconds": 35.92,
+          "footprintBytes": 63849624,
+          "cpuPercent": 0.8
+        },
+        {
+          "seconds": 36.44,
+          "footprintBytes": 55772312,
+          "cpuPercent": 0.2
+        },
+        {
+          "seconds": 36.96,
+          "footprintBytes": 55772312,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 37.47,
+          "footprintBytes": 115459224,
+          "cpuPercent": 15.8
+        },
+        {
+          "seconds": 38.0,
+          "footprintBytes": 115344536,
+          "cpuPercent": 2.7
+        },
+        {
+          "seconds": 38.51,
+          "footprintBytes": 114853016,
+          "cpuPercent": 2.2
+        },
+        {
+          "seconds": 39.02,
+          "footprintBytes": 63734936,
+          "cpuPercent": 0.1
+        },
+        {
+          "seconds": 39.53,
+          "footprintBytes": 55887000,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 40.04,
+          "footprintBytes": 55887000,
+          "cpuPercent": 0.0
+        },
+        {
+          "seconds": 40.54,
+          "footprintBytes": 114820248,
+          "cpuPercent": 4.2
+        },
+        {
+          "seconds": 41.06,
+          "footprintBytes": 114820248,
+          "cpuPercent": 1.9
+        },
+        {
+          "seconds": 41.58,
+          "footprintBytes": 116671640,
+          "cpuPercent": 11.6
+        },
+        {
+          "seconds": 42.09,
+          "footprintBytes": 114541720,
+          "cpuPercent": 2.9
+        },
+        {
+          "seconds": 42.6,
+          "footprintBytes": 113722520,
+          "cpuPercent": 5.4
+        },
+        {
+          "seconds": 43.12,
+          "footprintBytes": 60261528,
+          "cpuPercent": 0.7
+        },
+        {
+          "seconds": 43.63,
+          "footprintBytes": 114246808,
+          "cpuPercent": 15.4
+        },
+        {
+          "seconds": 44.16,
+          "footprintBytes": 113788056,
+          "cpuPercent": 3.6
+        },
+        {
+          "seconds": 44.67,
+          "footprintBytes": 61703320,
+          "cpuPercent": 3.9
+        },
+        {
+          "seconds": 45.18,
+          "footprintBytes": 61703320,
+          "cpuPercent": 0.5
+        }
+      ]
+    }
+  }
+}
