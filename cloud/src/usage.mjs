@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 import { readProviders } from './providers.mjs';
 import { accountQuota } from '../connectors/_shared/query-accounts.mjs';
+import { deepseekBalance } from '../connectors/_shared/deepseek.mjs';
 
 const finite = v => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const number = v => typeof v === 'string' && v.trim() ? Number(v) : v;
@@ -38,6 +39,10 @@ export function tavilyUsage(body) {
   return snapshot('ok', '', items);
 }
 
+export function deepseekUsage(body) {
+  return snapshot('ok', '', deepseekBalance(body).map(b => allowance(b.currency, '可用余额', b.currency, b.remaining)));
+}
+
 export class UsageService {
   constructor({ connectors, root, env = process.env, request = fetch, ttl = 60_000 }) {
     Object.assign(this, { connectors, root, env, request, ttl }); this.cache = new Map();
@@ -67,10 +72,12 @@ export class UsageService {
       return snapshot(exhausted ? 'exhausted' : 'ok', exhausted ? '额度不足' : '额度正常');
     }
     if (name === 'amap') return snapshot('unsupported', '');
+    if (name === 'deepseek-search') return this.cached(`connector:${name}:${account.id}`, account.values.apiKey,
+      async () => deepseekUsage(await this.json('https://api.deepseek.com/user/balance', account.values.apiKey)));
     return this.cached(`connector:${name}:${account.id}`, account.values.apiKey, async () => tavilyUsage(await this.json('https://api.tavily.com/usage', account.values.apiKey)));
   }
   async connectorList(list) {
-    await Promise.all(list.installed.filter(c => ['tavily', 'wind', 'amap'].includes(c.name)).map(async item => {
+    await Promise.all(list.installed.filter(c => ['tavily', 'deepseek-search', 'wind', 'amap'].includes(c.name)).map(async item => {
       const records = this.connectors.accounts.get(item.name);
       const usage = await Promise.all(records.map(a => this.connector(item.name, a)));
       // A deleted/replaced account cannot leak a stale result into a different account.
@@ -87,9 +94,7 @@ export class UsageService {
     if (!['zenmux.ai', 'api.deepseek.com', 'openrouter.ai'].includes(host)) return snapshot('unsupported', '尚未接入余额查询');
     return this.cached(`provider:${p.id}`, key + ':' + (management || ''), async () => {
       if (host === 'api.deepseek.com') {
-        const body = await this.json('https://api.deepseek.com/user/balance', key);
-        if (!Array.isArray(body.balance_infos) || !body.balance_infos.length) throw new Error('missing balance');
-        return snapshot('ok', '', body.balance_infos.map(b => { if (!/^[A-Z]{3}$/.test(b.currency)) throw new Error('invalid currency'); return allowance(b.currency, '可用余额', b.currency, number(b.total_balance)); }));
+        return deepseekUsage(await this.json('https://api.deepseek.com/user/balance', key));
       }
       if (host === 'openrouter.ai') {
         // Standard inference keys may report their own spending cap; never pretend it is account cash.

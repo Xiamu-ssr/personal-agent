@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-// Opt-in for Tavily/Wind queries only. Mail, GitHub and other account-scoped tools do not use this pool.
+// Opt-in for stateless Tavily/DeepSeek/Wind queries. Account-scoped tools do not use this pool.
 export class QuotaExhaustedError extends Error {
   constructor(message, retryAt, { replay = true } = {}) { super(message); this.retryAt = retryAt; this.replay = replay; }
 }

@@ -362,6 +362,12 @@ connectors:
       multiAccount: true
       setup:
         - API Key
+    - id: deepseek-search
+      name: DeepSeek Search
+      description: 搜索网页、提取正文；独立于基模，支持多账号与余额查看
+      multiAccount: true
+      setup:
+        - DeepSeek 官方 API Key
     - id: weread
       name: 微信读书
       description: 查看书架、阅读统计、划线和想法，搜索书籍

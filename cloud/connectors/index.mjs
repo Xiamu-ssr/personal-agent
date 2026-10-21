@@ -7,11 +7,12 @@ import exmail from "./exmail/index.mjs";
 import aliyun_mail from "./aliyun-mail/index.mjs";
 import imap from "./imap/index.mjs";
 import tavily from "./tavily/index.mjs";
+import deepseek_search from "./deepseek-search/index.mjs";
 import weread from "./weread/index.mjs";
 import wind from "./wind/index.mjs";
 import github from "./github/index.mjs";
 import tencent_quotes from "./tencent-quotes/index.mjs";
 import amap from "./amap/index.mjs";
 
-export const connectors = [qq_mail, netease_163, netease_126, gmail, exmail, aliyun_mail, imap, tavily, weread, wind, github, tencent_quotes, amap];
+export const connectors = [qq_mail, netease_163, netease_126, gmail, exmail, aliyun_mail, imap, tavily, deepseek_search, weread, wind, github, tencent_quotes, amap];
 export default connectors;

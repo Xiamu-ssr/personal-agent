@@ -12,8 +12,8 @@ import { startFakeImap } from "./fake-imap.mjs";
 import { fakeConnectorApi } from "./fake-connector-api.mjs";
 import { callTool, toolResult } from "./tool-call.mjs";
 
-test("released catalog has seven independent mail providers plus Tavily/WeRead/Wind/GitHub, real icon files and no legacy/custom/builtin fields", () => {
-  assert.deepEqual(registry.map((d) => d.name), ["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap", "tavily", "weread", "wind", "github", "tencent-quotes", "amap"]);
+test("released catalog has independent services, real icon files and no legacy/custom/builtin fields", () => {
+  assert.deepEqual(registry.map((d) => d.name), ["qq-mail", "netease-163", "netease-126", "gmail", "exmail", "aliyun-mail", "imap", "tavily", "deepseek-search", "weread", "wind", "github", "tencent-quotes", "amap"]);
   const manager = new ConnectorManager({ root: fs.mkdtempSync(path.join(testRoot, "catalog-")) });
   assert.deepEqual(Object.keys(manager.list()).sort(), ["catalog", "installed"]);
   for (const d of registry) {

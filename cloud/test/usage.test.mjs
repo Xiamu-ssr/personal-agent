@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { UsageService, tavilyUsage, totalUsage } from '../src/usage.mjs';
+import { UsageService, tavilyUsage, deepseekUsage, totalUsage } from '../src/usage.mjs';
 import { ConnectorManager } from '../src/connectors.mjs';
 import { Providers, readProviders } from '../src/providers.mjs';
 import { speechProvider } from '../src/transcribe.mjs';
@@ -54,7 +54,7 @@ test('Wind reports usable/exhausted availability without inventing a numeric bal
 
 test('provider balances use official fixed hosts and never forward a key from a custom proxy', async () => {
   const seen=[];
-  const usage=new UsageService({request:async(url,options)=>{seen.push([url,options.headers.authorization]);return ok({balance_infos:[{currency:'CNY',total_balance:'12.34'}]});}});
+  const usage=new UsageService({request:async(url,options)=>{seen.push([url,options.headers.authorization]);return ok({is_available:true,balance_infos:[{currency:'CNY',total_balance:'12.34'}]});}});
   const p={id:'d',baseUrl:'https://api.deepseek.com/v1',apiKey:'synthetic-model-key'};
   assert.equal((await usage.provider(p)).items[0].remaining,12.34);
   assert.equal(seen[0][0],'https://api.deepseek.com/user/balance');
@@ -62,6 +62,22 @@ test('provider balances use official fixed hosts and never forward a key from a 
   assert.equal(unsupported.status,'unsupported'); assert.equal(seen.length,1);
   assert.equal((await usage.provider({...p,id:'z',baseUrl:'https://zenmux.ai/api/v1'})).status,'credentials');
   assert.equal(seen.length,1);
+});
+
+test('DeepSeek Search and model cards share the official balance contract; connector accounts sum by currency', async () => {
+  const accounts=[{id:'a',values:{apiKey:'synthetic-deepseek-a'}},{id:'b',values:{apiKey:'synthetic-deepseek-b'}}],seen=[];
+  const usage=new UsageService({connectors:{accounts:new Map([['deepseek-search',accounts]])},request:async(url,options)=>{
+    seen.push(url);assert.ok(accounts.some(a=>options.headers.authorization===`Bearer ${a.values.apiKey}`));
+    return ok({is_available:true,balance_infos:[{currency:'CNY',total_balance:options.headers.authorization.endsWith('-a')?'12.34':'0.66'}]});
+  }});
+  const list=await usage.connectorList({installed:[{name:'deepseek-search',accounts:accounts.map(({id})=>({id}))}]});
+  assert.equal(list.installed[0].usage.items[0].remaining,13);
+  assert.deepEqual(list.installed[0].accounts.map(a=>a.usage.items[0].remaining),[12.34,0.66]);
+  assert.ok(seen.every(url=>url==='https://api.deepseek.com/user/balance'));
+  await usage.connectorList(list);assert.equal(seen.length,2,'balance polling uses the existing one-minute cache');
+  const empty=deepseekUsage({is_available:false,balance_infos:[{currency:'CNY',total_balance:'0.00'}]});
+  assert.equal(empty.items[0].remaining,0);assert.equal(empty.items[0].fraction,null,'cash balance is not a fabricated progress percentage');
+  for(const body of [{},{is_available:true,balance_infos:[]},{is_available:true,balance_infos:[{currency:'CNY',total_balance:'NaN'}]}])assert.throws(()=>deepseekUsage(body));
 });
 
 test('management credentials persist privately, stay out of model/public data, and are not sent for inference', async t => {

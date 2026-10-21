@@ -10,7 +10,7 @@
    - 代码在仓库的 `cloud/connectors/<name>/` 里，部署到 `/opt/personal-agent/`。这个目录归 root 所有，`agent` 用户只能读。
    - 配置在 `<AGENT_ROOT>/system/connectors/<name>/accounts.json`。
 2. **一个服务一个连接器**，和 Today AI 一样。QQ 邮箱、163 邮箱、Gmail 是三个连接器，各自有官方图标。
-   - 同一个服务可以连多个账号，比如两个 QQ 邮箱。邮箱工具用 `account` 指定账号，不填查所有账号；Tavily、Wind 的查询只用一个账号，明确额度耗尽时才尝试备用账号，见下文。
+   - 同一个服务可以连多个账号，比如两个 QQ 邮箱。邮箱工具用 `account` 指定账号，不填查所有账号；DeepSeek Search、Tavily、Wind 的查询只用一个账号，明确额度耗尽时才尝试备用账号，见下文。
    - 几个连接器底层用同一套代码时（比如都是 IMAP），共享代码放在 `cloud/connectors/_shared/`，但对外仍然是各自独立的连接器。
 3. **密钥只走表单或配置工具，不进模型上下文。**
    - 能接触到明文密钥的只有三处：App 表单 → 云端接口 → 连接器代码。
@@ -99,8 +99,8 @@ export default {
 ### 余量
 
 - 已连接列表显示余量，详情按账号展示；有数值才显示余额或进度。按同单位、同额度类型求和。
-- Tavily 读取 `/usage`。Wind 显示「额度正常／额度不足」，仍有可用账号就显示正常；高德不展示无法取得的余量。界面不放接口限制说明。
-- 同一 Tavily 账户下多个 Key 共享账户额度，不能当作独立账号累计。
+- DeepSeek Search 读取官方 `/user/balance`，与模型卡片共用余额解析；Tavily 读取 `/usage`。Wind 显示「额度正常／额度不足」，仍有可用账号就显示正常；高德不展示无法取得的余量。界面不放接口限制说明。
+- 同一 DeepSeek 或 Tavily 账户下多个 Key 共享账户余额／额度，不能当作独立账号累计；多账号请填写独立账户的 Key。
 - App 与 `connectors.list` 接收同一份 `usage` 信息；缓存一分钟，不改变授权和切换策略。
 
 ## 六、沿用的服务目录
@@ -135,9 +135,17 @@ export default {
 
 - 字段：账号备注（可选）、API Key（secret）。支持添加多个独立账号，拒绝重复添加同一个 Key。
 - 工具：`search({query, depth?, max_results?, time_range?})`、`extract({urls})`。
-- 什么时候用：网页搜索统一用 Tavily，日常查询默认 basic；已知网址先用原生 web_fetch，完整正文可用 Tavily extract。搜索额度独立于模型供应商。
+- 什么时候用：按已连接服务与用户偏好选择 DeepSeek Search 或 Tavily，通常一次查询用一个服务；Tavily 日常查询默认 basic。已知网址先用原生 web_fetch，完整正文可用 DeepSeek fetch 或 Tavily extract。搜索额度独立于模型供应商。
 - 仅在官方 `432`（套餐额度用完）、`433`（按量预算上限），或 `402/403/429` 的错误正文明确说明积分/余额/额度耗尽时，用备用账号重试同一个查询。普通 `429` 只表示限流，网络、鉴权、服务故障都不能据此换号。
 - 同一个 Tavily 账户的多个 Key 仍共享该账户的额度；Google/GitHub 只是登录方式，不代表额外获赠一份额度。
+
+### DeepSeek Search
+
+- `deepseek-search`，字段为可选账号备注、DeepSeek 官方 API Key（secret）。支持多个独立账号；与当前选择的基模无关，不接受其他聚合商的 Key。
+- `search({query,count?=5,ori_question?,need_content?=false})`：搜索词与可选原问题为 1～128 个 Unicode 字符；返回 1～50 条，保留来源、摘要、日期和可用正文。支持 `site:`、排除词、语言与日期语法。不自动上传用户 IP。
+- `fetch({url})`：抓取单个 HTTP(S) 网页，返回标题和 Markdown 正文，URL 最长 8192 字符，不得包含用户名或密码。
+- 固定调用官方 `POST /v1/tools/search`、`POST /v1/tools/fetch`；连接与重测仅用免费 `GET /user/balance`。只有 HTTP 402 才尝试备用账号；403 是网页访问策略拒绝，429 是限流，都不换号。
+- 官方 Search、Fetch 分别为每千次成功且有结果的请求 5 元，不按返回条数计费。[接口与计费](https://api-docs.deepseek.com/zh-cn/guides/search/)、[余额](https://api-docs.deepseek.com/zh-cn/api/get-user-balance/)。
 
 ### Wind AI
 
@@ -150,9 +158,9 @@ export default {
 
 ### 查询账号的冷却与恢复
 
-- 只对 Tavily、Wind 启用。邮箱、GitHub、微信读书等有账号状态的连接器沿用原来的账号语义。
+- 只对 DeepSeek Search、Tavily、Wind 启用。邮箱、GitHub、微信读书等有账号状态的连接器沿用原来的账号语义。
 - 优先沿用上一次成功账号；明确额度耗尽后，每个备用账号本次最多尝试一次。耗尽记录持久化到私有 `state.json`，主聊天、旁聊、后台任务和服务重启后都跳过已知耗尽账号。
-- Tavily 到下个 UTC 月初可再次探测，Wind 到下个北京时间零点可再次探测。这只是重新尝试时间，不承诺余额或预算届时一定恢复；如果仍不足，再进入冷却。充值或手动恢复后可点「重新测试」提前重新启用。
+- Tavily 到下个 UTC 月初可再次探测，Wind 到下个北京时间零点可再次探测；DeepSeek 为预付余额，冷却一分钟后允许重试以发现充值。这只是重新尝试时间，不承诺余额或预算届时一定恢复；如果仍不足，再进入冷却。充值或手动恢复后可点「重新测试」提前重新启用。
 - 修改为不同 Key 或删除账号时清除对应记录；改备注不会清除。成功的认证测试只表示允许再次尝试，不能冒充精确余额查询。
 - 状态记录仅含账号 ID、Key 的 SHA-256 指纹和时间，不保存查询、密钥或聊天正文，权限与账号文件相同（600）。并发请求的迟到成功结果不能取消另一个请求刚确认的耗尽记录。
 
