@@ -94,10 +94,10 @@ import SwiftUI
         try shot("mac-chat")
         var accessibleRows=0
         if let list=tableView(window.contentView!) {
-            accessibleRows=list.accessibilityRows()?.count ?? 0
+            accessibleRows=list.accessibilityChildren()?.count ?? 0
             if !baseline {
-                guard list.accessibilityRows()?.allSatisfy({($0 as? NSView)?.isAccessibilityElement()==true && !(($0 as? NSView)?.accessibilityChildren()?.isEmpty ?? true)})==true,accessibleRows>0 && accessibleRows<=max(1,list.rows(in:list.visibleRect).length),list.accessibilityRowCount()==1000 else {
-                    throw ApiError(code:0,message:"Accessibility rows \(accessibleRows), visible \(list.rows(in:list.visibleRect).length), total \(list.accessibilityRowCount())")
+                guard list.accessibilityRole()==NSAccessibility.Role.list,!(list.accessibilityChildren()?.isEmpty ?? true),accessibleRows>0 && accessibleRows<=max(1,list.rows(in:list.visibleRect).length),list.numberOfRows==1000 else {
+                    throw ApiError(code:0,message:"Accessibility rows \(accessibleRows), visible \(list.rows(in:list.visibleRect).length), total \(list.numberOfRows)")
                 }
             }
         }

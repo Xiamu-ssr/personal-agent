@@ -1,0 +1,11 @@
+{
+  "serverHeartbeatSeconds": 90,
+  "scope": "Isolated native Mac acceptance connections",
+  "socketStats": {
+    "connections": 17,
+    "serverPings": 5,
+    "pongs": 5,
+    "clientPings": 0,
+    "registrations": 0
+  }
+}

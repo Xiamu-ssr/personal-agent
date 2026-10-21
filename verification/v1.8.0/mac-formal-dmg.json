@@ -1,0 +1,616 @@
+{
+  "version": "1.8.0",
+  "build": 15,
+  "scope": "Mounted signed universal DMG; isolated account, 1000 synthetic messages, native UI navigation and menus",
+  "seconds": 120.56,
+  "aliveAtEnd": true,
+  "peakFootprintMiB": 175.44,
+  "medianSteadyCPU": 0.0,
+  "maxSteadyCPU": 2.4,
+  "layoutCycleWarnings": 9,
+  "samples": [
+    {
+      "seconds": 1.01,
+      "cpuPercent": 0.0,
+      "footprintMiB": 0.08
+    },
+    {
+      "seconds": 2.02,
+      "cpuPercent": 0.69,
+      "footprintMiB": 50.02
+    },
+    {
+      "seconds": 3.02,
+      "cpuPercent": 0.0,
+      "footprintMiB": 50.02
+    },
+    {
+      "seconds": 4.03,
+      "cpuPercent": 0.0,
+      "footprintMiB": 50.02
+    },
+    {
+      "seconds": 5.04,
+      "cpuPercent": 0.0,
+      "footprintMiB": 50.02
+    },
+    {
+      "seconds": 6.05,
+      "cpuPercent": 0.0,
+      "footprintMiB": 50.02
+    },
+    {
+      "seconds": 7.06,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.94
+    },
+    {
+      "seconds": 8.07,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.97
+    },
+    {
+      "seconds": 9.07,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.97
+    },
+    {
+      "seconds": 10.08,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.97
+    },
+    {
+      "seconds": 11.09,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.97
+    },
+    {
+      "seconds": 12.09,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.97
+    },
+    {
+      "seconds": 13.1,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.28
+    },
+    {
+      "seconds": 14.1,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.28
+    },
+    {
+      "seconds": 15.11,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.28
+    },
+    {
+      "seconds": 16.12,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.28
+    },
+    {
+      "seconds": 17.12,
+      "cpuPercent": 0.03,
+      "footprintMiB": 49.42
+    },
+    {
+      "seconds": 18.13,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.42
+    },
+    {
+      "seconds": 19.14,
+      "cpuPercent": 0.0,
+      "footprintMiB": 49.42
+    },
+    {
+      "seconds": 20.14,
+      "cpuPercent": 1.48,
+      "footprintMiB": 97.05
+    },
+    {
+      "seconds": 21.14,
+      "cpuPercent": 2.4,
+      "footprintMiB": 175.44
+    },
+    {
+      "seconds": 22.14,
+      "cpuPercent": 0.87,
+      "footprintMiB": 112.06
+    },
+    {
+      "seconds": 23.15,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.06
+    },
+    {
+      "seconds": 24.15,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.06
+    },
+    {
+      "seconds": 25.16,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.06
+    },
+    {
+      "seconds": 26.16,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.06
+    },
+    {
+      "seconds": 27.16,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.02
+    },
+    {
+      "seconds": 28.16,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 29.17,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 30.17,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 31.18,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 32.18,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 33.18,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 34.19,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 35.19,
+      "cpuPercent": 0.0,
+      "footprintMiB": 111.97
+    },
+    {
+      "seconds": 36.2,
+      "cpuPercent": 0.04,
+      "footprintMiB": 112.03
+    },
+    {
+      "seconds": 37.2,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.03
+    },
+    {
+      "seconds": 38.21,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.03
+    },
+    {
+      "seconds": 39.21,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.03
+    },
+    {
+      "seconds": 40.22,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.03
+    },
+    {
+      "seconds": 41.22,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.02
+    },
+    {
+      "seconds": 42.23,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 43.23,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 44.24,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 45.24,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 46.24,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 47.25,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 48.25,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 49.25,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 50.26,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 51.26,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 52.26,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 53.27,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 54.27,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 55.28,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 56.28,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 57.29,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 58.29,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 59.29,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 60.3,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 61.3,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 62.3,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 63.31,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 64.31,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 65.32,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 66.32,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 67.33,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 68.33,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 69.33,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 70.34,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 71.35,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.05
+    },
+    {
+      "seconds": 72.35,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.05
+    },
+    {
+      "seconds": 73.35,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.05
+    },
+    {
+      "seconds": 74.35,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.05
+    },
+    {
+      "seconds": 75.35,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.05
+    },
+    {
+      "seconds": 76.36,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 77.37,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 78.37,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 79.37,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 80.37,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 81.38,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 82.38,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 83.39,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 84.39,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 85.4,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 86.4,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 87.41,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 88.41,
+      "cpuPercent": 0.0,
+      "footprintMiB": 112.0
+    },
+    {
+      "seconds": 89.41,
+      "cpuPercent": 0.36,
+      "footprintMiB": 92.02
+    },
+    {
+      "seconds": 90.42,
+      "cpuPercent": 1.7,
+      "footprintMiB": 109.55
+    },
+    {
+      "seconds": 91.42,
+      "cpuPercent": 2.4,
+      "footprintMiB": 172.66
+    },
+    {
+      "seconds": 92.43,
+      "cpuPercent": 0.47,
+      "footprintMiB": 97.34
+    },
+    {
+      "seconds": 93.43,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.34
+    },
+    {
+      "seconds": 94.44,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.34
+    },
+    {
+      "seconds": 95.44,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.34
+    },
+    {
+      "seconds": 96.44,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.34
+    },
+    {
+      "seconds": 97.45,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 98.45,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 99.45,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 100.45,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 101.46,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 102.46,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 103.47,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 104.47,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 105.47,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.27
+    },
+    {
+      "seconds": 106.48,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.27
+    },
+    {
+      "seconds": 107.48,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.27
+    },
+    {
+      "seconds": 108.48,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.27
+    },
+    {
+      "seconds": 109.49,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.27
+    },
+    {
+      "seconds": 110.49,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.27
+    },
+    {
+      "seconds": 111.49,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 112.5,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 113.5,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 114.5,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 115.51,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 116.51,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 117.51,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 118.52,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    },
+    {
+      "seconds": 119.52,
+      "cpuPercent": 0.0,
+      "footprintMiB": 97.25
+    }
+  ],
+  "accessibilityVisibleMessageContentVerified": true,
+  "nativeUIOperations": [
+    "Read visible long message and table via native accessibility",
+    "Open and close attachment menu",
+    "Navigate feed, ideas, goals and library",
+    "Return from settings to chat"
+  ],
+  "diagnosticLimitation": "Nine transient AttributeGraph cycle diagnostics occurred during native UI navigation. The app remained responsive, with bounded memory and no sustained CPU loop during this 120-second run; absence of framework diagnostics is not claimed."
+}

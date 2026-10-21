@@ -140,9 +140,6 @@ struct NativeChatList: NSViewRepresentable {
         }
         func numberOfRows(in tableView:NSTableView)->Int {items.count}
         func tableView(_ tableView:NSTableView,shouldSelectRow row:Int)->Bool {false}
-        func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {
-            let view=NSTableRowView();view.setAccessibilityElement(true);view.setAccessibilityRole(.row);return view
-        }
         func tableView(_ tableView:NSTableView,heightOfRow row:Int)->CGFloat {
             guard items.indices.contains(row) else{return 1}
             return (metrics.heights[items[row].id] ?? 140)+(row==0 ? topInset:0)
@@ -204,17 +201,13 @@ struct NativeChatList: NSViewRepresentable {
 /// AppKit to materialize offscreen hosting views just to inspect their content.
 /// The table still reports its full row count; scrolling exposes the next rows.
 final class ChatTableView:NSTableView {
-    private func visibleRows()->[any NSAccessibilityRow] {
-        let range=rows(in:visibleRect)
-        guard range.location != NSNotFound,range.length>0 else{return []}
-        return (range.location..<min(numberOfRows,NSMaxRange(range))).compactMap {
-            rowView(atRow:$0,makeIfNecessary:false) as (any NSAccessibilityRow)?
-        }
+    override func accessibilityRole()->NSAccessibility.Role? {.list}
+    override func accessibilityLabel()->String? {"聊天记录"}
+    override func accessibilityChildren()->[Any]? {
+        // Cocoa returns row proxies. Keep the collection untyped at the Swift
+        // boundary, and expose the platform's existing visible elements.
+        value(forKey:"accessibilityVisibleRows") as? [Any] ?? []
     }
-    override func accessibilityRowCount()->Int {numberOfRows}
-    override func accessibilityRows()->[any NSAccessibilityRow]? {visibleRows()}
-    override func accessibilityChildren()->[Any]? {visibleRows()}
-    override func accessibilityVisibleRows()->[any NSAccessibilityRow]? {visibleRows()}
 }
 
 final class ChatListScroll:NSScrollView {
