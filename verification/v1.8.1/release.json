@@ -24,5 +24,26 @@
       "bytes": 11133781,
       "sha256": "42b479fb3ba0c914fd8b4675ea3ae2e93ba8013db0df5d2624ea6166637968a7"
     }
+  },
+  "sourceCommit": "e471b223875803004f00e1fff36b68410b35decc",
+  "releaseURL": "https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.8.1",
+  "publishedAssetsRedownloadedAndVerified": true,
+  "olderReleasesRemoved": true,
+  "androidUnitTests": 170,
+  "production": {
+    "healthReady": true,
+    "version": "1.8.1",
+    "firstPostDeployFeed": {
+      "status": "done",
+      "durationSeconds": 421
+    },
+    "firstPostDeployHeartbeat": {
+      "status": "done",
+      "durationSeconds": 63
+    },
+    "toolHookFailuresObserved": 0,
+    "workerTimeoutsObserved": 0,
+    "connectionResetsObserved": 0,
+    "observationLimitedToPostDeployWindow": true
   }
 }

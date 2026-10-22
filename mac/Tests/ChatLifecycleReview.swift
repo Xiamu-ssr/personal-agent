@@ -25,9 +25,11 @@ import SwiftUI
   for _ in 0..<40{try await Task.sleep(nanoseconds:50_000_000);window.contentView?.layoutSubtreeIfNeeded()}
   let table=find(window.contentView!)!,scroll=table.enclosingScrollView!,coordinator=table.delegate as! NativeChatList.Coordinator
   try check(table.rows(in:scroll.documentVisibleRect).location>980,"Initial history did not open at the newest rows")
-  transcript.scrollState.report(distance:100000,viewport:700,positionChanged:true)
-  table.scrollRowToVisible(500);try await Task.sleep(nanoseconds:300_000_000)
+  coordinator.userScrollUntil=ProcessInfo.processInfo.systemUptime+1
+  scroll.contentView.scroll(to:NSPoint(x:0,y:table.rect(ofRow:500).minY));scroll.reflectScrolledClipView(scroll.contentView)
+  try await Task.sleep(nanoseconds:300_000_000)
   let before=table.row(at:NSPoint(x:1,y:scroll.contentView.bounds.minY+1)),anchor=coordinator.items[before].serverID
+  try check((499...501).contains(before),"Reading-position check never reached the middle of history")
   let older=(0..<100).map{i in ["id":"older-\(i)","role":"user","text":"更早的合成消息 \(i)","ts":1_789_999_000_000+i] as [String:Any]}
   transcript.mergeSnapshot(older)
   try await Task.sleep(nanoseconds:500_000_000)
