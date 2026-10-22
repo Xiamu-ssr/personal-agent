@@ -30,6 +30,9 @@ the OpenClaw kernel are unchanged. No app protocol or client build changes.
 
 - `npm run check`: passed.
 - `npm test`: 159 passed, 0 failed in the shared working tree.
+- The exact committed tree was separately exported to an isolated temporary
+  directory: `npm test` passed 155 tests, 0 failed. The shared tree also contained
+  four unrelated connector tests; those changes were excluded from this fix.
 - `node scripts/verify-main-steering.mjs`: real OpenClaw 2026.10.4, local
   synthetic Anthropic HTTP/SSE service; busy inputs reach the model and all
   generated answers reach visible chat; 3 model requests.
@@ -46,3 +49,13 @@ the OpenClaw kernel are unchanged. No app protocol or client build changes.
 These are protocol and product-presentation checks with synthetic model output.
 They do not measure a production provider's reasoning quality. No Android or Mac
 UI changes were made or claimed as newly tested.
+
+## Deployment
+
+After the existing background update finished, only `agent.mjs`,
+`gateway-chat.mjs` and `openclaw-runtime.mjs` were installed on the cloud service,
+with the previous files backed up. The restarted service reported `ok: true`,
+`ready: true`, OpenClaw, app version 1.8.1 and protocol 2. All three deployed
+source hashes matched the tested commit. No persistent data migration or client
+reinstallation was required. Production provider output was not replaced with
+synthetic messages for verification.
