@@ -54,3 +54,35 @@ test('activity details migrate once; recording a new step does not rewrite unrel
  history.appendStep('first',{kind:'tool_result',text:'Finished'});assert.equal(fs.readFileSync(history.file,'utf8'),index);
  const reopened=new TaskHistory({root});assert.equal(reopened.get('first').steps.length,3);assert.equal(reopened.get('first').latestResult,'Synthetic result');
 });
+
+test('the preceding input can settle without deleting a native continuation tool context or clearing busy',async()=>{
+ initialize(config.root);let finish;
+ const response=new Promise(resolve=>finish=resolve),runtime={close:async()=>{},respond:async(_input,opts)=>{opts.onAccepted?.({});return response;}};
+ const h=new Harness({runtime,hub:new DeviceHub(),connectors:new ConnectorManager({root:config.root,definitions:[]}),bus:{emit(){}}});
+ try{
+  await h.send('Synthetic preceding question');const previous=h.mainTask;
+  h.observeMainRun({id:'native-owner-race',sessionKey:'agent:main:main',phase:'start'});
+  finish({text:'Synthetic preceding answer'});await previous;
+  assert.equal(h.busy,true);assert.equal(h.sessionRuns.get('agent:main:main').id,'native-owner-race');
+  const catalog=await h.productTool('catalog',{sessionKey:'agent:main:main'});assert.ok(catalog.content.length);
+  let settled=false;const waiting=h.waitForMain().then(()=>settled=true);await new Promise(r=>setImmediate(r));assert.equal(settled,false);
+  h.observeMainRun({id:'native-owner-race',sessionKey:'agent:main:main',phase:'final',response:{text:'Synthetic native answer'}});await waiting;
+  assert.equal(h.busy,false);assert.equal(h.running.size,0);assert.equal(h.history.get('native-owner-race').status,'done');
+ }finally{finish({text:'Synthetic preceding answer'});await h.close();}
+});
+
+test('native replies remain unique after restarting presentation, and quiet checks do not enter chat',async()=>{
+ initialize(config.root);
+ const create=()=>new Harness({runtime:{close:async()=>{}},hub:new DeviceHub(),connectors:new ConnectorManager({root:config.root,definitions:[]}),bus:{emit(){}}});
+ let h=create();
+ const final={id:'native-durable-reply',sessionKey:'agent:main:main',phase:'final',response:{text:'Synthetic durable native answer'}};
+ try{h.observeMainRun(final);await h.waitForMain();}finally{await h.close();}
+ h=create();
+ try{
+  h.observeMainRun(final);
+  h.observeMainRun({id:'native-quiet-check',sessionKey:'agent:main:main',phase:'start'});
+  h.observeMainRun({id:'native-quiet-check',sessionKey:'agent:main:main',phase:'final',response:{text:'HEARTBEAT_OK'}});await h.waitForMain();
+  assert.equal(h.speech.history().filter(m=>m.text==='Synthetic durable native answer').length,1);
+  assert.ok(!h.speech.history().some(m=>m.text==='HEARTBEAT_OK'));assert.equal(h.history.get('native-quiet-check').status,'done');
+ }finally{await h.close();}
+});

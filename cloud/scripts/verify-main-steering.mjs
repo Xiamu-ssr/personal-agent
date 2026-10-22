@@ -11,7 +11,7 @@ const entered=new Promise(r=>toolStarted=r),gate=new Promise(r=>releaseTool=r);
 const fake=await fakeAnthropic((body,index)=>{
  if(index===0)return {stop_reason:'tool_use',content:[{type:'tool_use',id:'synthetic_wait',name:'doudou_call',input:{name:'probe.wait',args_json:'{}'}}]};
  assert.ok(JSON.stringify(body.messages).includes('STEER_ORIGINAL_INPUT'),'main conversation was replaced');
- return {content:[{type:'text',text:'Synthetic progress received'}]};
+ return {content:[{type:'text',text:'SYNTHETIC_ORIGINAL_ANSWER; SYNTHETIC_PROGRESS_ANSWER; SYNTHETIC_CORRECTION_ACK'}]};
 });
 Object.assign(process.env,{MODEL_BASE_URL:fake.url,MODEL_API_KEY:'local-fixture-model-key'});
 const [{initialize},{Harness},{DeviceHub},{ConnectorManager},{startServer},{defineTool}]=await Promise.all([
@@ -38,10 +38,12 @@ try{
  releaseTool();await h.waitForMain();
  assert.ok(fake.requests.slice(1).some(r=>JSON.stringify(r.messages).includes('STEER_PROGRESS_INPUT')));
  assert.ok(fake.requests.slice(1).some(r=>JSON.stringify(r.messages).includes('STEER_EXTRA_INPUT')));
+ const answers=h.speech.history().filter(m=>m.role==='assistant');assert.equal(answers.length,1);
+ for(const expected of ['SYNTHETIC_ORIGINAL_ANSWER','SYNTHETIC_PROGRESS_ANSWER','SYNTHETIC_CORRECTION_ACK'])assert.ok(answers[0].text.includes(expected),'a generated answer never reached visible chat');
  await h.send('STEER_IDLE_INPUT continue the same conversation');await h.waitForMain();
  assert.equal(h.busy,false);assert.equal(h.running.size,0);
  assert.ok(events.some(e=>e.t==='activity_step'&&e.item.messageId===second));
- console.log(JSON.stringify({ok:true,kernel:'openclaw',version:'2026.10.4',busyInputsAcceptedDuringTool:true,nextModelSeesBothInputs:true,sameMainSession:true,oneRunningActivity:true,promptsVisibleInActivity:true,idleContinuation:true,modelRequests:fake.requests.length}));
+ console.log(JSON.stringify({ok:true,kernel:'openclaw',version:'2026.10.4',busyInputsAcceptedDuringTool:true,nextModelSeesBothInputs:true,allAnswersVisible:true,sameMainSession:true,oneRunningActivity:true,promptsVisibleInActivity:true,idleContinuation:true,modelRequests:fake.requests.length}));
 }finally{
  releaseTool();await h.close();server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));await fake.close();fs.rmSync(root,{recursive:true,force:true});
 }

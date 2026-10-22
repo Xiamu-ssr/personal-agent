@@ -16,8 +16,8 @@ import { GatewayChat } from './gateway-chat.mjs';
 import { contentInstructions } from './content-contract.mjs';
 export const MAIN_SESSION = 'agent:main:main';
 export class OpenClawRuntime {
- constructor({root=config.root,port=config.gatewayPort,log=()=>{},env=process.env}={}) {
-  Object.assign(this,{root,port,log,env});this.ready=false;this.closed=false;
+ constructor({root=config.root,port=config.gatewayPort,log=()=>{},env=process.env,onObservedRun=()=>{}}={}) {
+  Object.assign(this,{root,port,log,env,onObservedRun});this.ready=false;this.closed=false;
   this.state=path.join(root,'.openclaw');this.file=path.join(root,'system/openclaw.json');
   this.url=`http://127.0.0.1:${port}`;
   const tokenFile=path.join(root,'system/openclaw-token.json');
@@ -60,7 +60,7 @@ export class OpenClawRuntime {
   for(const stream of [this.process.stdout,this.process.stderr])stream.on('data',buf=>this.log('openclaw:',buf.toString().trim()));
   this.process.once('exit',(code,signal)=>{this.ready=false;this.log('OpenClaw exited',code,signal);if(!this.closed)this.onCrash?.(code);});
   this.client=new GatewayClient({url:`ws://127.0.0.1:${this.port}`,token:this.token,minProtocol:4,maxProtocol:4,scopes:['operator.admin','operator.read','operator.write'],onHelloOk:()=>{this.rpcReady=true;this.ready=true;this.chat.recover();},onConnectError:()=>{this.rpcReady=false;this.ready=false;},onEvent:event=>this.chat.event(event),onGap:()=>{this.chat.disconnect();this.chat.recover();},onClose:()=>{this.rpcReady=false;this.ready=false;this.chat.disconnect();}});
-  this.chat=new GatewayChat(this.client);
+  this.chat=new GatewayChat(this.client,{observeSessionKey:MAIN_SESSION,onObservedRun:event=>this.onObservedRun(event)});
   this.client.start();
   for(let i=0;i<900&&!this.rpcReady;i++){
    if(this.process.exitCode!==null)throw new Error('OpenClaw 启动失败，请查看服务日志');

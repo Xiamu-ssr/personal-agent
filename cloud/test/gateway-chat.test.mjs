@@ -52,3 +52,52 @@ test('native assistant mediaUrls belong to the pending run even when the termina
  chat.event({event:'chat',payload:{...options,runId:options.id,state:'final',message:{content:[{type:'text',text:'Ready'}]}}});
  assert.deepEqual(await done,{text:'Ready',media:[{type:'attachment',attachment:{url}}]});
 });
+
+test('a queued admission and its native continuation have independent identities and deliver both answers once',async()=>{
+ const events=[],sessionKey='agent:main:main',chat=new GatewayChat({request:async()=>({})},{observeSessionKey:sessionKey,onObservedRun:e=>events.push(e)});
+ const first=chat.respond('First question',{id:'first-input',sessionKey}),second=chat.respond('Second question',{id:'second-input',sessionKey});
+ const emit=(event,runId,fields)=>chat.event({event,payload:{sessionKey,runId,...fields}});
+ emit('chat','second-input',{state:'final'});assert.deepEqual(await second,{text:''});
+ emit('chat','first-input',{state:'final',message:{content:[{type:'text',text:'First answer'}]}});assert.equal((await first).text,'First answer');
+ emit('agent','native-continuation',{stream:'lifecycle',data:{phase:'start'}});
+ assert.equal(events.length,1);assert.equal(events[0].phase,'start');
+ emit('chat','native-continuation',{state:'delta',message:{content:[{type:'text',text:'Second answer'}]}});
+ emit('chat','native-continuation',{state:'final'});
+ emit('chat','native-continuation',{state:'final',message:{content:[{type:'text',text:'Second answer'}]}});
+ emit('agent','native-continuation',{stream:'lifecycle',data:{phase:'start'}});
+ assert.deepEqual(events.map(e=>({id:e.id,phase:e.phase,text:e.response?.text})),[
+  {id:'native-continuation',phase:'start',text:undefined},{id:'native-continuation',phase:'final',text:'Second answer'}]);
+ assert.equal(chat.pending.size,0);assert.equal(chat.observed.size,0);
+});
+
+test('empty admission does not suppress a later execution reusing that input id; other sessions remain isolated',async()=>{
+ const events=[],sessionKey='agent:main:main',chat=new GatewayChat({request:async()=>({})},{observeSessionKey:sessionKey,onObservedRun:e=>events.push(e)});
+ const accepted=chat.respond('Question',{sessionKey,id:'admitted'});
+ chat.event({event:'chat',payload:{sessionKey,runId:'admitted',state:'final'}});await accepted;
+ chat.event({event:'chat',payload:{sessionKey:'agent:main:task:feed',runId:'background',state:'final',message:{content:'Private background result'}}});
+ assert.equal(events.length,0);
+ chat.event({event:'chat',payload:{sessionKey,runId:'admitted',state:'final',message:{content:'Visible answer after admission'}}});
+ assert.deepEqual(events.map(e=>e.phase),['start','final']);assert.equal(events[1].response.text,'Visible answer after admission');
+});
+
+test('a continuation failure settles its lifecycle and retains media without replaying an input',()=>{
+ const events=[],sessionKey='agent:main:main',chat=new GatewayChat({request:()=>assert.fail('must not submit an input')},{observeSessionKey:sessionKey,onObservedRun:e=>events.push(e)});
+ chat.event({event:'agent',payload:{sessionKey,runId:'failed-continuation',stream:'lifecycle',data:{phase:'start'}}});
+ chat.event({event:'chat',payload:{sessionKey,runId:'failed-continuation',state:'error',errorMessage:'Synthetic failure'}});
+ assert.equal(events[1].phase,'error');assert.equal(events[1].error.message,'Synthetic failure');assert.equal(chat.observed.size,0);
+ chat.event({event:'agent',payload:{sessionKey,runId:'media-continuation',stream:'lifecycle',data:{phase:'start'}}});
+ chat.event({event:'agent',payload:{sessionKey,runId:'media-continuation',stream:'assistant',data:{mediaUrl:'/work/data/library/media/picture.png'}}});
+ chat.event({event:'chat',payload:{sessionKey,runId:'media-continuation',state:'final'}});
+ assert.equal(events[3].response.media[0].attachment.url,'/work/data/library/media/picture.png');
+});
+
+test('reconnecting a native continuation retrieves its terminal answer once, without resending either question',async()=>{
+ const events=[],requests=[],sessionKey='agent:main:main',chat=new GatewayChat({request:async(method,args)=>{
+  requests.push({method,...args});assert.equal(method,'agent.wait');return {status:'ok',terminalReply:{disposition:'visible',text:'Recovered continuation'}};
+ }},{observeSessionKey:sessionKey,onObservedRun:e=>events.push(e)});
+ chat.event({event:'agent',payload:{sessionKey,runId:'native-after-gap',stream:'lifecycle',data:{phase:'start'}}});
+ chat.disconnect();chat.recover();await new Promise(r=>setImmediate(r));
+ chat.event({event:'chat',payload:{sessionKey,runId:'native-after-gap',state:'final',message:{content:'Recovered continuation'}}});
+ assert.deepEqual(events.map(e=>e.phase),['start','final']);assert.equal(events[1].response.text,'Recovered continuation');
+ assert.equal(requests.length,1);assert.equal(requests[0].runId,'native-after-gap');assert.equal(chat.observed.size,0);
+});

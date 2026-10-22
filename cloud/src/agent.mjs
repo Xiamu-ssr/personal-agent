@@ -25,16 +25,57 @@ export class Harness {
  constructor({hub,bus,log=()=>{},connectors,runtime}){
   Object.assign(this,{hub,bus,connectors});this.log=(...args)=>log(...args.map(v=>connectors.redact(v)));
   for(const [key,value]of Object.entries(process.env))if(/(?:TOKEN|KEY|SECRET|PASSWORD)$/i.test(key)&&value?.length>=8)connectors.knownSecrets.add(value);
-  this.runtime=runtime||new OpenClawRuntime({log:this.log});this.busy=false;this.closed=false;this.running=new Map();this.sessionRuns=new Map();this.mainTask=Promise.resolve();
+  this.runtime=runtime||new OpenClawRuntime({log:this.log,onObservedRun:event=>this.observeMainRun(event)});this.busy=false;this.closed=false;this.running=new Map();this.sessionRuns=new Map();this.mainTask=Promise.resolve();
   this.history=new TaskHistory({root:config.root,redact:s=>connectors.redact(s)});
   this.inbox=new MessageInbox(config.root);this.delivering=new Set();
-  this.receipts=new Map(tailJsonl(config.chatLog,Number.MAX_SAFE_INTEGER).filter(m=>m.clientId).map(m=>[m.clientId,m.id]));
+  const messages=tailJsonl(config.chatLog,Number.MAX_SAFE_INTEGER);
+  this.receipts=new Map(messages.filter(m=>m.clientId).map(m=>[m.clientId,m.id]));
+  this.nativeReplies=new Set(messages.filter(m=>m.role==='assistant'&&m.id?.startsWith('native-')).map(m=>m.id));
   this.content=new Content({root:config.root,bus,timezone:config.timezone});this.pages=new PageScreenshot({root:config.root});
   this.speech=new Speech({root:config.root,bus,redact:s=>connectors.redact(s),onSay:e=>{const run=this.running.get(e.activityId);if(run)run.said=true;}});
   this.avatar=new Avatar({bus,busy:()=>this.running.size>0,waiting:()=>this.speech.waiting()});
  }
  async startMain(){await this.runtime.start();for(const record of this.inbox.records.values())this.deliverMessage(record);}
  async settingsChanged(){await this.runtime.reload();}
+ observeMainRun({id,sessionKey,phase,response,error}){
+  if(sessionKey!==MAIN_SESSION)return;
+  let run=this.running.get(id);
+  if(run&&!run.observed)return;
+  if(!run&&this.closed)return;
+  if(!run&&phase==='error')return;
+  if(!run&&phase==='final'&&!response?.text&&!response?.media?.length)return;
+  if(!run){
+   const label='继续处理消息',controller=new AbortController();let finish;
+   const done=new Promise(resolve=>finish=resolve);
+   run={id,label,sessionKey,controller,observed:true,silent:false,said:false,incoming:new Set(),started:Date.now(),finish};
+   this.running.set(id,run);this.sessionRuns.set(sessionKey,run);
+   const previous=this.mainTask;this.mainTask=Promise.all([previous,done]).then(([,result])=>result);
+   this.history.put(id,{title:label,kind:'chat',status:'running',sessionKey});
+   this.busy=true;this.bus.emit({t:'status',busy:true});this.bus.emit({t:'activity',phase:'started',id,title:label,ts:Date.now()});this.avatar.working();
+  }
+  if(phase==='start')return;
+  let text=response?.text||'',ok=false,status='done';
+  try{
+   if(error)throw error;
+   if(text)this.step(id,'result',text);
+   const messageId=`native-${id}`;
+   if(!this.closed&&!this.nativeReplies.has(messageId)&&(!run.said||response?.media?.length)&&(!quiet(text)||response?.media?.length)){
+    this.speech.emit({text},{id:messageId,activityId:id,nativeMedia:response.media});this.nativeReplies.add(messageId);
+   }
+   ok=true;
+  }catch(e){
+   const stopped=run.controller.signal.aborted;text=stopped?'已停止':this.connectors.redact(runFailureText(e));
+   status=stopped?'stopped':e.code==='outcome_unknown'?'unknown':'error';
+   if(!stopped)this.log('OpenClaw continuation failed',id,e.message);
+   if(!stopped&&!this.closed)this.speech.emit({text:'这次没完成：'+text},{activityId:id,error:true});
+  }finally{
+   this.history.put(id,{status,endedAt:Date.now(),summary:quiet(text)?'已检查，无新变化':text.slice(0,180),latestResult:text});
+   this.running.delete(id);if(this.sessionRuns.get(sessionKey)===run)this.sessionRuns.delete(sessionKey);
+   this.busy=[...this.running.values()].some(r=>r.sessionKey===MAIN_SESSION);
+   this.bus.emit({t:'status',busy:this.busy});this.bus.emit({t:'activity',phase:'done',id,title:run.label,status,ts:Date.now()});
+   this.content.discoverFeed();this.avatar.settle(ok);run.finish({ok,text});
+  }
+ }
  step(id,kind,text,tool,extra={}){if(!this.history.records.has(id))return;const item={kind,text:this.connectors.redact(String(text||'')),time:new Date().toISOString(),...(tool&&{tool}),...extra};this.history.appendStep(id,item);this.bus.emit({t:'activity_step',id,item});}
  groups(){
   const wrap=fn=>async args=>result(await fn(args));
@@ -101,7 +142,7 @@ export class Harness {
    return {ok:true,text:response.text};
   }catch(e){onAccepted?.(null,e);await this.drainMain(run);const stopped=controller.signal.aborted,message=this.connectors.redact(runFailureText(e));if(!stopped)this.log('OpenClaw run failed',id,e.message);this.history.put(id,{status:stopped?'stopped':e.code==='outcome_unknown'?'unknown':'error',endedAt:Date.now(),summary:stopped?'已停止':message});if(!silent&&!stopped&&reportError)this.speech.emit({text:(e.code==='outcome_unknown'?'结果待确认：':'这次没完成：')+message},{activityId:id,chatType,error:true});return {ok:false,error:e.message};
   }finally{
-   this.running.delete(id);this.sessionRuns.delete(sessionKey);this.busy=[...this.running.values()].some(r=>r.sessionKey===MAIN_SESSION);
+   this.running.delete(id);if(this.sessionRuns.get(sessionKey)===run)this.sessionRuns.delete(sessionKey);this.busy=[...this.running.values()].some(r=>r.sessionKey===MAIN_SESSION);
    this.bus.emit({t:'status',busy:this.busy});this.bus.emit({t:'activity',phase:'done',id,title:label,status:this.history.get(id).status,summary:this.history.get(id).summary,ts:Date.now()});
    this.content.discoverFeed();this.avatar.settle(ok);
   }
