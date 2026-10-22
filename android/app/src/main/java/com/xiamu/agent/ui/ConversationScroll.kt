@@ -26,41 +26,47 @@ class ConversationScrollState {
     var sentVersion = 0
     var programmatic = false
     var userScrolling = false
+    var gestureMoved = false
+    var newest:Any?=null
 }
 
 /** Layout growth and IME resize consult the position from the last user gesture. */
 @Composable
-fun BindConversationScroll(list: LazyListState, state: ConversationScrollState, count: Int, content: Any?, sent: Int, bottomInset: Any? = null) {
+fun BindConversationScroll(list: LazyListState, state: ConversationScrollState, count: Int, content: Any?, sent: Int, bottomInset: Any? = null,reversed:Boolean=false) {
     LaunchedEffect(list, state) {
-        list.interactionSource.interactions.collect { if (it is DragInteraction.Start) state.userScrolling = true }
+        list.interactionSource.interactions.collect { if (it is DragInteraction.Start) {state.userScrolling=true;state.gestureMoved=false} }
     }
     LaunchedEffect(list, state) {
-        snapshotFlow { Triple(list.isScrollInProgress, list.canScrollForward, list.layoutInfo) }.collect { (scrolling, forward, layout) ->
+        snapshotFlow { Triple(list.isScrollInProgress, if(reversed) list.canScrollBackward else list.canScrollForward, list.layoutInfo) }.collect { (scrolling, forward, layout) ->
             if (!state.programmatic && state.userScrolling) {
                 val last = layout.visibleItemsInfo.lastOrNull()
                 val average = layout.visibleItemsInfo.map { it.size }.average().takeIf { it.isFinite() } ?: 0.0
-                val below = if (last == null) 0 else ((layout.totalItemsCount - last.index - 1) * average +
+                val first=layout.visibleItemsInfo.firstOrNull()
+                val below = if(reversed) ((first?.index ?: 0)*average).toInt() else if (last == null) 0 else ((layout.totalItemsCount - last.index - 1) * average +
                     (last.offset + last.size + layout.afterContentPadding - layout.viewportEndOffset).coerceAtLeast(0)).toInt()
                 state.rules = state.rules.userPosition(!forward, below, layout.viewportEndOffset - layout.viewportStartOffset)
-                if (!scrolling) state.userScrolling = false
+                if(scrolling) state.gestureMoved=true
+                else if(state.gestureMoved) state.userScrolling=false
             }
         }
     }
     LaunchedEffect(count, content, sent, bottomInset) {
         val initial = !state.initialized
-        if (state.initialized) state.rules = state.rules.messages(count - state.count)
+        val historyBatch=initial || state.count==0 || count-state.count>1
+        if (state.initialized && content!=state.newest) state.rules = state.rules.messages(count - state.count)
         val sentNow = sent != state.sentVersion
         if (sentNow) state.rules = state.rules.sent()
-        state.count = count; state.sentVersion = sent; state.initialized = true
+        state.count = count; state.sentVersion = sent; state.initialized = count>0;state.newest=content
         if ((state.rules.contentChanged() && !state.userScrolling) || initial || sentNow) {
             state.programmatic = true
             try {
                 // Wait for the new item/viewport to be laid out, including after an IME resize.
                 withFrameNanos { }
-                val last = list.layoutInfo.totalItemsCount - 1
+                val last = if(reversed) 0 else list.layoutInfo.totalItemsCount - 1
                 if (last >= 0) {
-                    if (initial) list.scrollToItem(last, Int.MAX_VALUE / 2)
-                    else list.animateScrollToItem(last, Int.MAX_VALUE / 2)
+                    val offset=if(reversed) 0 else Int.MAX_VALUE/2
+                    if (historyBatch || reversed) list.scrollToItem(last,offset)
+                    else list.animateScrollToItem(last,offset)
                 }
             } finally { state.programmatic = false }
         }
@@ -68,14 +74,14 @@ fun BindConversationScroll(list: LazyListState, state: ConversationScrollState, 
 }
 
 @Composable
-fun ReturnToBottom(list: LazyListState, state: ConversationScrollState, modifier: Modifier = Modifier) {
+fun ReturnToBottom(list: LazyListState, state: ConversationScrollState, modifier: Modifier = Modifier,reversed:Boolean=false) {
     val scope = rememberCoroutineScope()
     if (!state.rules.showReturn) return
     Box(modifier.size(48.dp).background(Pal.Card, CircleShape).tap {
         state.rules = state.rules.returned()
         scope.launch {
             state.programmatic = true
-            try { list.animateScrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0), Int.MAX_VALUE / 2) }
+            try { list.animateScrollToItem(if(reversed) 0 else (list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0),if(reversed) 0 else Int.MAX_VALUE / 2) }
             finally { state.programmatic = false }
         }
     }.testTag("return-bottom"), contentAlignment = Alignment.Center) {

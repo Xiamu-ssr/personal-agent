@@ -1,0 +1,28 @@
+{
+  "version": "1.8.1",
+  "macBuild": 16,
+  "macArchitectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "macCodeSignatureVerified": true,
+  "appleNotarized": false,
+  "androidVersionCode": 28,
+  "androidCodeSignatureVerified": true,
+  "privateCredentialsAndHomePathAbsentFromPackages": true,
+  "cloudTests": 149,
+  "androidDeviceTests": 2,
+  "macChatAssertions": 77,
+  "nativeSteeringVerified": true,
+  "activityMigrationRecordsVerified": 416,
+  "assets": {
+    "doudou-1.8.1.apk": {
+      "bytes": 9573166,
+      "sha256": "3c607f1e03bf26db603ff08466f3ed4f68bb4c232fbfe52adea97b3500cea2ce"
+    },
+    "doudou-1.8.1.dmg": {
+      "bytes": 11133781,
+      "sha256": "42b479fb3ba0c914fd8b4675ea3ae2e93ba8013db0df5d2624ea6166637968a7"
+    }
+  }
+}

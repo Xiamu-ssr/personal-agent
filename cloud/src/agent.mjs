@@ -13,7 +13,8 @@ import { Content } from './content.mjs';
 import { triggerTitle } from './activity-title.mjs';
 import { cronFields } from './cron.mjs';
 import { defineTool } from './product-tools.mjs';
-import { appendJsonl, readJson } from './store.mjs';
+import { appendJsonl, readJson, tailJsonl } from './store.mjs';
+import { MessageInbox } from './message-inbox.mjs';
 import { writePrivateJson } from './private-json.mjs';
 import { validateMessage, prepareAttachments, userContent } from './attachments.mjs';
 import { runFailureText } from './gateway-chat.mjs';
@@ -26,13 +27,15 @@ export class Harness {
   for(const [key,value]of Object.entries(process.env))if(/(?:TOKEN|KEY|SECRET|PASSWORD)$/i.test(key)&&value?.length>=8)connectors.knownSecrets.add(value);
   this.runtime=runtime||new OpenClawRuntime({log:this.log});this.busy=false;this.closed=false;this.running=new Map();this.sessionRuns=new Map();this.mainTask=Promise.resolve();
   this.history=new TaskHistory({root:config.root,redact:s=>connectors.redact(s)});
+  this.inbox=new MessageInbox(config.root);this.delivering=new Set();
+  this.receipts=new Map(tailJsonl(config.chatLog,Number.MAX_SAFE_INTEGER).filter(m=>m.clientId).map(m=>[m.clientId,m.id]));
   this.content=new Content({root:config.root,bus,timezone:config.timezone});this.pages=new PageScreenshot({root:config.root});
   this.speech=new Speech({root:config.root,bus,redact:s=>connectors.redact(s),onSay:e=>{const run=this.running.get(e.activityId);if(run)run.said=true;}});
   this.avatar=new Avatar({bus,busy:()=>this.running.size>0,waiting:()=>this.speech.waiting()});
  }
- async startMain(){await this.runtime.start();}
+ async startMain(){await this.runtime.start();for(const record of this.inbox.records.values())this.deliverMessage(record);}
  async settingsChanged(){await this.runtime.reload();}
- step(id,kind,text,tool,extra={}){if(!this.history.records.has(id))return;const item={kind,text:this.connectors.redact(String(text||'')),time:new Date().toISOString(),...(tool&&{tool}),...extra};const record=this.history.get(id);this.history.put(id,{steps:[...(record.steps||[]),item]});this.bus.emit({t:'activity_step',id,item});}
+ step(id,kind,text,tool,extra={}){if(!this.history.records.has(id))return;const item={kind,text:this.connectors.redact(String(text||'')),time:new Date().toISOString(),...(tool&&{tool}),...extra};this.history.appendStep(id,item);this.bus.emit({t:'activity_step',id,item});}
  groups(){
   const wrap=fn=>async args=>result(await fn(args));
   return {...this.connectors.toolGroups(),devices:this.hub.tools(),page:this.pages.tools(),speech:this.speech.tools(),
@@ -84,7 +87,7 @@ export class Harness {
  async execute(prompt,{id=crypto.randomUUID(),label='处理消息',sessionKey=MAIN_SESSION,chatType,attachments=[],silent=false,reportError=true,kind='chat',scheduleId,onAccepted}={}){
   if(this.closed)throw new Error('云端正在关闭');
   const controller=new AbortController(),run={id,label,sessionKey,controller,chatType,silent,said:false,incoming:new Set(),started:Date.now()};
-  this.running.set(id,run);this.sessionRuns.set(sessionKey,run);this.history.put(id,{title:label,kind,status:'running',sessionKey,chatType,scheduleId,steps:this.history.records.get(id)?.steps||[]});this.history.rememberPrompt(id,prompt,attachments);
+  this.running.set(id,run);this.sessionRuns.set(sessionKey,run);this.history.put(id,{title:label,kind,status:'running',sessionKey,chatType,scheduleId});this.history.rememberPrompt(id,prompt,attachments);
   this.busy=[...this.running.values()].some(r=>r.sessionKey===MAIN_SESSION);this.bus.emit({t:'status',busy:this.busy});this.bus.emit({t:'activity',phase:'started',id,title:label,ts:Date.now()});this.avatar.working();
   let ok=false;
   try{
@@ -120,17 +123,27 @@ export class Harness {
   run.incoming.add(done);done.finally(()=>run.incoming.delete(done));
   const mainTask=this.mainTask;return done.then(reply=>reply.ok?mainTask:reply);
  }
- async send(text,source='app',attachments=[],{ifEmpty=false,promptText=text,quote}={}){
+ deliverMessage(record){
+  const {entry,promptText}=record,id=entry.id;if(this.delivering.has(id))return;
+  // The inbox is committed before the visible chat log. Recover a crash between them.
+  if(!tailJsonl(config.chatLog,Number.MAX_SAFE_INTEGER).some(m=>m.id===id))appendJsonl(config.chatLog,entry);
+  if(entry.clientId)this.receipts.set(entry.clientId,id);
+  this.delivering.add(id);
+  this.runMain(promptText,{id,label:(entry.text||entry.quote?.title||'附件').replace(/\s+/g,' ').slice(0,32),attachments:entry.attachments||[],
+   onAccepted:(_ack,error)=>{if(!error)this.inbox.received(id);}})
+   .then(()=>this.inbox.received(id),e=>this.log('message delivery failed',id,e.message)).finally(()=>this.delivering.delete(id));
+ }
+ async send(text,source='app',attachments=[],{ifEmpty=false,promptText=text,quote,clientId}={}){
   if(this.closed)throw new Error('云端正在关闭');if(ifEmpty&&this.speech.history(1).length)return null;
+  if(clientId&&this.receipts.has(clientId))return this.receipts.get(clientId);
   const msg=validateMessage(config.root,promptText,attachments),atts=await prepareAttachments(config.root,msg.attachments),id=crypto.randomUUID();
-  if(this.sessionRuns.get(MAIN_SESSION)?.controller.signal.aborted)await this.waitForMain();
   if(this.closed)throw new Error('云端正在关闭');
   const activityId=this.sessionRuns.get(MAIN_SESSION)?.id||id;
-  const entry={role:'user',id,activityId,text:text.trim(),ts:Date.now(),source,...(atts.length&&{attachments:atts}),...(quote&&{quote})};appendJsonl(config.chatLog,entry);if(source!=='onboarding')this.bus.emit({t:'user',...entry});
-  let received,failed;const acceptance=new Promise((resolve,reject)=>{received=resolve;failed=reject;});
-  this.runMain(msg.text,{id,label:(text||quote?.title||'附件').replace(/\s+/g,' ').slice(0,32),attachments:atts,onAccepted:(ack,error)=>error?failed(error):received(ack)})
-   .then(reply=>reply.ok?received():failed(new Error(reply.error)),failed);
-  await acceptance;return id;
+  const entry={role:'user',id,activityId,text:text.trim(),ts:Date.now(),source,...(clientId&&{clientId}),...(atts.length&&{attachments:atts}),...(quote&&{quote})};
+  const record={entry,promptText:msg.text};this.inbox.put(record);appendJsonl(config.chatLog,entry);
+  if(clientId)this.receipts.set(clientId,id);
+  if(source!=='onboarding')this.bus.emit({t:'user',...entry});
+  this.deliverMessage(record);return id;
  }
  async firstChat(device){if(!['mac','android'].includes(device))throw new Error('设备必须是 android 或 mac');const id=await this.send(`[第一次聊天] 设备：${device}。介绍自己；已从旧版迁移的偏好先读取，不让用户重复介绍。`,'onboarding',[],{ifEmpty:true});return {started:!!id,...(id&&{id})};}
  runIsolated(label,prompt,{id=crypto.randomUUID(),chatType,attachments=[],resumeTask,mainContext=false,scheduleId}={}){

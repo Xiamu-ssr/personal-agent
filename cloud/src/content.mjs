@@ -145,8 +145,8 @@ export class Content {
     appendJsonl(path.join(this.root, "data/feed/反馈.jsonl"), { path: rel, title: post.title, action: types[action], ts: this.clock().getTime() });
     return { ok: true };
   }
-  async sendMessage({ text = "", attachments = [], quote: reference }, send) {
-    if (!reference) return { ok: true, id: await send(text, "http", attachments) };
+  async sendMessage({ text = "", attachments = [], quote: reference, clientId }, send) {
+    if (!reference) return { ok: true, id: await send(text, "http", attachments, {clientId}) };
     if (typeof text !== "string" || text.length > 8000) throw problem("引用附言限 8000 字");
     let quote, promptText, feedbackFile, record;
     if (reference.kind === "feed") {
@@ -167,7 +167,7 @@ export class Content {
       feedbackFile = "data/ideas/反馈.jsonl";
       record = { id: item.id, revision: current.revision, title: item.title, reply: item.reply, action: "采纳" };
     } else throw problem("引用类型必须是 feed 或 idea");
-    const id = await send(text.trim(), quote.kind, attachments, { quote, promptText });
+    const id = await send(text.trim(), quote.kind, attachments, { quote, promptText, clientId });
     appendJsonl(path.join(this.root, feedbackFile), { ...record, text: text.trim(), ts: this.clock().getTime() });
     return { ok: true, id };
   }

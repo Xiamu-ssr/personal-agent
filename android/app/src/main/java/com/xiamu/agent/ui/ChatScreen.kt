@@ -104,15 +104,16 @@ fun ChatScreen(list: LazyListState,bottom: Dp,scroll: ConversationScrollState = 
     items: List<ChatItem> = Chat.items,error: String = Chat.error.value,
     sentVersion: Int = Draft.sentVersion.intValue,emptyText: String = if(Chat.connected.value) "豆豆正在准备第一句话…" else "正在连接云端…",
     onChoose: (String,String) -> Unit = Chat::choose) {
-    BindConversationScroll(list,scroll,items.size,items.lastOrNull(),sentVersion,bottom)
+    BindConversationScroll(list,scroll,items.size,items.lastOrNull(),sentVersion,bottom,reversed=true)
     val visible by remember(list) { derivedStateOf { list.layoutInfo.visibleItemsInfo.map { it.index }.toSet() } }
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(state=list,modifier=Modifier.fillMaxSize().testTag("chat-list"),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=FloatingHeaderSpace+8.dp,bottom=bottom+12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
-            if(items.isEmpty()) item { EmptyNote(emptyText) }
-            itemsIndexed(items,key={ i,item -> when(item) { is ChatItem.User -> item.id.ifBlank { "pending:$i" }; is ChatItem.Assistant -> item.id.ifBlank { "assistant:$i" } } }) { i,item -> ChatRow(item,mediaActive=i in visible,onChoose=onChoose) }
+        LazyColumn(state=list,reverseLayout=true,modifier=Modifier.fillMaxSize().testTag("chat-list"),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=FloatingHeaderSpace+8.dp,bottom=bottom+12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             if(error.isNotBlank()) item { ErrorNote(error) }
+            if(items.isEmpty()) item { EmptyNote(emptyText) }
+            itemsIndexed(items.asReversed(),key={ i,item -> when(item) { is ChatItem.User -> item.id.ifBlank { "pending:$i" }; is ChatItem.Assistant -> item.id.ifBlank { "assistant:$i" } } }) { i,item -> ChatRow(item,mediaActive=(i+(if(error.isNotBlank())1 else 0)) in visible,onChoose=onChoose) }
+            if(items === Chat.items && Chat.hasEarlier.value) item {Box(Modifier.fillMaxWidth().padding(12.dp).tap(!Chat.loadingEarlier.value) {Chat.loadEarlier()},contentAlignment=Alignment.Center) {Text(if(Chat.loadingEarlier.value) "正在加载…" else "更早的消息",style=Type.body(12),color=Pal.Muted)}}
         }
-        ReturnToBottom(list,scroll,Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=bottom+12.dp))
+        ReturnToBottom(list,scroll,Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=bottom+12.dp),reversed=true)
     }
 }
 @Composable

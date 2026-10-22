@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.8.0"><img src="https://img.shields.io/badge/Release-v1.8.0-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.8.0"></a>
+  <a href="https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.8.1"><img src="https://img.shields.io/badge/Release-v1.8.1-C9A45C?style=flat-square&amp;labelColor=101612" alt="Release v1.8.1"></a>
   <img src="https://img.shields.io/badge/Platforms-Android%20%C2%B7%20macOS%20%C2%B7%20Cloud-C9A45C?style=flat-square&amp;labelColor=101612" alt="Android · macOS · Cloud">
   <a href="https://github.com/openclaw/openclaw"><img src="https://img.shields.io/badge/Built%20with-OpenClaw-C9A45C?style=flat-square&amp;labelColor=101612" alt="Built with OpenClaw"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C9A45C?style=flat-square&amp;labelColor=101612" alt="MIT License"></a>
@@ -27,9 +27,9 @@
 
 ## 开始使用
 
-**当前版本：[v1.8.0 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.8.0)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
+**当前版本：[v1.8.1 · OpenClaw](https://github.com/Xiamu-ssr/personal-agent/releases/tag/v1.8.1)。** 需要自己的 Linux 云主机和模型端点；本项目不提供托管账号或内含模型额度。
 
-1.8.0 修正长表格的换行与重叠，优化 Mac 切栏、滚动条、选择器和附件菜单；头像改为短暂表情，空闲与后台释放视频播放器，连接统一由云端保活。[查看验证记录](verification/v1.8.0/README.md)。
+1.8.1 将消息保存回执与模型执行分开；聊天先显示最近 100 条，断线只补新消息，更早记录按需加载。修正重连顺序、打开聊天时快速滚动和加载旧记录后的阅读位置；活动按任务独立保存，记录工具过程不再阻塞工具执行。[查看验证记录](verification/v1.8.1/README.md)。
 
 从 1.7 升级无需迁移数据，更新云端和客户端即可。
 
@@ -37,8 +37,8 @@
 
 | 设备 | 安装包 | 要求 |
 | --- | --- | --- |
-| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.8.0/doudou-1.8.0.apk) | Android 9 或更新版本 |
-| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.8.0/doudou-1.8.0.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
+| Android | [下载 APK](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.8.1/doudou-1.8.1.apk) | Android 9 或更新版本 |
+| Mac | [下载 DMG](https://github.com/Xiamu-ssr/personal-agent/releases/download/v1.8.1/doudou-1.8.1.dmg) | macOS 14 或更新版本，Apple 芯片 / Intel 通用 |
 | 云端 | [部署指南](docs/deployment.md) | Linux、Node.js 24.16+ 或 26.1+、systemd、Nginx、HTTPS |
 
 先[部署云端](#部署)，生成一次性配对码，再在 App 填入自己的服务器地址。第一次聊天，豆豆会问怎么称呼你、自己叫什么，再推荐需要连接的应用和本机能力。
@@ -256,8 +256,8 @@ cd android
 ```bash
 # 首次构建创建自己的本地签名身份，可能弹出钥匙串授权
 bash mac/tools/make-signing-identity.sh
-VERSION=1.8.0 bash mac/build.sh
-# 产物：mac/build/doudou-1.8.0.dmg；Apple 芯片 + Intel 通用
+VERSION=1.8.1 bash mac/build.sh
+# 产物：mac/build/doudou-1.8.1.dmg；Apple 芯片 + Intel 通用
 ```
 
 Mac 安装包采用本地签名，未做 Apple 公证。首次打开被系统拦截时，在「系统设置 → 隐私与安全性」中核对应用后选择「仍要打开」。

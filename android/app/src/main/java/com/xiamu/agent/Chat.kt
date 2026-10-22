@@ -16,6 +16,8 @@ object Chat {
     val avatar=mutableStateOf(AvatarStatus())
     val agentName=mutableStateOf("豆豆")
     val error=mutableStateOf("")
+    val hasEarlier=mutableStateOf(false)
+    val loadingEarlier=mutableStateOf(false)
     val filesVersion=mutableIntStateOf(0)
     val libraryVersion=mutableIntStateOf(0)
     val activityVersion=mutableIntStateOf(0)
@@ -47,20 +49,26 @@ object Chat {
         wanted=false; generation++; socket?.close(1000,null); socket=null; connected.value=false
         state.disconnected(); SideChats.disconnected(); background.clear(); publish()
     }
-    fun reset() { disconnect(); SideChats.reset(); state.clear(); activityUpdates.clear(); error.value=""; agentName.value="豆豆"; inbox=FeedInbox(); feedUnread.value=false }
+    fun reset() { disconnect(); SideChats.reset(); state.clear(); hasEarlier.value=false; loadingEarlier.value=false; activityUpdates.clear(); error.value=""; agentName.value="豆豆"; inbox=FeedInbox(); feedUnread.value=false }
+    fun loadEarlier() {
+        if(loadingEarlier.value) return
+        val first=items.firstOrNull().let {when(it) {is ChatItem.User->it.id;is ChatItem.Assistant->it.id;else->""}}
+        if(first.isBlank()) return
+        loadingEarlier.value=true;val session=generation
+        scope.launch {
+            try {
+                val page=Api.getJson("/api/history?n=100&before="+java.net.URLEncoder.encode(first,"UTF-8"))
+                if(session==generation) {state.replaceHistory(page.optJSONArray("items").objects().mapNotNull(::historyItem));hasEarlier.value=page.optBoolean("hasMore")}
+            } catch(e: CancellationException) {throw e} catch(e: Exception) {if(session==generation) error.value=e.message ?: "历史加载失败"}
+            finally {loadingEarlier.value=false}
+        }
+    }
     suspend fun send(message: OutgoingMessage): Boolean {
         val result=Api.postMessage(message.path,message.json())
         val id=result.optString("id")
         check(result.optBoolean("ok") && id.isNotBlank()) { "消息尚未确认，请重试" }
-        // Display only server messages. A receipt lost on WS is recovered from history.
-        if(items.none { it is ChatItem.User && it.id==id }) {
-            val session=generation
-            scope.launch {
-                runCatching { Api.getJson("/api/history?n=200") }.onSuccess { history ->
-                    if(session==generation) { state.replaceHistory(history.optJSONArray("items").objects().mapNotNull(::historyItem));publish() }
-                }
-            }
-        }
+        // HTTP receipt and WS echo share the server ID; neither needs a full refill.
+        if(items.none { it is ChatItem.User && it.id==id }) state.user(ChatItem.User(message.text,message.attachments,System.currentTimeMillis(),id,message.quote))
         revision++; error.value=""; return true
     }
     fun interrupt() { if(socket?.send("{\"t\":\"interrupt\"}")!=true) error.value="连接断开，未能停止" }
@@ -75,7 +83,7 @@ object Chat {
     fun enterFeed() { feedVisible=true; inbox.enter(); persistFeed() }
     fun leaveFeed() { feedVisible=false; inbox.leave() }
     private fun persistFeed() { feedUnread.value=inbox.unread; Prefs.feedUnread=inbox.unread; Prefs.feedKnownPaths=inbox.knownPaths }
-    private fun refresh() {
+    private fun refresh(after:String) {
         val session=generation; val before=revision
         scope.launch {
             try {
@@ -85,8 +93,9 @@ object Chat {
                 if(before==revision) { state.status(s.optBoolean("busy")); state.avatar(AvatarStatus.from(s.optJSONObject("avatar"))); publish() }
                 // Check the actual server state, never infer onboarding from a local preference.
                 if(s.optBoolean("chatEmpty")) Api.postJson("/api/first-chat",JSONObject().put("device","android"))
-                val history=Api.getJson("/api/history?n=200")
-                if(session==generation) { state.replaceHistory(history.optJSONArray("items").objects().mapNotNull(::historyItem)); publish() }
+                val last=after
+                val history=Api.getJson("/api/history?n=100"+if(last.isBlank()) "" else "&after="+java.net.URLEncoder.encode(last,"UTF-8"))
+                if(session==generation) { state.replaceHistory(history.optJSONArray("items").objects().mapNotNull(::historyItem));if(last.isBlank()) hasEarlier.value=history.optBoolean("hasMore"); publish() }
                 // New posts can arrive while the App has no socket. Reconcile on reconnect.
                 runCatching { Api.feed() }.onSuccess { page -> if(session==generation) { inbox.receive(page.items.map { it.path }); persistFeed() } }
 
@@ -100,8 +109,11 @@ object Chat {
                 generation++; revision++
                 // Re-read canonical activity titles after events missed offline.
                 activityUpdates.clear(); activityVersion.intValue++
-                state.hello(m.optJSONArray("history").objects().mapNotNull(::historyItem),m.optBoolean("busy"),AvatarStatus.from(m.optJSONObject("avatar")))
-                connected.value=true; error.value=""; refresh(); filesVersion.intValue++;libraryVersion.intValue++
+                val history=m.optJSONArray("history").objects().mapNotNull(::historyItem)
+                val lastReceived=items.lastOrNull().let {when(it) {is ChatItem.User->it.id;is ChatItem.Assistant->it.id;else->""}}
+                if(items.isEmpty()) hasEarlier.value=history.size>=100
+                state.hello(history,m.optBoolean("busy"),AvatarStatus.from(m.optJSONObject("avatar")))
+                connected.value=true; error.value=""; refresh(lastReceived); filesVersion.intValue++;libraryVersion.intValue++
             }
             "user" -> { (historyItem(m) as? ChatItem.User)?.let(state::user); revision++ }
             "say" -> { (historyItem(m) as? ChatItem.Assistant)?.let(state::say); revision++ }

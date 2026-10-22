@@ -9,6 +9,9 @@ import Observation
     var sentRevision=0
     var choosing=Set<String>()
     var error=""
+    var hasEarlier=false
+    var loadingEarlier=false
+    @ObservationIgnored var onLoadEarlier:(()->Void)?
     @ObservationIgnored private var consumed=Set<String>()
     // Presentation measurements belong to this transcript; this cache owns
     // no native views, media players or background page tasks.
@@ -16,7 +19,7 @@ import Observation
     @ObservationIgnored let layoutCache=ChatLayoutCache()
     init(activityID:String?=nil) { self.activityID=activityID }
     func bind(_ id:String) { precondition(activityID == nil || activityID == id); activityID=id }
-    func reset() { items=[]; consumed=[]; choosing=[]; error="";scrollState.returnToBottom();layoutCache.reset();revision += 1 }
+    func reset() { items=[]; consumed=[]; choosing=[]; error="";hasEarlier=false;loadingEarlier=false;scrollState.returnToBottom();layoutCache.reset();revision += 1 }
     private func belongs(_ row:[String:Any])->Bool {
         if let activityID { return row["activityId"] as? String == activityID && row["chatType"] as? String == "side" }
         return row["chatType"] as? String != "side"
@@ -37,12 +40,19 @@ import Observation
         revision += 1
     }
     func mergeSnapshot(_ rows:[[String:Any]]) {
-        for row in rows {receive(row)}
-        let order=Dictionary(rows.enumerated().compactMap { i,row in (row["id"] as? String).map {($0,i)} },uniquingKeysWith:{_,new in new})
-        // The server owns write order. Events newer than this snapshot stay after its rows.
-        let ordered=items.enumerated().sorted { a,b in
-            let x=order[a.element.serverID],y=order[b.element.serverID]
-            if let x,let y {return x<y}; if x != nil {return true};if y != nil {return false};return a.offset<b.offset
+        var merged=items,indices=Dictionary(items.enumerated().map{($0.element.serverID,$0.offset)},uniquingKeysWith:{_,new in new})
+        for row in rows {
+            guard belongs(row),var item=ChatClient.item(row) else{continue}
+            if item.optionsUsed {consumed.insert(item.serverID)}
+            item.optionsUsed = item.optionsUsed || consumed.contains(item.serverID)
+            if let i=indices[item.serverID] {item.optionsUsed = item.optionsUsed || merged[i].optionsUsed;merged[i]=item}
+            else {indices[item.serverID]=merged.count;merged.append(item)}
+        }
+        // A reconnect sends a recent suffix. It must never move that suffix ahead
+        // of the older messages already loaded, or publish one change per bubble.
+        let ordered=merged.enumerated().sorted {a,b in
+            if let x=a.element.ts,let y=b.element.ts,x != y {return x<y}
+            return a.offset<b.offset
         }.map(\.element)
         if ordered != items {items=ordered;revision += 1}
     }

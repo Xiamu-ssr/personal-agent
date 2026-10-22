@@ -127,7 +127,7 @@ test('device catalog distinguishes offline, missing implementation and revoked p
 test('failed scheduled checks stay in activities while a failed user request reports the failure in chat',async t=>{
  const {h}=product(t,{respond:async()=>{throw new Error('HTTP 402');},close:async()=>{}});
  const checked=await h.runMain('定时检查',{id:'scheduled-error',reportError:false});assert.equal(checked.ok,false);assert.equal(h.history.get('scheduled-error').status,'error');assert.equal(h.speech.history().length,0);
- await assert.rejects(h.send('用户发来的请求'),/HTTP 402/);await h.waitForMain();assert.equal(h.speech.history().filter(m=>m.error).length,1);
+ const id=await h.send('用户发来的请求');assert.ok(id);await h.waitForMain();assert.equal(h.speech.history().filter(m=>m.error).length,1);
 });
 test('new HTTP protocol is mandatory and internal tools cannot be reached through proxy headers',async t=>{
  const {h,bus,connectors}=product(t,{ready:true,close:async()=>{}});

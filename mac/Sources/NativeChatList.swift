@@ -114,12 +114,16 @@ struct NativeChatList: NSViewRepresentable {
                     metrics.heights=metrics.heights.filter{snapshots[$0.key] != nil};metrics.items=snapshots;metrics.revision=revision
                 }
                 let sameOrder=items.map(\.id)==next.map(\.id)
+                if !sameOrder,state.atBottom == false,!items.isEmpty {
+                    let row=table.row(at:NSPoint(x:1,y:scroll.contentView.bounds.minY+1))
+                    if items.indices.contains(row){readingAnchor=(items[row].id,scroll.contentView.bounds.minY-table.rect(ofRow:row).minY)}
+                }
                 items=next;self.revision=revision;state.messages(items)
                 if sameOrder {
                     let changedRows=IndexSet(items.indices.filter{old[items[$0].id] != items[$0]})
                     if !changedRows.isEmpty {table.reloadData(forRowIndexes:changedRows,columnIndexes:IndexSet(integer:0));table.noteHeightOfRows(withIndexesChanged:changedRows)}
                 } else {table.reloadData()}
-                if state.atBottom {bottom()}
+                if state.atBottom {bottom()}else if !sameOrder {restoreAnchor()}
             }
             if sentRevision != transcript.sentRevision {sentRevision=transcript.sentRevision;state.returnToBottom();bottom()}
             if self.returnRevision != returnRevision {self.returnRevision=returnRevision;if state.atBottom {bottom()}}
@@ -150,7 +154,13 @@ struct NativeChatList: NSViewRepresentable {
             cell.identifier=id
             let item=items[row],padding:CGFloat=compact ? 14:28
             let contentWidth=max(180,min(width-2*padding,compact ? width-2*padding:680))
-            let bubble=MessageRow(item:item,compact:compact,transcript:transcript).id(item.id).frame(width:contentWidth,alignment:.leading).fixedSize(horizontal:false,vertical:true).padding(.horizontal,padding).padding(.top,row==0 ? topInset:0).padding(.bottom,2)
+            let bubble=VStack(spacing:12) {
+                if row==0,!compact,transcript.hasEarlier {
+                    Button(transcript.loadingEarlier ? "正在加载…":"更早的消息") {transcript.onLoadEarlier?()}
+                        .buttonStyle(.plain).font(Theme.font(size:12)).foregroundStyle(Theme.faint).disabled(transcript.loadingEarlier)
+                }
+                MessageRow(item:item,compact:compact,transcript:transcript).id(item.id)
+            }.frame(width:contentWidth,alignment:.leading).fixedSize(horizontal:false,vertical:true).padding(.horizontal,padding).padding(.top,row==0 ? topInset:0).padding(.bottom,2)
             let root=ChatHostedContent(content:AnyView(bubble),activity:activity)
             cell.configure(AnyView(root),width:width)
             cell.onHeight={[weak self,weak cell] height in

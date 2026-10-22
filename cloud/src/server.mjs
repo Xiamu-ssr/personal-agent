@@ -274,12 +274,19 @@ export function startServer({ harness, hub, bus, log, connectors = harness.conne
     if (p === "/api/history") {
       const n = Number(url.searchParams.get("n") ?? 200);
       if (!Number.isInteger(n) || n < 1 || n > 1000) return json(res, 400, { error: "n 必须是 1–1000 的整数" });
-      return json(res, 200, { items: harness.speech?.history(n) || tailJsonl(config.chatLog, n) });
+      const after=url.searchParams.get('after');
+      const before=url.searchParams.get('before');
+      const all=harness.speech?.history(Number.MAX_SAFE_INTEGER) || tailJsonl(config.chatLog,Number.MAX_SAFE_INTEGER);
+      const cursor=after?all.findIndex(m=>m.id===after):-1,end=before?all.findIndex(m=>m.id===before):all.length;
+      if(before&&end<0)return json(res,400,{error:'历史位置已失效，请重新连接'});
+      const start=Math.max(0,end-n),items=cursor>=0?all.slice(cursor+1):all.slice(start,end);
+      return json(res, 200, { items,hasMore:cursor<0&&start>0 });
     }
     if (p === "/api/send" && req.method === "POST") {
       try {
         const body=JSON.parse((await readRaw(req,64*1024)).toString("utf8"));
         return await once(res, body?.clientId, 200, async () => {
+          const received=harness.receipts?.get(body?.clientId);if(received)return {ok:true,id:received};
           return content.sendMessage(body, harness.send.bind(harness));
         });
       }catch(e){return json(res,e.status||400,{error:e instanceof SyntaxError?"请提交有效的 JSON 消息":connectors.redact(e.message)});}

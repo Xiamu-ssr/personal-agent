@@ -1,6 +1,7 @@
 package com.xiamu.agent
 
 import org.json.JSONObject
+import androidx.compose.runtime.snapshots.Snapshot
 
 sealed class ChatItem {
     data class User(val text: String,val attachments: List<Attachment> = emptyList(),val ts: Long = 0,val id: String = "",val quote: ChatQuote? = null) : ChatItem()
@@ -27,7 +28,7 @@ class Conversation(val items: MutableList<ChatItem> = mutableListOf()) {
     fun replaceHistory(history: List<ChatItem>) {
         history.filterIsInstance<ChatItem.Assistant>().filter { it.optionsUsed }.forEach { consumed.add(it.id) }
         val merged=mergeChatMessages(history,items.toList()).map { if(it is ChatItem.Assistant && it.id in consumed) it.copy(optionsUsed=true,choosing=false) else it }
-        items.clear(); items.addAll(merged)
+        if(merged!=items) Snapshot.withMutableSnapshot { items.clear(); items.addAll(merged) }
     }
     fun clear() { items.clear(); consumed.clear(); busy=false; avatar=AvatarStatus() }
     fun user(m: ChatItem.User) {

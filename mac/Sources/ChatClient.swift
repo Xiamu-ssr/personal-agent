@@ -143,6 +143,7 @@ struct BackgroundActivity: Identifiable, Equatable {
         socket.onOpen = { [weak self] in self?.connected=true; self?.error="" }
         socket.onClose = { [weak self] why in self?.connected=false; self?.error=why ?? "连接已断开，正在重连" }
         socket.onMessage = { [weak self] in self?.handle($0) }
+        transcript.onLoadEarlier = { [weak self] in Task { @MainActor in await self?.loadEarlier() } }
     }
     func start() { configured=LocalVerification.explicitLoopback || Prefs.configured; socket.start() }
     func reconnect() { revision += 1; refresh?.cancel(); socket.stop(); connected=false; start() }
@@ -187,14 +188,15 @@ struct BackgroundActivity: Identifiable, Equatable {
                         clientID:r["clientId"] as? String ?? "",quote:(r["quote"] as? [String:Any]).flatMap(ChatQuote.init))
     }
     private func upsert(_ row:[String:Any]) {transcript.receive(row)}
-    @MainActor func bootstrap() async {
+    @MainActor func bootstrap(after cursor:String?=nil) async {
         guard configured else {return}
         guard !booting else {syncRequested=true;return};booting=true
         defer {booting=false;if syncRequested {syncRequested=false;Task {await self.bootstrap()}}}
         let version=revision, avatarVersion=avatarRevision, statusVersion=statusRevision
         do {
             async let state=Api.json("/api/state")
-            async let history=Api.json("/api/history?n=1000")
+            let after=(cursor ?? items.last?.serverID)?.addingPercentEncoding(withAllowedCharacters:.urlQueryAllowed) ?? ""
+            async let history=Api.json("/api/history?n=100"+(after.isEmpty ? "":"&after="+after))
             let (s,h)=try await (state,history)
             guard version == revision, !Task.isCancelled else { return }
             ProfileStore.shared.applyState(s)
@@ -202,11 +204,23 @@ struct BackgroundActivity: Identifiable, Equatable {
             // Do not overwrite a newer websocket busy/avatar state with an older HTTP snapshot.
             if statusVersion == statusRevision { busy=s["busy"] as? Bool ?? false }
             transcript.mergeSnapshot(h["items"] as? [[String:Any]] ?? [])
+            if after.isEmpty {transcript.hasEarlier=h["hasMore"] as? Bool ?? false}
             if s["chatEmpty"] as? Bool == true, items.isEmpty {
                 _ = try await Api.json("/api/first-chat",method:"POST",body:["device":"mac"])
             }
             error=""
         } catch is CancellationError {} catch { self.error=error.localizedDescription }
+    }
+    @MainActor func loadEarlier() async {
+        guard !transcript.loadingEarlier,let first=items.first?.serverID.addingPercentEncoding(withAllowedCharacters:.urlQueryAllowed) else{return}
+        transcript.loadingEarlier=true;defer{transcript.loadingEarlier=false}
+        let version=revision
+        do {
+            let page=try await Api.json("/api/history?n=100&before="+first)
+            guard version==revision else{return}
+            transcript.mergeSnapshot(page["items"] as? [[String:Any]] ?? [])
+            transcript.hasEarlier=page["hasMore"] as? Bool ?? false
+        } catch {self.error=error.localizedDescription}
     }
     /// Foreground/menu activation supplements websocket hello after a gap; no transcript reset.
     @MainActor func catchUp() async {
@@ -223,10 +237,13 @@ struct BackgroundActivity: Identifiable, Equatable {
         switch r["t"] as? String {
         case "hello":
             revision += 1; statusRevision += 1; connected=true; busy=r["busy"] as? Bool ?? false
-            transcript.mergeSnapshot(r["history"] as? [[String:Any]] ?? [])
+            let lastReceived=items.last?.serverID
+            let history=r["history"] as? [[String:Any]] ?? []
+            if items.isEmpty {transcript.hasEarlier=history.count>=100}
+            transcript.mergeSnapshot(history)
             if let a=r["avatar"] as? [String:Any] { applyAvatar(a) }
             devicesVersion += 1; jobsVersion += 1;libraryVersion += 1
-            refresh?.cancel(); refresh=Task { @MainActor [weak self] in await self?.bootstrap() }
+            refresh?.cancel(); refresh=Task { @MainActor [weak self] in await self?.bootstrap(after:lastReceived) }
         case "user","say":
             var row=r; row["role"] = r["t"] as? String == "user" ? "user" : "assistant"; upsert(row)
         case "activity_message": SideChats.shared.receive(r); jobsVersion += 1
