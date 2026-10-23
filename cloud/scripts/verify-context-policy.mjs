@@ -18,6 +18,7 @@ const marker='cedarpebblecontextmarker';
 const fake=await fakeAnthropic(async body=>{
  const last=JSON.stringify(body.messages?.findLast(m=>m.role==='user')?.content||'');
  if(/You are a context summarization assistant/.test(JSON.stringify(body.system))){
+  assert.equal(body.thinking?.type,'disabled','summary thinking was not disabled on the actual model request');
   summaries++;
   maxSummaryInputChars=Math.max(maxSummaryInputChars,JSON.stringify(body.messages).length);
   if(timeoutRecovery)await new Promise(r=>setTimeout(r,3000));
@@ -35,7 +36,7 @@ const [{PROVIDER_PRESETS},{initialize},{Harness},{DeviceHub},{ConnectorManager},
  import('../src/provider-presets.mjs'),import('../src/initialize.mjs'),import('../src/agent.mjs'),import('../src/devices.mjs'),import('../src/connectors.mjs'),import('../src/server.mjs'),import('../src/content.mjs'),import('../src/scheduler.mjs'),import('../src/private-json.mjs')]);
 const provider='11111111-1111-4111-8111-111111111111',model='fixture-context-1m';
 // A process-local provider fixture uses the production catalog/configuration path.
-PROVIDER_PRESETS.push({id:'context-fixture',protocol:'anthropic',baseUrl:fake.url,models:[{id:model,name:'Context fixture',input:['text'],reasoning:false,contextWindow:1048576,maxTokens:8192}]});
+PROVIDER_PRESETS.push({id:'context-fixture',protocol:'anthropic',baseUrl:fake.url,models:[{id:model,name:'Context fixture',input:['text'],reasoning:true,contextWindow:1048576,maxTokens:8192}]});
 initialize(root);
 writePrivateJson(root+'/system/providers.json',{providers:[{id:provider,name:'Local context fixture',protocol:'anthropic',baseUrl:fake.url,apiKey:'context-fixture-only-key',models:[{id:model,name:'Context fixture'}]}]});
 writePrivateJson(root+'/system/app-settings.json',{model:{provider,id:model}});

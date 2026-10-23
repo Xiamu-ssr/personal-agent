@@ -45,6 +45,14 @@ test('the 272K compaction point excludes native reserve and leaves room for the 
   assert.ok(small.contextWindow >= small.contextTokens + small.maxTokens);
 });
 
+test('the Anthropic endpoint of a known vendor retains its reasoning and image capabilities', () => {
+  const provider = { protocol: 'anthropic', baseUrl: 'https://zenmux.ai/api/anthropic' };
+  const model = nativeModelDefinition(provider, { id: 'z-ai/glm-5.3-flash', name: 'GLM' });
+  assert.equal(model.reasoning, true);
+  assert.deepEqual(model.input, ['text', 'image']);
+  assert.equal(model.contextTokens - COMPACTION_RESERVE_TOKENS, COMPACT_AT_TOKENS);
+});
+
 test('templates become accounts only after probing, preserve custom models and never return credentials', async () => {
   const root = fs.mkdtempSync(path.join(testRoot, 'presets-'));
   const connectors = new ConnectorManager({ root, definitions: [] });

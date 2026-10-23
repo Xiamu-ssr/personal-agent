@@ -90,7 +90,10 @@ export function listProviderPresets() {
 }
 
 export function presetModel(provider, id) {
-  const preset = PROVIDER_PRESETS.find(p => provider.builtin ? p.id === 'zenmux' : p.protocol === provider.protocol && p.baseUrl === provider.baseUrl);
+  const preset = PROVIDER_PRESETS.find(p => provider.builtin ? p.id === 'zenmux' : p.protocol === provider.protocol && p.baseUrl === provider.baseUrl)
+    // A vendor's Anthropic and OpenAI endpoints describe the same model.
+    // Keep capability metadata when its configured wire protocol changes.
+    ?? PROVIDER_PRESETS.find(p => new URL(p.baseUrl).origin === new URL(provider.baseUrl).origin);
   return preset?.models.find(m => m.id === id);
 }
 
