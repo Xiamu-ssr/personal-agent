@@ -9,7 +9,10 @@ dnf install -y poppler-utils python3.11 python3.11-pip
 /usr/bin/python3.11 -m pip install pypdf pdfplumber python-docx openpyxl
 chmod 755 deploy/bin/pip deploy/bin/pip3
 npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-npm rebuild openclaw --foreground-scripts
+# Complete the official lifecycle while the installer can write the package.
+# New npm versions may leave `npm rebuild` scripts pending approval; the service
+# user must not be responsible for pruning a root-owned dependency tree at boot.
+node node_modules/openclaw/scripts/postinstall-bundled-plugins.mjs
 node node_modules/openclaw/openclaw.mjs --version
 while IFS= read -r -d '' task_source; do node --check "${task_source}"; done < <(find src -name '*.mjs' -print0)
 

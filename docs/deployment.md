@@ -1,6 +1,6 @@
-# 部署豆豆 1.6
+# 部署豆豆 1.8
 
-豆豆使用 OpenClaw 2026.10.4，一个 Agent、同一个持续压缩的主 Session。Android、Mac 和 cloud 必须一起升级；旧协议返回 426。
+豆豆使用 OpenClaw 2026.10.5，一个 Agent、同一个持续压缩的主 Session。当前 App 协议为 2；本次云端内核升级不要求重装 Android 或 Mac 客户端。
 
 ## 运行环境
 
@@ -36,7 +36,27 @@ sudo -u agent /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node \
 
 把地址 `https://agent.example.com/agent` 和一次性配对码填入 App。健康检查的 `ready:true` 表示内核可接收请求；还应发送一条消息确认实际模型和工具执行。
 
-## 1.6 升级
+## OpenClaw 2026.10.5 升级
+
+等任务结束，停服并完整备份数据、环境配置和旧版代码，再替换依赖。安装阶段完成 OpenClaw 官方 postinstall，不能把可写包目录的要求留给服务账号。`npm rebuild` 显示成功也可能有未批准的脚本；核对安装日志。
+
+10.5 的会话身份 schema 需要离线迁移。保持 Gateway 停止，以持久数据的属主执行官方工具：
+
+```bash
+sudo -u agent env \
+  OPENCLAW_STATE_DIR=/srv/agent/.openclaw \
+  OPENCLAW_CONFIG_PATH=/srv/agent/system/openclaw.json \
+  /opt/doudou-runtimes/node-v26.5.0-linux-x64/bin/node \
+  /opt/personal-agent/cloud/node_modules/openclaw/openclaw.mjs \
+  doctor --fix --non-interactive
+sudo systemctl start personal-agent.service
+```
+
+保留主 Session 和原始历史。升级后核对原生会话可读、模型请求与工具执行；HTTP 健康状态不能替代这些检查。回退时同时恢复旧依赖和完整数据备份，不能只切回旧版代码打开迁移后的数据库。
+
+压缩点仍为 272K，OpenClaw 的 20K 保留预算另算，最大输出策略仍为 128K。内核使用有界摘要；自动摘要超时由原生机制保留近期上下文和待办输入，完整原始记录留存。Memory Core 显式启用，与业务插件共用原生记忆。
+
+## 1.6–1.8 应用升级
 
 等运行中的任务结束，停服后完整备份数据和环境配置，再更新代码并启动。供应商配置自动迁为 version 2，原内置 ZenMux 成为可编辑、删除的普通账号；保留原账号 ID、模型选择、连接器、记忆和原生 Session。后续以 `system/providers.json` 为准。不要清空该文件；余额按需读取，不迁移或复制余额。
 
