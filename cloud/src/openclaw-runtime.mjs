@@ -43,7 +43,7 @@ export class OpenClawRuntime {
    gateway:{mode:'local',bind:'loopback',port:this.port,auth:{mode:'token',token:this.token},controlUi:{enabled:false}},
    discovery:{mdns:{mode:'off'}},browser:{enabled:false},
    agents:{ownership:'explicit',defaults:{systemAgent:{agentId:'main'},sessionStore:{agentId:'main'},workspace:this.root,userTimezone:config.timezone,model:{primary:`${model.provider}/${model.id}`},
-    maxConcurrent:2,heartbeat:{every:'0m'},compaction:{mode:'safeguard',thinkingLevel:'off',memoryFlush:{enabled:true},midTurnPrecheck:{enabled:true}},sandbox:{mode:'off'}},entries:{main:{name:config.agentName}}},
+    thinkingDefault:'max',maxConcurrent:2,heartbeat:{every:'0m'},compaction:{mode:'safeguard',thinkingLevel:'max',memoryFlush:{enabled:true},midTurnPrecheck:{enabled:true}},sandbox:{mode:'off'}},entries:{main:{name:config.agentName}}},
    session:{dmScope:'main',reset:{mode:'none'}},
    models:{mode:'replace',catalogRefresh:{enabled:false},providers},update:{checkOnStart:false},
    tools:{profile:'full',toolSearch:false,loopDetection:{enabled:true},deny:['sessions_spawn','agents_list','cron','browser','web_search','nodes','mobile_ui'],exec:{security:'full',ask:'off'}},

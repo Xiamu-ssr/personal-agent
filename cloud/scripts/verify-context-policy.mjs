@@ -7,19 +7,20 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { zstdDecompressSync } from 'node:zlib';
 import { fakeAnthropic } from '../test/fake-anthropic.mjs';
+import { fakeOpenAI } from '../test/fake-openai.mjs';
 
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'doudou-context-policy-'));
 process.env.AGENT_ROOT=root;process.env.AGENT_TOKEN='context-policy-fixture';
 process.env.AGENT_PORT='14442';process.env.OPENCLAW_PORT='18792';
 delete process.env.MODEL_BASE_URL;delete process.env.MODEL_API_KEY;
-const timeoutRecovery=process.argv.includes('--summary-timeout'),alwaysThinking=process.argv.includes('--always-thinking');
+const timeoutRecovery=process.argv.includes('--summary-timeout'),alwaysThinking=process.argv.includes('--always-thinking'),openaiMax=process.argv.includes('--openai-max');
 let stage='warmup',summaries=0,flushes=0,continued=false,maxSummaryInputChars=0;
 const marker='cedarpebblecontextmarker';
-const fake=await fakeAnthropic(async body=>{
+const fake=await (openaiMax?fakeOpenAI:fakeAnthropic)(async body=>{
+ if(openaiMax)assert.equal(body.reasoning_effort,'max','native request did not send the model\'s Max effort');
  const last=JSON.stringify(body.messages?.findLast(m=>m.role==='user')?.content||'');
- if(/You are a context summarization assistant/.test(JSON.stringify(body.system))){
-  assert.equal(body.thinking?.type,alwaysThinking?'enabled':'disabled','summary did not honor the actual model thinking contract');
-  if(alwaysThinking)assert.ok(body.thinking.budget_tokens>0,'mandatory thinking needs a positive budget');
+ if(/You are a context summarization assistant/.test(JSON.stringify(body.system||body.messages?.filter(m=>['system','developer'].includes(m.role))))){
+  if(!openaiMax){assert.equal(body.thinking?.type,'enabled','summary did not honor the highest supported thinking tier');assert.equal(body.thinking.budget_tokens,16384,'native Anthropic fallback did not use its highest supported budget tier');}
   summaries++;
   maxSummaryInputChars=Math.max(maxSummaryInputChars,JSON.stringify(body.messages).length);
   if(timeoutRecovery)await new Promise(r=>setTimeout(r,3000));
@@ -37,8 +38,9 @@ const [{PROVIDER_PRESETS,nativeModelDefinition},{initialize},{Harness},{DeviceHu
  import('../src/provider-presets.mjs'),import('../src/initialize.mjs'),import('../src/agent.mjs'),import('../src/devices.mjs'),import('../src/connectors.mjs'),import('../src/server.mjs'),import('../src/content.mjs'),import('../src/scheduler.mjs'),import('../src/private-json.mjs')]);
 const provider='11111111-1111-4111-8111-111111111111',model='fixture-context-1m';
 // A process-local provider fixture uses the production catalog/configuration path.
-const thinkingLevelMap=alwaysThinking?nativeModelDefinition({protocol:'anthropic',baseUrl:'https://zenmux.ai/api/anthropic'},{id:'z-ai/glm-5.3-flash',name:'GLM'}).thinkingLevelMap:undefined;
-PROVIDER_PRESETS.push({id:'context-fixture',protocol:'anthropic',baseUrl:fake.url,models:[{id:model,name:'Context fixture',input:['text'],reasoning:true,contextWindow:1048576,maxTokens:8192,...(thinkingLevelMap&&{thinkingLevelMap})}]});
+const glm=nativeModelDefinition({protocol:'anthropic',baseUrl:'https://zenmux.ai/api/anthropic'},{id:'z-ai/glm-5.3-flash',name:'GLM'});
+const thinkingLevelMap=alwaysThinking||openaiMax?glm.thinkingLevelMap:undefined;
+PROVIDER_PRESETS.push({id:'context-fixture',protocol:'anthropic',baseUrl:fake.url,models:[{id:model,name:'Context fixture',input:['text'],reasoning:true,contextWindow:1048576,maxTokens:8192,...(thinkingLevelMap&&{thinkingLevelMap}),...(openaiMax&&{api:glm.api,baseUrl:fake.url,compat:glm.compat})}]});
 initialize(root);
 writePrivateJson(root+'/system/providers.json',{providers:[{id:provider,name:'Local context fixture',protocol:'anthropic',baseUrl:fake.url,apiKey:'context-fixture-only-key',models:[{id:model,name:'Context fixture'}]}]});
 writePrivateJson(root+'/system/app-settings.json',{model:{provider,id:model}});
@@ -64,7 +66,7 @@ try{
  await h.startMain();
  const cfg=JSON.parse(fs.readFileSync(root+'/system/openclaw.json','utf8')),native=cfg.models.providers[provider].models[0];
  assert.equal(native.contextWindow,1048576);assert.equal(native.contextTokens,292000);
- assert.equal(cfg.agents.defaults.compaction.thinkingLevel,'off');
+  assert.equal(cfg.agents.defaults.thinkingDefault,'max');assert.equal(cfg.agents.defaults.compaction.thinkingLevel,'max');
  if(alwaysThinking)assert.equal(native.thinkingLevelMap.off,'low');
  assert.equal(cfg.session.reset.mode,'none');assert.equal(cfg.agents.defaults.compaction.midTurnPrecheck.enabled,true);
  for(let i=0;i<4;i++){
@@ -93,5 +95,5 @@ try{
  }else assert.ok(persisted.events.some(event=>JSON.stringify(event).includes(marker)),'native compaction did not preserve the transcript marker');
  assert.ok(continued);assert.equal(persisted.sessionId,originalSessionId,'compaction reset the main Session');
  assert.ok(maxSummaryInputChars>0&&maxSummaryInputChars<180000,'long transcript was sent to the summarizer without an input bound');
- console.log(JSON.stringify({ok:true,kernel:'openclaw',version:JSON.parse(fs.readFileSync(new URL('../node_modules/openclaw/package.json',import.meta.url),'utf8')).version,nativeModelWindow:native.contextWindow,activeContextBudget:native.contextTokens,compactAtTokens:272000,syntheticUsage:true,belowThresholdInputTokens:270000,aboveThresholdInputTokens:273000,belowThresholdNoCompaction:true,nativeCompaction:true,persistedCompactions:persisted.events.length,continuityAfterCompaction:continued,sameSessionId:true,sessionResetDisabled:true,midTurnPrecheck:true,maxSummaryInputChars,memoryFlushes:flushes,modelRequests:fake.requests.length,...(alwaysThinking&&{mandatoryThinkingPreserved:true}),...(timeoutRecovery&&{nativeTimeoutRecovery:true,originalTranscriptRetained:persisted.originalTranscriptRetained,noRepeatedCompaction:true})}));
+ console.log(JSON.stringify({ok:true,kernel:'openclaw',version:JSON.parse(fs.readFileSync(new URL('../node_modules/openclaw/package.json',import.meta.url),'utf8')).version,nativeModelWindow:native.contextWindow,activeContextBudget:native.contextTokens,compactAtTokens:272000,syntheticUsage:true,belowThresholdInputTokens:270000,aboveThresholdInputTokens:273000,belowThresholdNoCompaction:true,nativeCompaction:true,persistedCompactions:persisted.events.length,continuityAfterCompaction:continued,sameSessionId:true,sessionResetDisabled:true,midTurnPrecheck:true,maxSummaryInputChars,memoryFlushes:flushes,modelRequests:fake.requests.length,...(alwaysThinking&&{mandatoryThinkingPreserved:true}),...(openaiMax&&{nativeMaxReasoningOnAllRequests:true}),...(timeoutRecovery&&{nativeTimeoutRecovery:true,originalTranscriptRetained:persisted.originalTranscriptRetained,noRepeatedCompaction:true})}));
 }finally{await h.close();server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));await fake.close();fs.rmSync(root,{recursive:true,force:true});}

@@ -1,5 +1,9 @@
 # Mandatory-thinking model recovery
 
+The subsequent [reasoning policy](20261024-reasoning-policy.md) follows the user's
+choice of the highest supported tier, including summaries. The low-tier recovery
+and measurements below describe the earlier incident repair.
+
 ## Incident
 
 The long main conversation reached its compaction boundary again. The native

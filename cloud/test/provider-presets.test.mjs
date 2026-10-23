@@ -49,17 +49,28 @@ test('the Anthropic endpoint of a known vendor retains its reasoning and image c
   const provider = { protocol: 'anthropic', baseUrl: 'https://zenmux.ai/api/anthropic' };
   const model = nativeModelDefinition(provider, { id: 'z-ai/glm-5.3-flash', name: 'GLM' });
   assert.equal(model.reasoning, true);
-  assert.deepEqual(model.thinkingLevelMap, { off: 'low' });
+  assert.deepEqual(model.thinkingLevelMap, { off: 'low', max: 'max' });
+  assert.equal(model.api, 'openai-completions');
+  assert.equal(model.baseUrl, 'https://zenmux.ai/api/v1');
+  assert.equal(model.compat.requiresReasoningContentOnAssistantMessages, true);
   assert.deepEqual(model.input, ['text', 'image']);
   assert.equal(model.contextTokens - COMPACTION_RESERVE_TOKENS, COMPACT_AT_TOKENS);
 });
 
-test('mandatory thinking is model metadata, shared across vendor protocols without changing other models', () => {
+test('GLM thinking and routing metadata is shared across vendor protocols without rerouting other models', () => {
   for (const provider of [{ protocol: 'openai', baseUrl: 'https://zenmux.ai/api/v1' }, { protocol: 'anthropic', baseUrl: 'https://zenmux.ai/api/anthropic' }]) {
     assert.equal(nativeModelDefinition(provider, { id: 'z-ai/glm-5.3-flash', name: 'GLM' }).thinkingLevelMap.off, 'low');
-    assert.equal(nativeModelDefinition(provider, { id: 'anthropic/claude-haiku-5.5', name: 'Haiku' }).thinkingLevelMap, undefined);
+    assert.equal(nativeModelDefinition(provider, { id: 'z-ai/glm-5.3-flash', name: 'GLM' }).thinkingLevelMap.max, 'max');
+    const haiku = nativeModelDefinition(provider, { id: 'anthropic/claude-haiku-5.5', name: 'Haiku' });
+    assert.equal(haiku.thinkingLevelMap, undefined);assert.equal(haiku.api, undefined);assert.equal(haiku.baseUrl, undefined);
   }
   assert.equal(nativeModelDefinition({ protocol: 'anthropic', baseUrl: 'https://custom.example' }, { id: 'custom', name: 'Custom' }).thinkingLevelMap, undefined);
+});
+
+test('Claude catalog entries expose reasoning so the native resolver can select their highest supported tier', () => {
+  for (const provider of listProviderPresets().filter(p => ['zenmux', 'anthropic', 'openrouter'].includes(p.id))) {
+    for (const row of provider.models.filter(m => m.id.includes('claude'))) assert.equal(nativeModelDefinition(provider, row).reasoning, true);
+  }
 });
 
 test('templates become accounts only after probing, preserve custom models and never return credentials', async () => {
