@@ -37,7 +37,7 @@ test('a model connection failure remains a failure without sending users to a di
 });
 
 test('context maintenance failures preserve a failed outcome without asking users to reset their main session',()=>{
- for(const message of ['Context overflow: prompt too large for the model. Try /reset (or /new).','This conversation is too long, and shortening it took too long. Try /compact.','Compaction timed out']){
+ for(const message of ['Context overflow: prompt too large for the model. Try /reset (or /new).','This conversation is too long, and shortening it took too long. Try /compact.','Compaction timed out',"This conversation is too long, and OpenClaw couldn't shorten it. Try again, use /compact, or use /new to start a fresh session.",'Preflight compaction required but failed: provider invalid_params']){
   const text=runFailureText(new Error(message));assert.match(text,/未完成/);assert.match(text,/历史已保留/);assert.doesNotMatch(text,/reset|new|compact|Control UI/);
  }
  assert.equal(runFailureText(new Error('The provider refused this request. Revise the request and try again.')),'模型服务拒绝了这次请求，未完成的内容已保留。');

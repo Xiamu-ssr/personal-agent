@@ -56,7 +56,9 @@ export class OpenClawRuntime {
    OPENCLAW_NO_RESPAWN:'1',OPENCLAW_DISABLE_BONJOUR:'1',OPENCLAW_SKIP_CHANNELS:'1',OPENCLAW_EXEC_SHELL_SNAPSHOT:'0',
    NO_PROXY:'localhost,127.0.0.1,::1,'+(this.env.NO_PROXY||''),NODE_USE_ENV_PROXY:'1'};
   delete env.NODE_OPTIONS;
-  this.process=spawn(process.execPath,['--max-old-space-size=512',path.join(CODE,'node_modules/openclaw/openclaw.mjs'),'gateway','--port',String(this.port)],{cwd:this.root,env,stdio:['ignore','pipe','pipe']});
+  // Node sizes its heap from the service's memory limit. A second, smaller
+  // fixed heap cap killed long-session hydration before that limit was reached.
+  this.process=spawn(process.execPath,[path.join(CODE,'node_modules/openclaw/openclaw.mjs'),'gateway','--port',String(this.port)],{cwd:this.root,env,stdio:['ignore','pipe','pipe']});
   for(const stream of [this.process.stdout,this.process.stderr])stream.on('data',buf=>this.log('openclaw:',buf.toString().trim()));
   this.process.once('exit',(code,signal)=>{this.ready=false;this.log('OpenClaw exited',code,signal);if(!this.closed)this.onCrash?.(code);});
   this.client=new GatewayClient({url:`ws://127.0.0.1:${this.port}`,token:this.token,minProtocol:4,maxProtocol:4,scopes:['operator.admin','operator.read','operator.write'],onHelloOk:()=>{this.rpcReady=true;this.ready=true;this.chat.recover();},onConnectError:()=>{this.rpcReady=false;this.ready=false;},onEvent:event=>this.chat.event(event),onGap:()=>{this.chat.disconnect();this.chat.recover();},onClose:()=>{this.rpcReady=false;this.ready=false;this.chat.disconnect();}});

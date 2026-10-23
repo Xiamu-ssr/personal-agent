@@ -13,6 +13,9 @@ OpenClaw's internal 20K reserve move the pressure boundary to 252K.
 
 ## Changes
 
+Follow-up: [mandatory-thinking recovery](20261023-mandatory-thinking.md) corrects
+the disabled-thinking assumption below for a model that rejects disabling it.
+
 - Pin the kernel and Gateway client to stable OpenClaw 2026.10.5. Use its bounded
   summary input and native automatic timeout reduction; do not patch its bundle.
 - Keep the 272K conversation compaction point, add the native 20K reserve to the

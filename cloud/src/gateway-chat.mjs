@@ -7,7 +7,7 @@ export function runFailureText(error) {
  if(error?.code==='outcome_unknown')return '连接已恢复，但这次任务的最终结果尚未确认。请先查看活动记录。';
  const text=error?.message||String(error);
  if(/conversation is too long.*shortening it took too long|compaction timed out/i.test(text))return '整理聊天记录超时，这次回复未完成。消息和历史已保留。';
- if(/context overflow|prompt too (?:large|long)/i.test(text))return '对话上下文整理失败，这次回复未完成。消息和历史已保留。';
+ if(/context overflow|prompt too (?:large|long)|conversation is too long.*couldn.t shorten|preflight compaction.*failed/i.test(text))return '对话上下文整理失败，这次回复未完成。消息和历史已保留。';
  if(text.includes('The provider refused this request'))return '模型服务拒绝了这次请求，未完成的内容已保留。';
  return text.includes('Lost the connection to the AI service')?'模型服务连接中断，消息已保留。稍后可以继续。':text;
 }

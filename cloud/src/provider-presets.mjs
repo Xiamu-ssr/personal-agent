@@ -60,7 +60,9 @@ export const PROVIDER_PRESETS = [
   {
     id: 'zenmux', name: 'ZenMux', protocol: 'openai', baseUrl: 'https://zenmux.ai/api/v1',
     hint: '支持订阅 Key 和按量 Key，各按对应账号额度计费。', docsUrl: 'https://zenmux.ai/docs/guide/subscription.html',
-    models: [model('anthropic/claude-haiku-5.5', 'Claude Haiku 5.5', { vision: true }), model('anthropic/claude-sonnet-5.5', 'Claude Sonnet 5.5', { vision: true }), model('anthropic/claude-opus-5.5', 'Claude Opus 5.5', { vision: true }), model('z-ai/glm-5.3-flash', 'GLM 5.3 Flash', vision), model('z-ai/glm-5.3-flashx', 'GLM 5.3 FlashX', vision), model('xiaomi/mimo-v2.6-pro', 'MiMo V2.6 Pro', vision)],
+    // This route rejects disabled thinking. Let the native model contract map
+    // an explicit off request (including compaction) to its supported low tier.
+    models: [model('anthropic/claude-haiku-5.5', 'Claude Haiku 5.5', { vision: true }), model('anthropic/claude-sonnet-5.5', 'Claude Sonnet 5.5', { vision: true }), model('anthropic/claude-opus-5.5', 'Claude Opus 5.5', { vision: true }), model('z-ai/glm-5.3-flash', 'GLM 5.3 Flash', { ...vision, thinkingLevelMap: { off: 'low' } }), model('z-ai/glm-5.3-flashx', 'GLM 5.3 FlashX', vision), model('xiaomi/mimo-v2.6-pro', 'MiMo V2.6 Pro', vision)],
   },
   {
     id: 'openai', name: 'OpenAI', protocol: 'openai', baseUrl: 'https://api.openai.com/v1',
@@ -99,12 +101,13 @@ export function presetModel(provider, id) {
 
 export function nativeModelDefinition(provider, row) {
   const known = presetModel(provider, row.id);
-  const { reasoning = false, input = ['text', 'image'] } = known ?? {};
+  const { reasoning = false, input = ['text', 'image'], thinkingLevelMap } = known ?? {};
   // Keep the configured operating budget distinct from the provider's window.
   // Custom providers follow the same user-selected input/output policy.
   const contextWindow = Math.max(known?.contextWindow || 0, ACTIVE_CONTEXT_TOKENS + MODEL_OUTPUT_TOKENS);
   const contextTokens = ACTIVE_CONTEXT_TOKENS, maxTokens = MODEL_OUTPUT_TOKENS;
-  const result = { id: row.id, name: row.name, reasoning, input, contextWindow, contextTokens, maxTokens };
+  const result = { id: row.id, name: row.name, reasoning, input, contextWindow, contextTokens, maxTokens,
+    ...(thinkingLevelMap && { thinkingLevelMap: { ...thinkingLevelMap } }) };
   if (provider.protocol === 'openai' && !['api.openai.com', 'openrouter.ai', 'zenmux.ai'].includes(new URL(provider.baseUrl).hostname)) {
     const family = PROVIDER_PRESETS.find(p => p.protocol === provider.protocol && p.baseUrl === provider.baseUrl)?.id;
     result.compat = { maxTokensField: 'max_tokens', supportsStore: false, supportsDeveloperRole: false,
