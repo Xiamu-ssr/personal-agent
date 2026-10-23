@@ -5,6 +5,10 @@ const model = (id, name, { vision = false, reasoning = false, contextWindow = 13
 const vision = { vision: true, reasoning: true };
 export const COMPACT_AT_TOKENS = 272_000;
 export const MODEL_OUTPUT_TOKENS = 128_000;
+// OpenClaw reserves 20K inside contextTokens. The user's 272K is the
+// conversation compaction point, not a window that includes that reserve.
+export const COMPACTION_RESERVE_TOKENS = 20_000;
+export const ACTIVE_CONTEXT_TOKENS = COMPACT_AT_TOKENS + COMPACTION_RESERVE_TOKENS;
 
 export const PROVIDER_PRESETS = [
   {
@@ -93,7 +97,10 @@ export function presetModel(provider, id) {
 export function nativeModelDefinition(provider, row) {
   const known = presetModel(provider, row.id);
   const { reasoning = false, input = ['text', 'image'] } = known ?? {};
-  const contextWindow = COMPACT_AT_TOKENS, contextTokens = COMPACT_AT_TOKENS, maxTokens = MODEL_OUTPUT_TOKENS;
+  // Keep the configured operating budget distinct from the provider's window.
+  // Custom providers follow the same user-selected input/output policy.
+  const contextWindow = Math.max(known?.contextWindow || 0, ACTIVE_CONTEXT_TOKENS + MODEL_OUTPUT_TOKENS);
+  const contextTokens = ACTIVE_CONTEXT_TOKENS, maxTokens = MODEL_OUTPUT_TOKENS;
   const result = { id: row.id, name: row.name, reasoning, input, contextWindow, contextTokens, maxTokens };
   if (provider.protocol === 'openai' && !['api.openai.com', 'openrouter.ai', 'zenmux.ai'].includes(new URL(provider.baseUrl).hostname)) {
     const family = PROVIDER_PRESETS.find(p => p.protocol === provider.protocol && p.baseUrl === provider.baseUrl)?.id;

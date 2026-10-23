@@ -6,6 +6,9 @@ const mediaOf=message=>blocksOf(message).filter(c=>['input_image','image','attac
 export function runFailureText(error) {
  if(error?.code==='outcome_unknown')return '连接已恢复，但这次任务的最终结果尚未确认。请先查看活动记录。';
  const text=error?.message||String(error);
+ if(/conversation is too long.*shortening it took too long|compaction timed out/i.test(text))return '整理聊天记录超时，这次回复未完成。消息和历史已保留。';
+ if(/context overflow|prompt too (?:large|long)/i.test(text))return '对话上下文整理失败，这次回复未完成。消息和历史已保留。';
+ if(text.includes('The provider refused this request'))return '模型服务拒绝了这次请求，未完成的内容已保留。';
  return text.includes('Lost the connection to the AI service')?'模型服务连接中断，消息已保留。稍后可以继续。':text;
 }
 
@@ -62,6 +65,29 @@ export class GatewayChat {
   else if(p.state==='final')entry.finish(null,{text:entry.text,...(entry.media.length&&{media:entry.media})});
  }
  disconnect(){this.connected=false;for(const entry of [...this.pending.values(),...this.observed.values()])entry.interrupted=true;}
+ async transcriptReply(id,entry){
+  const history=await this.client.request('chat.history',{sessionKey:entry.sessionKey,limit:100},{signal:entry.signal,timeoutMs:20000});
+  const messages=history.messages||[],isReply=m=>m.role==='assistant'&&!m.provenance&&['stop','length'].includes(m.stopReason);
+  let reply=messages.findLast(m=>isReply(m)&&m.__openclaw?.runId===id);
+  if(!reply){
+   // Native follow-ups can retain a different execution id in the transcript.
+   // Bind via this exact accepted input, stopping at the next user turn.
+   const start=messages.findLastIndex(m=>m.role==='user'&&(m.idempotencyKey||m.__openclaw?.idempotencyKey)===`${id}:user`);
+   if(start<0)return null;
+   const end=messages.findIndex((m,i)=>i>start&&m.role==='user'),turn=messages.slice(start+1,end<0?undefined:end);
+   const nativeId=turn.find(m=>m.role==='assistant'&&m.__openclaw?.runId)?.__openclaw.runId;
+   if(!nativeId)return null;
+   reply=turn.findLast(m=>isReply(m)&&m.__openclaw?.runId===nativeId);
+   if(reply&&nativeId!==id&&(this.liveEntry(nativeId)||this.completed.has(nativeId)))return {text:''};
+  }
+  if(!reply)return null;
+  if(reply.__openclaw?.truncated){
+   const full=await this.client.request('chat.message.get',{sessionKey:entry.sessionKey,messageId:reply.__openclaw.id},{signal:entry.signal,timeoutMs:20000});
+   if(!full.ok||full.message?.__openclaw?.truncated||!isReply(full.message)||full.message.__openclaw?.runId!==reply.__openclaw.runId)return null;
+   reply=full.message;
+  }
+  return {text:textOf(reply),media:mediaOf(reply),nativeRunId:reply.__openclaw?.runId};
+ }
  recover(){
   this.connected=true;
   for(const [id,entry] of [...this.pending,...this.observed])if(entry.interrupted&&!entry.recovering){
@@ -75,7 +101,11 @@ export class GatewayChat {
       if(run.status==='ok'){
        if(!entry.accepted){entry.accepted=true;entry.onAccepted({runId:id,recovered:true});}
        const reply=run.terminalReply;
-       entry.finish(null,{text:reply?.disposition==='visible'?(reply.text||entry.text):'',...(entry.media.length&&{media:entry.media}),recovered:true});return;
+       const restored=reply?{text:reply.disposition==='visible'?(reply.text||entry.text):''}:await this.transcriptReply(id,entry);
+       if(this.liveEntry(id)!==entry)return;
+       if(!restored){const error=new Error('任务已结束，但回复尚未确认，请查看活动记录');error.code='outcome_unknown';entry.finish(error);return;}
+       if(restored.nativeRunId&&restored.nativeRunId!==id)this.rememberCompleted(restored.nativeRunId);
+       entry.finish(null,{text:restored.text,...((restored.media?.length||entry.media.length)&&{media:restored.media?.length?restored.media:entry.media}),recovered:true});return;
       }
       const error=new Error(run.error||'任务结果尚未确认，请查看活动记录');
       if(!run.endedAt&&!run.stopReason)error.code='outcome_unknown';entry.finish(error);return;

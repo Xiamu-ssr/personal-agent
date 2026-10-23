@@ -86,3 +86,22 @@ test('native replies remain unique after restarting presentation, and quiet chec
   assert.ok(!h.speech.history().some(m=>m.text==='HEARTBEAT_OK'));assert.equal(h.history.get('native-quiet-check').status,'done');
  }finally{await h.close();}
 });
+
+test('stopping a queued continuation marks its still-open activity stopped after the first answer settled',async()=>{
+ initialize(config.root);let first,second;const entered=[];
+ const runtime={close:async()=>{},abort:async()=>{},respond:(_input,opts)=>{
+  opts.onAccepted?.({});entered.push(opts.id);
+  return new Promise((resolve,reject)=>{
+   opts.signal.addEventListener('abort',()=>reject(opts.signal.reason),{once:true});
+   if(entered.length===1)first=resolve;else second=resolve;
+  });
+ }};
+ const h=new Harness({runtime,hub:new DeviceHub(),connectors:new ConnectorManager({root:config.root,definitions:[]}),bus:{emit(){}}});
+ try{
+  const id=await h.send('Synthetic first request');await h.send('Synthetic queued follow-up');
+  first({text:'Synthetic first answer before stop'});await new Promise(r=>setImmediate(r));
+  assert.equal(h.history.get(id).status,'running');await h.interrupt();await h.waitForMain();
+  assert.equal(h.history.get(id).status,'stopped');assert.equal(h.busy,false);
+  assert.ok(!h.speech.history().some(m=>m.error&&m.activityId===id));
+ }finally{first?.({text:''});second?.({text:''});await h.close();}
+});

@@ -36,6 +36,13 @@ test('a model connection failure remains a failure without sending users to a di
  assert.equal(runFailureText(error),'模型服务连接中断，消息已保留。稍后可以继续。');assert.equal(runFailureText(new Error('Specific API error')),'Specific API error');
 });
 
+test('context maintenance failures preserve a failed outcome without asking users to reset their main session',()=>{
+ for(const message of ['Context overflow: prompt too large for the model. Try /reset (or /new).','This conversation is too long, and shortening it took too long. Try /compact.','Compaction timed out']){
+  const text=runFailureText(new Error(message));assert.match(text,/未完成/);assert.match(text,/历史已保留/);assert.doesNotMatch(text,/reset|new|compact|Control UI/);
+ }
+ assert.equal(runFailureText(new Error('The provider refused this request. Revise the request and try again.')),'模型服务拒绝了这次请求，未完成的内容已保留。');
+});
+
 test('native image and attachment blocks survive text snapshots and an empty final event',async()=>{
  const chat=new GatewayChat({request:async()=>({})}),options={sessionKey:'agent:main:main',id:'media'};
  const done=chat.respond('Render a picture',options),image={type:'input_image',image_url:'data:image/png;base64,aGVsbG8='},attachment={type:'attachment',attachment:{url:'/work/data/library/media/song.mp3',kind:'audio',label:'Song'}};
@@ -100,4 +107,50 @@ test('reconnecting a native continuation retrieves its terminal answer once, wit
  chat.event({event:'chat',payload:{sessionKey,runId:'native-after-gap',state:'final',message:{content:'Recovered continuation'}}});
  assert.deepEqual(events.map(e=>e.phase),['start','final']);assert.equal(events[1].response.text,'Recovered continuation');
  assert.equal(requests.length,1);assert.equal(requests[0].runId,'native-after-gap');assert.equal(chat.observed.size,0);
+});
+
+test('reconnection reads the accepted input and its completed native turn when wait has no terminal reply',async()=>{
+ const requests=[],sessionKey='agent:main:main';
+ const chat=new GatewayChat({request:async(method,args)=>{
+  requests.push({method,...args});
+  if(method==='chat.send')return {};
+  if(method==='agent.wait')return {status:'ok',endedAt:100,stopReason:'stop'};
+  assert.equal(method,'chat.history');assert.equal(args.sessionKey,sessionKey);
+  return {messages:[
+   {role:'assistant',stopReason:'stop',content:'Older answer',__openclaw:{runId:'older'}},
+   {role:'user',idempotencyKey:'accepted:user',content:'Next question'},
+   {role:'assistant',stopReason:'toolUse',__openclaw:{runId:'native-followup'}},
+   {role:'assistant',stopReason:'stop',content:'Recovered exact answer',__openclaw:{runId:'native-followup'}},
+   {role:'user',content:'Later question'},
+   {role:'assistant',stopReason:'stop',content:'Unrelated later answer',__openclaw:{runId:'later'}}]};
+ }},{observeSessionKey:sessionKey});
+ const reply=chat.respond('Next question',{id:'accepted',sessionKey});chat.disconnect();chat.recover();
+ assert.deepEqual(await reply,{text:'Recovered exact answer',recovered:true});
+ chat.event({event:'chat',payload:{sessionKey,runId:'native-followup',state:'final',message:{content:'Recovered exact answer'}}});
+ assert.equal(chat.observed.size,0);assert.equal(requests.filter(r=>r.method==='chat.send').length,1);
+});
+
+test('reconnection never treats another turn, unfinished tools or an error artifact as a recovered answer',async()=>{
+ for(const messages of [
+  [{role:'assistant',stopReason:'stop',content:'Unrelated',__openclaw:{runId:'other'}}],
+  [{role:'user',idempotencyKey:'input:user'},{role:'assistant',stopReason:'toolUse',__openclaw:{runId:'native'}}],
+  [{role:'user',idempotencyKey:'input:user'},{role:'user',idempotencyKey:'other:user'},{role:'assistant',stopReason:'stop',content:'Other turn',__openclaw:{runId:'native'}}],
+  [{role:'user',idempotencyKey:'input:user'},{role:'assistant',stopReason:'error',content:'Provider error',__openclaw:{runId:'native'}}],
+ ]){
+  const chat=new GatewayChat({request:async method=>method==='agent.wait'?{status:'ok'}:method==='chat.history'?{messages}:{}});
+  const done=chat.respond('input',{id:'input',sessionKey:'main'});chat.disconnect();chat.recover();
+  await assert.rejects(done,e=>e.code==='outcome_unknown');assert.equal(chat.pending.size,0);
+ }
+});
+
+test('recovered history previews are expanded through the native message endpoint',async()=>{
+ const chat=new GatewayChat({request:async(method,args)=>{
+  if(method==='chat.send')return {};
+  if(method==='agent.wait')return {status:'ok'};
+  const message={role:'assistant',stopReason:'stop',content:'Complete answer',__openclaw:{id:'native-message',runId:'input'}};
+  if(method==='chat.history')return {messages:[{...message,content:'Preview',__openclaw:{...message.__openclaw,truncated:true}}]};
+  assert.equal(method,'chat.message.get');assert.equal(args.messageId,'native-message');return {ok:true,message};
+ }});
+ const done=chat.respond('input',{id:'input',sessionKey:'main'});chat.disconnect();chat.recover();
+ assert.deepEqual(await done,{text:'Complete answer',recovered:true});
 });

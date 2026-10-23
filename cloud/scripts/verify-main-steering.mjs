@@ -43,7 +43,7 @@ try{
  await h.send('STEER_IDLE_INPUT continue the same conversation');await h.waitForMain();
  assert.equal(h.busy,false);assert.equal(h.running.size,0);
  assert.ok(events.some(e=>e.t==='activity_step'&&e.item.messageId===second));
- console.log(JSON.stringify({ok:true,kernel:'openclaw',version:'2026.10.4',busyInputsAcceptedDuringTool:true,nextModelSeesBothInputs:true,allAnswersVisible:true,sameMainSession:true,oneRunningActivity:true,promptsVisibleInActivity:true,idleContinuation:true,modelRequests:fake.requests.length}));
+ console.log(JSON.stringify({ok:true,kernel:'openclaw',version:JSON.parse(fs.readFileSync(new URL('../node_modules/openclaw/package.json',import.meta.url),'utf8')).version,busyInputsAcceptedDuringTool:true,nextModelSeesBothInputs:true,allAnswersVisible:true,sameMainSession:true,oneRunningActivity:true,promptsVisibleInActivity:true,idleContinuation:true,modelRequests:fake.requests.length}));
 }finally{
  releaseTool();await h.close();server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));await fake.close();fs.rmSync(root,{recursive:true,force:true});
 }

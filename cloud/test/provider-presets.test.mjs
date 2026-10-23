@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COMPACT_AT_TOKENS, listProviderPresets, nativeModelDefinition } from '../src/provider-presets.mjs';
+import { COMPACT_AT_TOKENS, COMPACTION_RESERVE_TOKENS, MODEL_OUTPUT_TOKENS, listProviderPresets, nativeModelDefinition } from '../src/provider-presets.mjs';
 import { Providers, readProviders, testProvider } from '../src/providers.mjs';
 import { getAppSettings, putAppSettings } from '../src/app-settings.mjs';
 import { ConnectorManager } from '../src/connectors.mjs';
@@ -27,21 +27,22 @@ test('the shared catalog has usable, unique provider templates and distinguishes
   assert.equal(multimodal.compat.maxTokensField, 'max_tokens');
   assert.equal(multimodal.compat.requiresReasoningContentOnAssistantMessages, true);
   for (const id of ['deepseek-ai/DeepSeek-V4.1-Flash', 'zai-org/GLM-5.3-Flash', 'zai-org/GLM-5.3']) {
-    assert.equal(nativeModelDefinition(silicon, silicon.models.find(m => m.id === id)).contextWindow, 272000);
+    assert.equal(nativeModelDefinition(silicon, silicon.models.find(m => m.id === id)).contextWindow, 1048576);
   }
   const gemini = presets.find(p => p.id === 'gemini');
   assert.equal(nativeModelDefinition(gemini, gemini.models[0]).compat.requiresReasoningContentOnAssistantMessages, false);
 });
 
-test('the 272K operating policy preserves native model windows and fits smaller models', () => {
+test('the 272K compaction point excludes native reserve and leaves room for the selected output policy', () => {
   const silicon = listProviderPresets().find(p => p.id === 'siliconflow');
   const model = nativeModelDefinition(silicon, silicon.models[0]);
   assert.equal(COMPACT_AT_TOKENS, 272000);
-  assert.equal(model.contextWindow, 272000);
-  assert.equal(model.contextTokens, 272000);
+  assert.equal(model.contextWindow, 1048576);
+  assert.equal(model.contextTokens - COMPACTION_RESERVE_TOKENS, 272000);
+  assert.equal(model.maxTokens, MODEL_OUTPUT_TOKENS);
   const small = nativeModelDefinition({ protocol: 'openai', baseUrl: 'https://models.example/v1' }, { id: 'small', name: 'Small' });
-  assert.equal(small.contextWindow, 272000);
-  assert.equal(small.contextTokens, small.contextWindow);
+  assert.equal(small.contextTokens - COMPACTION_RESERVE_TOKENS, COMPACT_AT_TOKENS);
+  assert.ok(small.contextWindow >= small.contextTokens + small.maxTokens);
 });
 
 test('templates become accounts only after probing, preserve custom models and never return credentials', async () => {

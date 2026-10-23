@@ -39,9 +39,13 @@ try{
  };
  const original=await h.send('SYNTHETIC_SEARCH_QUESTION');await bounded(firstModel.promise);
  const second=await h.send('QUEUED_GLASSES_QUESTION');await until(()=>h.inbox.records.size===0);firstGate.resolve();
- await until(()=>fake.requests.length>=2&&h.runtime.chat.observed.size===1);
- const continuation=[...h.runtime.chat.observed.keys()][0];assert.ok(![original,second].includes(continuation));
- await bounded(toolEntered.promise);assert.equal(h.busy,true);assert.equal(h.sessionRuns.get('agent:main:main').id,continuation);
+ await bounded(toolEntered.promise);
+ // Native admission may bind the queued execution back to its accepted id.
+ // Both forms must deliver the second answer and retain its tool/run context.
+ const continuation=h.sessionRuns.get('agent:main:main')?.id;assert.ok(continuation);
+ const executionId=[...nativeEvents].reverse().find(e=>e.event==='agent'&&e.payload.stream==='item')?.payload.runId;
+ assert.ok(executionId&&executionId!==original,'queued input never received its own native execution');
+ assert.equal(h.busy,true);
  assert.equal(h.history.get(continuation).status,'running');
  let settled=false;const finished=h.waitForMain().then(()=>settled=true);await new Promise(r=>setImmediate(r));assert.equal(settled,false);
  h.runtime.client.protocol.closeSocket(1012,'synthetic continuation disconnect');
@@ -51,16 +55,16 @@ try{
  assert.equal(h.history.get(continuation).status,'done');assert.equal(h.busy,false);assert.ok(reconciliations>0);
  assert.ok(h.taskHistory(continuation).items.some(i=>i.tool==='probe.wait'&&i.kind==='tool_result'&&!i.isError));
  // Repeated terminal events must not append the answer twice.
- const final=nativeEvents.find(e=>e.event==='chat'&&e.payload.runId===continuation&&e.payload.state==='final');
- h.runtime.chat.event(final||{event:'chat',payload:{sessionKey:'agent:main:main',runId:continuation,state:'final',message:{content:[{type:'text',text:'SYNTHETIC_GLASSES_ANSWER'}]}}});
+ const final=nativeEvents.find(e=>e.event==='chat'&&e.payload.runId===executionId&&e.payload.state==='final');
+ h.runtime.chat.event(final||{event:'chat',payload:{sessionKey:'agent:main:main',runId:executionId,state:'final',message:{content:[{type:'text',text:'SYNTHETIC_GLASSES_ANSWER'}]}}});
  assert.equal(h.speech.history().filter(m=>m.text==='SYNTHETIC_GLASSES_ANSWER').length,1);
  await h.send('SYNTHETIC_BEFORE_STOP_QUESTION');await bounded(beforeStopModel.promise);
  // Hold its first response until the following input has been admitted.
  await h.send('QUEUED_STOP_QUESTION');await until(()=>h.inbox.records.size===0);beforeStopGate.resolve();await bounded(stopModel.promise);
- const stopped=[...h.runtime.chat.observed.keys()][0];assert.ok(stopped);await h.interrupt();stopGate.resolve();
+ const stopped=h.sessionRuns.get('agent:main:main')?.id;assert.ok(stopped);await h.interrupt();stopGate.resolve();
  await bounded(h.waitForMain());assert.equal(h.history.get(stopped).status,'stopped');assert.equal(h.running.size,0);assert.equal(h.busy,false);
  assert.ok(!h.speech.history().some(m=>m.text==='SYNTHETIC_STOPPED_SHOULD_NOT_APPEAR'||m.error));
- console.log(JSON.stringify({ok:true,kernel:'openclaw',version:'2026.10.4',differentNativeRunId:true,bothAnswersVisibleOnce:true,continuationToolsHaveContext:true,waitingIncludesContinuation:true,reconnectRecoversContinuation:true,stopCancelsContinuation:true,sameMainSession:true,modelRequests:fake.requests.length}));
+ console.log(JSON.stringify({ok:true,kernel:'openclaw',version:JSON.parse(fs.readFileSync(new URL('../node_modules/openclaw/package.json',import.meta.url),'utf8')).version,nativeQueuedFollowup:true,differentNativeRunId:executionId!==second,bothAnswersVisibleOnce:true,continuationToolsHaveContext:true,waitingIncludesContinuation:true,reconnectRecoversContinuation:true,stopCancelsContinuation:true,sameMainSession:true,modelRequests:fake.requests.length}));
 }finally{
  firstGate.resolve();toolGate.resolve();beforeStopGate.resolve();stopGate.resolve();await h.close();server.closeSockets();server.closeAllConnections();await new Promise(r=>server.close(r));await fake.close();fs.rmSync(root,{recursive:true,force:true});
 }

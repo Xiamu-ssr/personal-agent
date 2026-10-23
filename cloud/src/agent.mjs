@@ -137,6 +137,7 @@ export class Harness {
    if(response.text)this.step(id,'result',response.text);
    if(!silent&&(!run.said||response.media?.length)&&(!quiet(response.text)||response.media?.length))this.speech.emit({text:response.text},{activityId:id,chatType,nativeMedia:response.media});
    await this.drainMain(run);
+   controller.signal.throwIfAborted();
    const latest=run.latestResponse||response.text;
    this.history.put(id,{status:'done',endedAt:Date.now(),summary:quiet(latest)?'已检查，无新变化':latest.slice(0,180),latestResult:latest,usage:response.usage});ok=true;
    return {ok:true,text:response.text};
