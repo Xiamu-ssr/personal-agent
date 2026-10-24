@@ -3,9 +3,8 @@
 const model = (id, name, { vision = false, reasoning = false, contextWindow = 131072, maxTokens = 8192, ...rest } = {}) =>
   ({ id, name, note: vision ? '图片 · 对话 · 工具' : '对话 · 工具', input: vision ? ['text', 'image'] : ['text'], reasoning, contextWindow, maxTokens, ...rest });
 const vision = { vision: true, reasoning: true };
-// ZenMux's OpenAI route preserves GLM's named Max tier; its Messages route
-// converts token budgets to effort and cannot express that tier exactly.
-const zenmuxGlmFlash = { ...vision, api: 'openai-completions', baseUrl: 'https://zenmux.ai/api/v1',
+// Preserve named Max effort and reasoning content on ZenMux's OpenAI route.
+const zenmuxMaxReasoning = { ...vision, api: 'openai-completions', baseUrl: 'https://zenmux.ai/api/v1',
   thinkingLevelMap: { off: 'low', max: 'max' }, compat: { requiresReasoningContentOnAssistantMessages: true } };
 export const COMPACT_AT_TOKENS = 272_000;
 export const MODEL_OUTPUT_TOKENS = 128_000;
@@ -64,7 +63,7 @@ export const PROVIDER_PRESETS = [
   {
     id: 'zenmux', name: 'ZenMux', protocol: 'openai', baseUrl: 'https://zenmux.ai/api/v1',
     hint: '支持订阅 Key 和按量 Key，各按对应账号额度计费。', docsUrl: 'https://zenmux.ai/docs/guide/subscription.html',
-    models: [model('anthropic/claude-haiku-5.5', 'Claude Haiku 5.5', vision), model('anthropic/claude-sonnet-5.5', 'Claude Sonnet 5.5', vision), model('anthropic/claude-opus-5.5', 'Claude Opus 5.5', vision), model('z-ai/glm-5.3-flash', 'GLM 5.3 Flash', zenmuxGlmFlash), model('z-ai/glm-5.3-flashx', 'GLM 5.3 FlashX', zenmuxGlmFlash), model('xiaomi/mimo-v2.6-pro', 'MiMo V2.6 Pro', vision)],
+    models: [model('anthropic/claude-haiku-5.5', 'Claude Haiku 5.5', vision), model('anthropic/claude-sonnet-5.5', 'Claude Sonnet 5.5', vision), model('anthropic/claude-opus-5.5', 'Claude Opus 5.5', vision), model('z-ai/glm-5.3-flash', 'GLM 5.3 Flash', zenmuxMaxReasoning), model('z-ai/glm-5.3-flashx', 'GLM 5.3 FlashX', zenmuxMaxReasoning), model('xiaomi/mimo-v2.6-pro', 'MiMo V2.6 Pro', vision), model('moonshotai/kimi-k3.1-pro', 'Kimi K3.1 Pro', { ...zenmuxMaxReasoning, contextWindow: 1048576 })],
   },
   {
     id: 'openai', name: 'OpenAI', protocol: 'openai', baseUrl: 'https://api.openai.com/v1',

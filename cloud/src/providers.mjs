@@ -12,6 +12,7 @@ export const MODELS = [
   { id: "z-ai/glm-5.3-flash", label: "GLM 5.3 Flash", note: "输入约 1.5×，输出约 1×；缓存读约 3×" },
   { id: "z-ai/glm-5.3-flashx", label: "GLM 5.3 FlashX", note: "输入约 3.75×，输出约 2.5×；缓存读约 7.5×" },
   { id: "xiaomi/mimo-v2.6-pro", label: "MiMo-V2.6-Pro", note: "输入约 4.35×，输出约 1.74×；缓存读约 0.36×" },
+  { id: "moonshotai/kimi-k3.1-pro", label: "Kimi K3.1 Pro", note: "图片 · 对话 · 工具" },
 ];
 export const ZENMUX = { id: "zenmux", name: "ZenMux", protocol: "anthropic", baseUrl: "https://zenmux.ai/api/anthropic", models: MODELS.map(({ id, label }) => ({ id, name: label })) };
 

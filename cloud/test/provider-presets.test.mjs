@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { COMPACT_AT_TOKENS, COMPACTION_RESERVE_TOKENS, MODEL_OUTPUT_TOKENS, listProviderPresets, nativeModelDefinition } from '../src/provider-presets.mjs';
-import { Providers, readProviders, testProvider } from '../src/providers.mjs';
+import { Providers, readProviders, testProvider, ZENMUX } from '../src/providers.mjs';
 import { getAppSettings, putAppSettings } from '../src/app-settings.mjs';
 import { ConnectorManager } from '../src/connectors.mjs';
 
@@ -70,6 +70,25 @@ test('GLM thinking and routing metadata is shared across vendor protocols withou
 test('Claude catalog entries expose reasoning so the native resolver can select their highest supported tier', () => {
   for (const provider of listProviderPresets().filter(p => ['zenmux', 'anthropic', 'openrouter'].includes(p.id))) {
     for (const row of provider.models.filter(m => m.id.includes('claude'))) assert.equal(nativeModelDefinition(provider, row).reasoning, true);
+  }
+});
+
+test('Kimi K3.1 Pro keeps mandatory Max reasoning and tool history across ZenMux account protocols', () => {
+  const preset = listProviderPresets().find(p => p.id === 'zenmux');
+  const row = preset.models.find(m => m.id === 'moonshotai/kimi-k3.1-pro');
+  assert.equal(row.name, 'Kimi K3.1 Pro');
+  assert.ok(ZENMUX.models.some(m => m.id === row.id && m.name === row.name));
+  for (const provider of [preset, ZENMUX]) {
+    const native = nativeModelDefinition(provider, row);
+    assert.equal(native.reasoning, true);
+    assert.deepEqual(native.thinkingLevelMap, { off: 'low', max: 'max' });
+    assert.equal(native.api, 'openai-completions');
+    assert.equal(native.baseUrl, 'https://zenmux.ai/api/v1');
+    assert.equal(native.compat.requiresReasoningContentOnAssistantMessages, true);
+    assert.deepEqual(native.input, ['text', 'image']);
+    assert.equal(native.contextWindow, 1048576);
+    assert.equal(native.contextTokens - COMPACTION_RESERVE_TOKENS, COMPACT_AT_TOKENS);
+    assert.equal(native.maxTokens, MODEL_OUTPUT_TOKENS);
   }
 });
 
